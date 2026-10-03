@@ -1,0 +1,11 @@
+{
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "outDir": "dist",
+    "types": []
+  },
+  "include": ["index.ts", "auth/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
