@@ -1,5 +1,6 @@
 // Learn more https://docs.expo.io/guides/customizing-metro
 const { getDefaultConfig } = require('expo/metro-config');
+const path = require('path');
 
 /** @type {import('expo/metro-config').MetroConfig} */
 const config = getDefaultConfig(__dirname);
@@ -15,8 +16,9 @@ config.resolver.nodeModulesPaths = [
     path.resolve(monorepoRoot, 'node_modules'),
 ];
 
-// 3. Make sure Metro minimizes symlink asset errors
-config.resolver.disableHierarchicalLookup = true;
-
+// 3. Leave hierarchical node_modules lookup enabled (the default).
+// pnpm's isolated store only exposes transitive deps (e.g. whatwg-fetch, pulled in
+// by @expo/metro-runtime) through the nested .pnpm node_modules dirs, so disabling
+// hierarchical lookup makes the bundle fail with "Unable to resolve module".
 
 module.exports = config;

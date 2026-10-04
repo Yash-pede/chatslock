@@ -1,10 +1,11 @@
 module "lambdas" {
-  source             = "./lambda"
-  user_pool_arn      = aws_cognito_user_pool.chat_user_pool.arn
-  vpc_id             = var.vpc_id
-  private_subnet_ids = var.private_subnet_ids
+  source               = "./lambda"
+  user_pool_arn        = aws_cognito_user_pool.chat_user_pool.arn
+  vpc_id               = var.vpc_id
+  private_subnet_ids   = var.private_subnet_ids
+  auth_lambda_env_name = var.auth_lambda_env_name
+  auth_lambda_env_arn  = var.auth_lambda_env_arn
 }
-
 
 resource "aws_cognito_user_pool" "chat_user_pool" {
   name = var.resource_name
@@ -25,16 +26,15 @@ resource "aws_cognito_user_pool" "chat_user_pool" {
   }
 
   lambda_config {
-    define_auth_challenge = module.lambdas.define_auth_arn
-    create_auth_challenge = module.lambdas.create_auth_arn
+    define_auth_challenge          = module.lambdas.define_auth_arn
+    create_auth_challenge          = module.lambdas.create_auth_arn
     verify_auth_challenge_response = module.lambdas.verify_auth_arn
-    # pre_token_generation  = module.lambdas.pre_token_generation_arn
   }
 }
 
 
 resource "aws_cognito_user_pool_client" "users" {
-  name = "users-client"
+  name         = "users-client"
   user_pool_id = aws_cognito_user_pool.chat_user_pool.id
 
   generate_secret = false
@@ -57,7 +57,7 @@ resource "aws_cognito_user_pool_client" "users" {
 
 
 resource "aws_cognito_user_pool_client" "admin" {
-  name = "admin-client"
+  name         = "admin-client"
   user_pool_id = aws_cognito_user_pool.chat_user_pool.id
 
   generate_secret = false

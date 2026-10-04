@@ -11,6 +11,11 @@ locals {
   }
 }
 
+resource "aws_secretsmanager_secret" "auth_lambda_env" {
+  name = "auth-lambda/env"
+}
+
+
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
@@ -27,11 +32,13 @@ module "vpc" {
   tags = local.tags
 }
 
-module "cognito"{
+module "cognito" {
   source = "./modules/cognito"
 
-  resource_name = local.name
-  vpc_id = module.vpc.vpc_id
-  private_subnet_ids = module.vpc.private_subnets
+  resource_name        = local.name
+  vpc_id               = module.vpc.vpc_id
+  private_subnet_ids   = module.vpc.private_subnets
+  auth_lambda_env_name = aws_secretsmanager_secret.auth_lambda_env.name
+  auth_lambda_env_arn  = aws_secretsmanager_secret.auth_lambda_env.arn
 }
 

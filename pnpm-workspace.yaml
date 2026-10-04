@@ -1,5 +1,35 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Single source of truth for versions that more than one workspace package
+# depends on. Packages reference these as "catalog:", so a bump here lands
+# everywhere at once instead of drifting apart one `pnpm add` at a time.
+catalog:
+  "@eslint/js": 10.0.1
+  "@react-native-async-storage/async-storage": 2.2.0
+  "@types/react": ~19.2.2
+  eslint-config-prettier: 10.1.8
+  eslint-plugin-only-warn: 1.2.1
+  eslint-plugin-react-hooks: 7.1.1
+  expo-secure-store: ~57.0.4
+  globals: 17.12.0
+  react: 19.2.3
+  react-native: 0.86.3
+  react-native-reanimated: 4.5.1
+  react-native-safe-area-context: ~5.7.0
 allowBuilds:
   esbuild: true
+  unrs-resolver: true
+# Metro (via @expo/metro-config) transforms with @babel/core 7.29.7, while
+# @repo/eslint-config pulls @babel/core 8. The worklets Babel plugin requires
+# @babel/traverse, @babel/types and @babel/generator without declaring them, so pnpm's
+# hidden hoist decides which major it gets. When it lands on Babel 8 the plugin runs
+# against Babel 7 AST nodes and bundling dies with
+# "[Worklets] Babel plugin exception: Cannot read properties of undefined (reading 'length')".
+# Declaring the Babel 7 helpers as real dependencies pins them next to the plugin.
+packageExtensions:
+  react-native-worklets:
+    dependencies:
+      "@babel/generator": "^7.29.0"
+      "@babel/traverse": "^7.29.0"
+      "@babel/types": "^7.29.0"

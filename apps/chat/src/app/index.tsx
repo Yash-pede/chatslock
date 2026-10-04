@@ -1,17 +1,18 @@
-import { Text, View, StyleSheet } from "react-native";
+import { Screen, Text } from "@chatslock/ui";
 
-export default function Index() {
+/**
+ * Where the flow lands once auth is done.
+ *
+ * A placeholder on purpose: this build ships the sign-in screens only, and
+ * anything more here would be a chat screen nobody has designed yet.
+ */
+export default function HomeScreen() {
   return (
-    <View style={styles.container}>
-      <Text>Edit src/app/index.tsx to edit this screen.</Text>
-    </View>
+    <Screen testID="home">
+      <Text variant="title">chatslock</Text>
+      <Text variant="subhead" tone="secondary">
+        You are in.
+      </Text>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});

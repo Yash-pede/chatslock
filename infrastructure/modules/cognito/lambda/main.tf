@@ -1,8 +1,3 @@
-data "aws_secretsmanager_secret" "lambda_env" {
-  name = "lambda/env"
-}
-
-
 # IAM role for Lambda execution
 data "aws_iam_policy_document" "assume_role" {
   statement {
@@ -45,7 +40,7 @@ resource "aws_iam_role_policy" "lambda_secrets_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ],
-        Resource = data.aws_secretsmanager_secret.lambda_env.arn
+        Resource = var.auth_lambda_env_arn
       }
     ]
   })
@@ -107,7 +102,7 @@ resource "aws_lambda_function" "create_auth" {
   }
   environment {
     variables = {
-      SECRET_NAME = data.aws_secretsmanager_secret.lambda_env.name
+      SECRET_NAME = var.auth_lambda_env_name
     }
   }
 }

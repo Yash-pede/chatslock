@@ -9,3 +9,10 @@ variable "vpc_id" {
 variable "private_subnet_ids" {
   type = list(string)
 }
+variable "auth_lambda_env_name" {
+  type = string
+}
+
+variable "auth_lambda_env_arn" {
+  type = string
+}
