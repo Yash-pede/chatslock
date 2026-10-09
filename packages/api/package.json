@@ -1,0 +1,50 @@
+{
+  "name": "@repo/api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "default": "./dist/auth/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "default": "./dist/schema/index.js"
+    },
+    "./utils": {
+      "types": "./dist/utils/index.d.ts",
+      "default": "./dist/utils/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && pnpm build:types",
+    "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1147.0",
+    "@aws-sdk/client-secrets-manager": "^3.1147.0",
+    "@hono/zod-validator": "^0.9.1",
+    "dotenv": "^18.0.6",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@hono/aws-lambda": "^1.0.0",
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^26.4.1",
+    "eslint": "10.9.1",
+    "hono": "^4.13.13",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2"
+  }
+}

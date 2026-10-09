@@ -40,7 +40,7 @@ resource "aws_iam_role_policy" "lambda_secrets_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ],
-        Resource = var.auth_lambda_env_arn
+        Resource = var.auth_lambda_secret_arn
       }
     ]
   })
@@ -102,7 +102,7 @@ resource "aws_lambda_function" "create_auth" {
   }
   environment {
     variables = {
-      SECRET_NAME = var.auth_lambda_env_name
+      SECRET_NAME = var.auth_lambda_secret_name
     }
   }
 }

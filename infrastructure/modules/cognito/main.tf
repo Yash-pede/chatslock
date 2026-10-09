@@ -3,8 +3,8 @@ module "lambdas" {
   user_pool_arn        = aws_cognito_user_pool.chat_user_pool.arn
   vpc_id               = var.vpc_id
   private_subnet_ids   = var.private_subnet_ids
-  auth_lambda_env_name = var.auth_lambda_env_name
-  auth_lambda_env_arn  = var.auth_lambda_env_arn
+  auth_lambda_secret_name = var.auth_lambda_secret_name
+  auth_lambda_secret_arn  = var.auth_lambda_secret_arn
 }
 
 resource "aws_cognito_user_pool" "chat_user_pool" {

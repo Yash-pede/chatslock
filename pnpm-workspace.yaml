@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "functions/*"
 # Single source of truth for versions that more than one workspace package
 # depends on. Packages reference these as "catalog:", so a bump here lands
 # everywhere at once instead of drifting apart one `pnpm add` at a time.

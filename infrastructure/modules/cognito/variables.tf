@@ -8,10 +8,10 @@ variable "private_subnet_ids" {
   type = list(string)
 }
 
-variable "auth_lambda_env_name" {
+variable "auth_lambda_secret_name" {
   type = string
 }
 
-variable "auth_lambda_env_arn" {
+variable "auth_lambda_secret_arn" {
   type = string
 }
