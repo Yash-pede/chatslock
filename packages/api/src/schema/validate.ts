@@ -33,8 +33,8 @@ export const validateWithZod = (schema: Schema) => createMiddleware(async (c, ne
         const errors = new ZodError(modifiedIssues);
 
         return c.json({
-            message: "Validation failed",
-            errors: prettifyError(errors),
+            success: false,
+            message: prettifyError(errors),
         }, 400);
     }
     c.set('valid', result.data)

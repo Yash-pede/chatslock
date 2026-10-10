@@ -7,7 +7,6 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider";
 import {AWSManager, awsManagerInstance} from "@repo/api/utils"
 import {HTTPException} from 'hono/http-exception'
-import {decode} from "hono/jwt"
 
 export async function sendOtp(phone: string) {
     const username = await getOrCreateUserByPhone(phone);
@@ -101,20 +100,18 @@ export async function getCognitoUserGroups(username: string) {
     return response.Groups || [];
 }
 
-export async function cognitoRefreshCall(
-    refreshToken: string,
-    accessToken: string,
-) {
-    const {payload} = decode(token);
-    if (!payload.client_id || !payload.client_id == "") throw new HTTPException(500, {message})
+export async function cognitoRefreshCall(refreshToken: string) {
+    const clientId = await awsManagerInstance.getSecretValue("cognito_user_client_id");
 
-    const command = new GetTokensFromRefreshTokenCommand({
-        ClientId: payload.client_id,
-        RefreshToken: refreshToken,
-        ClientMetadata: {},
-    });
-
-    return await cognitoClient.send(command);
+    return await AWSManager.cognitoClient.send(
+        new InitiateAuthCommand({
+            AuthFlow: "REFRESH_TOKEN_AUTH",
+            ClientId: clientId,
+            AuthParameters: {
+                REFRESH_TOKEN: refreshToken,
+            },
+        }),
+    );
 }
 
 export async function cognitoLogout(accessToken: string) {

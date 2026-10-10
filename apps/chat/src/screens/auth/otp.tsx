@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell, Button, CodeInput, Text } from "@chatslock/ui";
+import { useAuth } from "@/utils/AuthContext";
+import { extractErrorMessage } from "@repo/utils/auth";
 
 /** Digits in the code. Fixed by the backend contract, not by taste. */
 const CODE_LENGTH = 6;
@@ -8,20 +10,50 @@ const CODE_LENGTH = 6;
 /**
  * The code step of phone sign-in.
  *
- * The resend countdown is a literal, not a timer: a live countdown means a
- * `setInterval` that has to be torn down when the screen unmounts mid-tick, and
- * this build has nothing to resend to. The string is where the timer will go.
- *
- * The number the code went to arrives as a route param so the subtitle can name
- * it. A missing param falls back to a generic line rather than printing
- * "undefined" at the user.
+ * The Cognito session and username arrive as route params from the phone
+ * screen; without them there is nothing to verify against, so the screen falls
+ * back to sending the user back rather than firing a request that cannot work.
  */
 export function AuthOtpScreen() {
   const router = useRouter();
-  const { phone } = useLocalSearchParams<{ phone?: string }>();
+  const { phone, username, session } = useLocalSearchParams<{
+    phone?: string;
+    username?: string;
+    session?: string;
+  }>();
+  const { verifyOtp } = useAuth();
   const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const complete = code.length === CODE_LENGTH;
+
+  const submit = async (codeToVerify: string) => {
+    if (loading) return;
+
+    // `onComplete` fires in the same tick as the last keystroke, before the
+    // `code` state re-renders — so the value must come in as an argument.
+    if (codeToVerify.length !== CODE_LENGTH) {
+      setError(`Enter the ${CODE_LENGTH}-digit code.`);
+      return;
+    }
+    if (!username || !session) {
+      setError("This code has expired. Request a new one.");
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    try {
+      await verifyOtp({ otp: codeToVerify, username, session });
+      router.replace("/");
+    } catch (e) {
+      setError(extractErrorMessage(e));
+      setCode("");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <AuthShell
@@ -50,13 +82,18 @@ export function AuthOtpScreen() {
         value={code}
         onChangeCode={setCode}
         label="Verification code"
+        disabled={loading}
+        error={error ?? undefined}
+        onComplete={submit}
       />
 
       <Button
         label="Verify"
         block
         disabled={!complete}
-        onPress={() => router.replace("/")}
+        loading={loading}
+        loadingLabel="Verifying"
+        onPress={() => submit(code)}
       />
     </AuthShell>
   );

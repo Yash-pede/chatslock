@@ -2,7 +2,7 @@ import {Context} from "hono";
 import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/api/schema"
 import {cognitoLogout, cognitoRefreshCall, getCognitoUserGroups, sendOtp, verifyOtp} from "./auth.service";
 import {AdminInitiateAuthCommand} from "@aws-sdk/client-cognito-identity-provider";
-import {AWSManager} from "@repo/api/utils";
+import {AWSManager, awsManagerInstance} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
 
 export const otpController = async (c: Context) => {
@@ -30,18 +30,21 @@ export const verifyOtpController = async (c: Context) => {
 export const loginController = async (c: Context) => {
     const {body}: loginSchema = c.get("valid")
     body.username = body.username.toLowerCase();
-    let role = "";
 
     try {
         const cognitoUser = await getCognitoUserGroups(body.username);
+        const role = cognitoUser[0]?.GroupName || "";
 
-        role = cognitoUser[0]?.GroupName || "";
+        if (role === "user") {
+            throw new HTTPException(403, {message: "Use phone sign-in instead."});
+        }
 
-        if (role === "user") throw new Error("Not allowed");
+        const userPoolId = await awsManagerInstance.getSecretValue("cognito_user_pool_id");
+        const clientId = await awsManagerInstance.getSecretValue("cognito_admin_client_id");
 
         const command = new AdminInitiateAuthCommand({
-            UserPoolId: process.env.cognito_user_pool_id,
-            ClientId: process.env.cognito_admin_client_id,
+            UserPoolId: userPoolId,
+            ClientId: clientId,
             AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
             AuthParameters: {
                 USERNAME: body.username,
@@ -49,10 +52,11 @@ export const loginController = async (c: Context) => {
             },
         });
         const response = await AWSManager.cognitoClient.send(command);
-        const {AccessToken, RefreshToken, IdToken} =
-        response.AuthenticationResult || {};
+        const {AccessToken, RefreshToken} = response.AuthenticationResult || {};
 
-        if (!AccessToken || !RefreshToken) throw new Error("AccessToken not set");
+        if (!AccessToken || !RefreshToken) {
+            throw new HTTPException(401, {message: "Incorrect username or password."});
+        }
 
         return c.json({
             refreshToken: response.AuthenticationResult?.RefreshToken,
@@ -60,17 +64,16 @@ export const loginController = async (c: Context) => {
             idToken: response.AuthenticationResult?.IdToken,
             expiresIn: response.AuthenticationResult?.ExpiresIn,
         })
-    } catch (error: any) {
-        throw new HTTPException(500, {message: error.message});
+    } catch (error) {
+        if (error instanceof HTTPException) throw error;
+        throw new HTTPException(401, {message: "Incorrect username or password."});
     }
 }
 
 export const refreshController = async (c: Context) => {
     const {body}: refreshOtpSchema = c.get("valid");
-    const accessToken = c.req.header("Authorization")?.split(" ")[1]
-    if (!accessToken) throw new HTTPException(402, {message: "Not allowed"});
 
-    const resp = await cognitoRefreshCall(body.refreshToken, accessToken)
+    const resp = await cognitoRefreshCall(body.refreshToken)
     return c.json({
         accessToken: resp.AuthenticationResult?.AccessToken,
         idToken: resp.AuthenticationResult?.IdToken,
@@ -80,7 +83,9 @@ export const refreshController = async (c: Context) => {
 
 export const logOutUserController = async (c: Context) => {
     const accessToken = c.req.header("Authorization")?.split(" ")[1]
-    const resp = await cognitoLogout(accessToken)
+    if (accessToken) {
+        await cognitoLogout(accessToken)
+    }
     return c.json({
         message: "Logged out",
     })

@@ -1,80 +1,41 @@
-import axios from 'axios';
 import { tokenManager } from './tokenManager';
 import { tokenRefreshService } from './tokenRefreshService';
-import apiClient from '../api';
+import { refresh } from './authService';
+import type { AuthUser } from './jwt';
 
-const API_BASE_URL = 'https://api.yourapp.com';
-
-interface UserProfile {
-    id: string;
-    email: string;
-    name: string;
-}
-
-interface AuthState {
+export interface AuthState {
     isAuthenticated: boolean;
-    isLoading: boolean;
-    user: UserProfile | null;
+    user: AuthUser | null;
     error: string | null;
 }
 
-interface RefreshResponse {
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
-}
-
+/**
+ * Runs on app launch. If a refresh token is on the device, swap it for a live
+ * access token and restore the user from the new ID token — no login screen.
+ */
 class SilentAuthService {
-    // Attempt silent authentication on app launch
     async attemptSilentAuth(): Promise<AuthState> {
+        const refreshToken = await tokenManager.getRefreshToken();
+
+        if (!refreshToken) {
+            return { isAuthenticated: false, user: null, error: null };
+        }
+
         try {
-            const refreshToken = await tokenManager.getRefreshToken();
-
-            if (!refreshToken) {
-                return {
-                    isAuthenticated: false,
-                    isLoading: false,
-                    user: null,
-                    error: null,
-                };
-            }
-
-            // Try to refresh the access token
-            const response = await axios.post<RefreshResponse>(
-                `${API_BASE_URL}/auth/refresh`,
-                { refreshToken },
-                {
-                    headers: { 'Content-Type': 'application/json' },
-                }
-            );
-
-            const { accessToken, refreshToken: newRefreshToken, expiresIn } = response.data;
-
-            // Store new tokens
-            tokenManager.setAccessToken(accessToken, expiresIn);
-            await tokenManager.setRefreshToken(newRefreshToken);
-
-            // Fetch user profile
-            const userResponse = await apiClient.get<UserProfile>('/auth/me');
-
-            // Start automatic refresh
+            await refresh();
             tokenRefreshService.startAutoRefresh();
 
             return {
                 isAuthenticated: true,
-                isLoading: false,
-                user: userResponse.data,
+                user: tokenManager.getUser(),
                 error: null,
             };
-        } catch (error) {
-            // Silent auth failed, clear tokens
+        } catch {
             await tokenManager.clearAllTokens();
-
             return {
                 isAuthenticated: false,
-                isLoading: false,
                 user: null,
-                error: 'Session expired. Please login again.',
+                error: null,
             };
         }
     }
