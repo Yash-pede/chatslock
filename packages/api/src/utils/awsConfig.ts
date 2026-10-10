@@ -11,7 +11,10 @@ export class AWSManager {
                 SecretId: process.env.SECRET_NAME,
             }));
 
-        return response.SecretString ? JSON.parse(response.SecretString) : undefined;
+        if (!response.SecretString) return undefined;
+
+        const secret = JSON.parse(response.SecretString);
+        return secret[secretName];
     }
 
 }

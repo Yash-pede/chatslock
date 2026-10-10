@@ -8,7 +8,8 @@ const baseSchema = z.strictObject({
 const phonePipe = z.string()
     .trim()
     .transform((val) => val.replace(/\s+/g, "").replace(/^(\+91|0)/, ""))
-    .refine((val) => /^[6-9]\d{9}$/.test(val), "Invalid phone number");
+    .refine((val) => /^[6-9]\d{9}$/.test(val), "Invalid phone number")
+    .transform((val) => `+91${val}`);
 
 const usernamePipe = z.string().min(1, "Username is required").toLowerCase()
 

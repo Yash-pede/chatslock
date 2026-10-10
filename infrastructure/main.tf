@@ -30,7 +30,7 @@ module "vpc" {
 module "cognito" {
   source = "./modules/cognito"
 
-  resource_name           = local.name
+  resource_name           = "main-${local.name}"
   vpc_id                  = module.vpc.vpc_id
   private_subnet_ids      = module.vpc.private_subnets
   auth_lambda_secret_name = aws_secretsmanager_secret.auth_lambda_env.name
@@ -51,6 +51,9 @@ module "api_lambdas" {
   source = "./modules/backend/lambda"
 
   api_gateway_execution_arn = module.backend_api_gateway.api_gateway_execution_arn
+  api_lambda_secret_arn     = aws_secretsmanager_secret.backend_lambda_env.arn
+  vpc_id                    = module.vpc.vpc_id
+  vpc_subnet_ids            = module.vpc.private_subnets
 }
 
 resource "aws_secretsmanager_secret" "auth_lambda_env" {

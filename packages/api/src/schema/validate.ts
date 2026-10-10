@@ -23,10 +23,11 @@ export const validateWithZod = (schema: Schema) => createMiddleware(async (c, ne
 
     if (!result.success) {
         const modifiedIssues = result.error.issues.map((e) => {
-            if (e.code === "unrecognized_keys") {
-                return {...e, message: "Unrecognized fields are not allowed"};
-            }
-            return e;
+            const message = e.code === "unrecognized_keys"
+                ? "Unrecognized fields are not allowed"
+                : e.message;
+            const path = e.path[0] === "body" ? e.path.slice(1) : e.path;
+            return {...e, message, path};
         });
 
         const errors = new ZodError(modifiedIssues);

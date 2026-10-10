@@ -79,6 +79,7 @@ export const handler = async (event) => {
       }
 
       console.log("OTP sent successfully to:", phone);
+      console.log("Response:", response);
     } catch (err) {
       console.error("Error sending OTP:", err);
       throw err; // IMPORTANT: fail auth if SMS fails

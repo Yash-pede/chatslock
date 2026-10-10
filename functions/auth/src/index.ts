@@ -4,13 +4,8 @@ import {loginController, otpController, refreshController, verifyOtpController} 
 import {initiateOtpSchema, loginSchema, refreshOtpSchema, validateWithZod, verifyOtpSchema} from "@repo/api/schema";
 import {HTTPException} from "hono/http-exception";
 
-const app = new Hono()
+const app = new Hono({strict: false}).basePath("/api/auth")
 
-app.get("/", (c) => {
-    return c.json({
-        message: "Welcome to the Hono!",
-    })
-})
 app.post("/otp/request", validateWithZod(initiateOtpSchema), otpController)
 app.post("/otp/verify", validateWithZod(verifyOtpSchema), verifyOtpController)
 app.post("/login", validateWithZod(loginSchema), loginController)
@@ -22,7 +17,13 @@ app.onError((err, c) => {
         return err.getResponse()
     }
     console.error(err)
-    return c.text("Internal Server Error", 500)
+    return c.json(
+        {
+            success: false,
+            message: err.message,
+        },
+        err.status ?? 500
+    )
 })
 
 export const handler = handle(app)
