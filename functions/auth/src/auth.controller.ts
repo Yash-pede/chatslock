@@ -68,6 +68,8 @@ export const loginController = async (c: Context) => {
 export const refreshController = async (c: Context) => {
     const {body}: refreshOtpSchema = c.get("valid");
     const accessToken = c.req.header("Authorization")?.split(" ")[1]
+    if (!accessToken) throw new HTTPException(402, {message: "Not allowed"});
+
     const resp = await cognitoRefreshCall(body.refreshToken, accessToken)
     return c.json({
         accessToken: resp.AuthenticationResult?.AccessToken,

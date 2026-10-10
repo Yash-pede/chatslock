@@ -7,7 +7,7 @@ import {HTTPException} from "hono/http-exception";
 const app = new Hono()
 
 app.get("/", (c) => {
-    c.json({
+    return c.json({
         message: "Welcome to the Hono!",
     })
 })

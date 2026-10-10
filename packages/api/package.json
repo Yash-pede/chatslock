@@ -35,15 +35,15 @@
     "@aws-sdk/client-secrets-manager": "^3.1147.0",
     "@hono/zod-validator": "^0.9.1",
     "dotenv": "^18.0.6",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@hono/aws-lambda": "^1.0.0",
+    "hono": "^4.13.13"
   },
   "devDependencies": {
-    "@hono/aws-lambda": "^1.0.0",
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/node": "^26.4.1",
     "eslint": "10.9.1",
-    "hono": "^4.13.13",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2"
   }

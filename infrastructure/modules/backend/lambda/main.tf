@@ -20,15 +20,11 @@ resource "aws_lambda_permission" "api_gateway" {
 }
 
 # layer for lambda
-data "archive_file" "lambda_layer_zip" {
-  type        = "zip"
-  source_dir  = "${path.root}/../packages/api/dist"
-  output_path = "${path.root}/../packages/api/dist/build.zip"
-}
-
+# Build it with: pnpm layer:push (see scripts/build-layer.sh)
 resource "aws_lambda_layer_version" "lambda_layer" {
   layer_name          = "api_layer"
-  filename            = "${path.root}/../packages/api/dist/build.zip"
+  filename            = "${path.root}/../layers/api/build.zip"
+  source_code_hash    = filebase64sha256("${path.root}/../layers/api/build.zip")
   compatible_runtimes = ["nodejs24.x"]
 }
 
@@ -42,9 +38,7 @@ module "auth_lambda" {
   handler       = "index.handler"
   runtime       = "nodejs24.x"
   create_role   = true
+  layers        = [aws_lambda_layer_version.lambda_layer.arn]
 
-
-  source_path = "${path.root}/../functions/auth/dist/index.js"
-
-
+  source_path = "${path.root}/../functions/auth/dist/index.mjs"
 }

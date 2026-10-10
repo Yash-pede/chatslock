@@ -40,3 +40,7 @@ yarn-error.log*
 *.zip
 .idea
 .agents
+
+tmp
+temp
+layers

@@ -11,8 +11,11 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "infra:apply": "cd infrastructure && terraform init && terraform apply -auto-approve",
-    "infra:plan": "cd infrastructure && terraform init && terraform plan",
+    "layer:build": "bash scripts/build-layer.sh --no-push",
+    "layer:push": "bash scripts/build-layer.sh",
+    "deploy": "pnpm build && bash scripts/build-layer.sh",
+    "infra:apply": "pnpm layer:build && cd infrastructure && terraform init && terraform apply",
+    "infra:plan": "pnpm layer:build && cd infrastructure && terraform init && terraform plan",
     "infra:destroy": "cd infrastructure && terraform init && terraform destroy -auto-approve"
   },
   "devDependencies": {
