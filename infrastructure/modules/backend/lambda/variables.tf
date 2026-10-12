@@ -13,3 +13,7 @@ variable "vpc_id" {
 variable "vpc_subnet_ids" {
   type = list(string)
 }
+
+variable "s3_media_bucket_name" {
+  type = string
+}

@@ -1,10 +1,10 @@
-import { ThemeProvider } from "@chatslock/ui";
-import { SplashScreen, Stack } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import { useEffect } from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { configureApi } from "@repo/utils";
-import { AuthProvider, useAuth } from "@/utils/AuthContext";
+import {ThemeProvider} from "@chatslock/ui";
+import {SplashScreen, Stack} from "expo-router";
+import {StatusBar} from "expo-status-bar";
+import {useEffect} from "react";
+import {SafeAreaProvider} from "react-native-safe-area-context";
+import {configureApi} from "@repo/utils";
+import {AuthProvider, useAuth} from "@/utils/AuthContext";
 
 // Hand the API URL (from EXPO_PUBLIC_API_URL in .env) to the shared client.
 // Expo inlines EXPO_PUBLIC_* into the app bundle, so no URL lives in code.
@@ -18,15 +18,15 @@ SplashScreen.preventAutoHideAsync();
  * Keeps the splash screen up while silent auth resolves, then hides it.
  */
 function SplashScreenController() {
-  const { isLoading } = useAuth();
+    const {isLoading, isAuthenticated} = useAuth();
 
-  useEffect(() => {
-    if (!isLoading) {
-      SplashScreen.hideAsync();
-    }
-  }, [isLoading]);
+    useEffect(() => {
+        if (!isLoading) {
+            SplashScreen.hideAsync();
+        }
+    }, [isLoading]);
 
-  return null;
+    return null;
 }
 
 /**
@@ -36,36 +36,37 @@ function SplashScreenController() {
  * available screen (the auth flow), and vice versa.
  */
 function RootNavigator() {
-  const { isAuthenticated } = useAuth();
+    const {isAuthenticated} = useAuth();
 
-  return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: "slide_from_right",
-      }}
-    >
-      <Stack.Protected guard={isAuthenticated}>
-        <Stack.Screen name="index" />
-      </Stack.Protected>
+    return (
+        <Stack
+            screenOptions={{
+                headerShown: false,
+                animation: "slide_from_right",
+            }}
+        >
+            <Stack.Protected guard={isAuthenticated}>
+                <Stack.Screen name="index"/>
+                <Stack.Screen name="onboarding" options={{animation: "fade"}}/>
+            </Stack.Protected>
 
-      <Stack.Protected guard={!isAuthenticated}>
-        <Stack.Screen name="auth" options={{ animation: "fade" }} />
-      </Stack.Protected>
-    </Stack>
-  );
+            <Stack.Protected guard={!isAuthenticated}>
+                <Stack.Screen name="auth" options={{animation: "fade"}}/>
+            </Stack.Protected>
+        </Stack>
+    );
 }
 
 export default function RootLayout() {
-  return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <StatusBar style="auto" />
-        <AuthProvider>
-          <SplashScreenController />
-          <RootNavigator />
-        </AuthProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
-  );
+    return (
+        <SafeAreaProvider>
+            <ThemeProvider>
+                <StatusBar style="auto"/>
+                <AuthProvider>
+                    <SplashScreenController/>
+                    <RootNavigator/>
+                </AuthProvider>
+            </ThemeProvider>
+        </SafeAreaProvider>
+    );
 }

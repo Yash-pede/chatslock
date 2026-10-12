@@ -46,23 +46,45 @@ module "apigateway-v2" {
     })
   }
 
-  # Authorizer(s)
-  # authorizers = {
-  #   "main" = {
-  #     authorizer_type  = "JWT"
-  #     identity_sources = ["$request.header.Authorization"]
-  #     name             = "api-auth"
-  #     jwt_configuration = {
-  #       audience = [var.cognito_user_client, var.cognito_admin_client]
-  #       issuer   = var.cognito_issuer
-  #     }
-  #   }
-  # }
+  authorizers = {
+    "main" = {
+      name             = "api-auth"
+      authorizer_type  = "JWT"
+      identity_sources = ["$request.header.Authorization"]
+      jwt_configuration = {
+        audience = [var.cognito_user_client, var.cognito_admin_client]
+        issuer   = var.cognito_issuer
+      }
+    }
+  }
 
   routes = {
-    "ANY /api/auth/{proxy+}" = {
+
+    "POST /api/auth/refresh" = {
+      authorization_type = "JWT"
+      authorizer_key     = "main"
       integration = {
         uri                    = var.lambda_details.auth.arn
+        payload_format_version = "2.0"
+        timeout_milliseconds   = 12000
+      }
+    }
+
+    "ANY /api/auth/{proxy+}" = {
+      authorization_type = "NONE"
+      integration = {
+        uri                    = var.lambda_details.auth.arn
+        payload_format_version = "2.0"
+        timeout_milliseconds   = 12000
+      }
+    }
+
+
+    "ANY /api/users/{proxy+}" = {
+      authorization_type = "JWT"
+      authorizer_key     = "main"
+      integration = {
+        uri                    = var.lambda_details.users.arn
         payload_format_version = "2.0"
         timeout_milliseconds   = 12000
       }

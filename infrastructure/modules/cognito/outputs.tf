@@ -7,7 +7,7 @@ output "admin_client" {
 }
 
 output "cognito_issuer" {
-  value = "https://cognito-idp.ap-south-1.amazonaws.com/${aws_cognito_user_pool.chat_user_pool.id}/.well-known/jwks.json"
+  value = "https://cognito-idp.ap-south-1.amazonaws.com/${aws_cognito_user_pool.chat_user_pool.id}"
 }
 output "user_pool_id" {
   value = aws_cognito_user_pool.chat_user_pool.id

@@ -4,6 +4,10 @@ locals {
       arn  = module.auth_lambda.lambda_function_arn
       name = module.auth_lambda.lambda_function_name
     }
+    users = {
+      arn  = module.users_lambda.lambda_function_arn
+      name = module.users_lambda.lambda_function_name
+    }
   }
 }
 
@@ -21,8 +25,26 @@ resource "aws_lambda_layer_version" "lambda_layer" {
 module "auth_lambda" {
   source = "terraform-aws-modules/lambda/aws"
 
-  function_name          = "auth"
-  description            = "Lambda For granting auth tokens"
+  function_name = "auth"
+  description   = "Lambda For granting auth tokens"
+  handler       = "index.handler"
+  runtime       = "nodejs24.x"
+  create_role   = false
+  timeout       = 10
+  layers        = [aws_lambda_layer_version.lambda_layer.arn]
+  lambda_role   = aws_iam_role.api_lambda_role.arn
+  # 
+  # vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
+  # vpc_subnet_ids         = var.vpc_subnet_ids
+
+  source_path = "${path.root}/../functions/auth/dist/index.mjs"
+}
+
+module "users_lambda" {
+  source = "terraform-aws-modules/lambda/aws"
+
+  function_name          = "users"
+  description            = "Lambda For users Route."
   handler                = "index.handler"
   runtime                = "nodejs24.x"
   create_role            = false
@@ -32,7 +54,7 @@ module "auth_lambda" {
   vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
   vpc_subnet_ids         = var.vpc_subnet_ids
 
-  source_path = "${path.root}/../functions/auth/dist/index.mjs"
+  source_path = "${path.root}/../functions/users/dist/index.mjs"
 }
 
 # ---- IAM ----
@@ -63,7 +85,7 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy" "lambda_secrets_policy" {
+resource "aws_iam_role_policy" "api_lambda_policy" {
   name = "api-lambda-policy"
   role = aws_iam_role.api_lambda_role.id
 
@@ -77,18 +99,18 @@ resource "aws_iam_role_policy" "lambda_secrets_policy" {
         ],
         Resource = var.api_lambda_secret_arn
       },
-      # {
-      #   sid    = "AllowS3Access"
-      #   effect = "Allow"
-      #   actions = [
-      #     "s3:PutObject",
-      #     "s3:GetObject"
-      #   ]
-      #   resources = [
-      #     "arn:aws:s3:::${var.s3_uploads_bucket_name}",
-      #     "arn:aws:s3:::${var.s3_uploads_bucket_name}/*"
-      #   ]
-      # },
+      {
+        Sid    = "AllowS3MediaAccess"
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.s3_media_bucket_name}",
+          "arn:aws:s3:::${var.s3_media_bucket_name}/*"
+        ]
+      },
       {
         Sid    = "AllowCognitoAdminAllPools"
         Effect = "Allow"
@@ -112,7 +134,15 @@ resource "aws_iam_role_policy" "lambda_secrets_policy" {
           "cognito-idp:RevokeToken"
         ]
         Resource = ["*"]
-      }
+      },
+      {
+        Sid    = "AllowDynamodb"
+        Effect = "Allow",
+        Action = [
+          "dynamodb:*"
+        ],
+        Resource = ["*"]
+      },
     ]
   })
 }

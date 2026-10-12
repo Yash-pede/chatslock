@@ -1,9 +1,5 @@
 import {z} from "zod"
-
-const baseSchema = z.strictObject({
-    query: z.strictObject({}),
-    params: z.strictObject({}),
-});
+import {baseSchema} from "./base"
 
 const phonePipe = z.string()
     .trim()

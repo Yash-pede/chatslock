@@ -46,7 +46,7 @@ export function AuthOtpScreen() {
     setLoading(true);
     try {
       await verifyOtp({ otp: codeToVerify, username, session });
-      router.replace("/");
+      router.replace("/onboarding");
     } catch (e) {
       setError(extractErrorMessage(e));
       setCode("");

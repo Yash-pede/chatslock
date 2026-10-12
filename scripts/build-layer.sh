@@ -15,6 +15,7 @@
 # Usage:
 #   bash scripts/build-layer.sh            # build + terraform apply (push)
 #   bash scripts/build-layer.sh --no-push  # build the zip only
+#   bash scripts/build-layer.sh clean      # only delete built artifacts
 #
 set -euo pipefail
 
@@ -23,6 +24,16 @@ API_PKG="$ROOT/packages/api"
 OUT_ZIP="$ROOT/layers/api/build.zip"
 PUSH=1
 [ "${1:-}" = "--no-push" ] && PUSH=0
+
+# --- clean: only delete built artifacts, then exit ----------------------------
+if [ "${1:-}" = "clean" ]; then
+  echo "==> Cleaning built artifacts"
+  rm -rf "$ROOT/layers"
+  rm -rf "$API_PKG/dist"
+  rm -rf "${TMPDIR:-/tmp}"/api-layer.*
+  echo "    removed layers/, packages/api/dist, and stray temp build dirs"
+  exit 0
+fi
 
 # --- make sure node/npm are available -----------------------------------------
 if ! command -v npm >/dev/null 2>&1; then
@@ -43,8 +54,8 @@ if [ ! -d "$API_PKG/dist" ]; then
 fi
 
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/api-layer.XXXXXX")"
-cleanup() { rm -rf "$BUILD_DIR"; }
-trap cleanup EXIT
+#cleanup() { rm -rf "$BUILD_DIR"; }
+#trap cleanup EXIT
 NODEJS="$BUILD_DIR/nodejs"
 
 # --- 1. layer package.json = @repo/api's production deps (single source) ------
@@ -74,7 +85,7 @@ rsync -a --exclude 'build.zip' --exclude '*.map' "$API_PKG/dist/" "$NODEJS/node_
 # --- 4. zip with the required nodejs/node_modules/ layout ---------------------
 echo "==> Zipping layer"
 mkdir -p "$(dirname "$OUT_ZIP")"
-rm -f "$OUT_ZIP"
+#rm -f "$OUT_ZIP"
 ( cd "$BUILD_DIR" && zip -rq "$OUT_ZIP" nodejs )
 echo "    built $OUT_ZIP ($(du -h "$OUT_ZIP" | cut -f1))"
 
@@ -84,7 +95,7 @@ if [ "$PUSH" -eq 1 ]; then
   ( cd "$ROOT/infrastructure" && terraform init -input=false >/dev/null && terraform apply -auto-approve )
 
   echo "==> Cleaning up layers/ (already uploaded; no longer needed on disk)"
-  rm -rf "$ROOT/layers"
+#  rm -rf "$ROOT/layers"
 else
   echo "==> Skipping push (--no-push); keeping $OUT_ZIP"
 fi

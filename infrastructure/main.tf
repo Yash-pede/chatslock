@@ -21,8 +21,8 @@ module "vpc" {
   public_subnets  = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k)]     # /24
   private_subnets = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k + 3)] # /24
 
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  enable_nat_gateway = false
+  # single_nat_gateway = true
 
   tags = local.tags
 }
@@ -54,6 +54,17 @@ module "api_lambdas" {
   api_lambda_secret_arn     = aws_secretsmanager_secret.backend_lambda_env.arn
   vpc_id                    = module.vpc.vpc_id
   vpc_subnet_ids            = module.vpc.private_subnets
+  s3_media_bucket_name      = module.s3_media.bucket_name
+}
+
+module "dynamodb" {
+  source = "./modules/backend/dynamodb"
+
+}
+
+module "s3_media" {
+  source               = "./modules/s3"
+  s3_media_bucket_name = "${local.name}-media"
 }
 
 resource "aws_secretsmanager_secret" "auth_lambda_env" {

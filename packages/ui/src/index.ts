@@ -1,4 +1,5 @@
 export * from "./components/auth-shell";
+export * from "./components/avatar";
 export * from "./components/button";
 export * from "./components/card";
 export * from "./components/code-input";

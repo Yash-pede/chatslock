@@ -13,9 +13,9 @@
     "npm-run-all2": "^9.0.2"
   },
   "dependencies": {
+    "@repo/api": "workspace:*",
     "@aws-sdk/client-cognito-identity-provider": "^3.1147.0",
     "@hono/aws-lambda": "^1.0.0",
-    "@repo/api": "workspace:*",
     "hono": "^4.13.13"
   }
 }
