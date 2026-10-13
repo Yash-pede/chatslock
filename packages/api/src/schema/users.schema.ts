@@ -23,7 +23,7 @@ export const userOnboardingSchema = baseSchema.extend({
     body: z.strictObject({
         username,
         fullName,
-        agentId: userId,
+        agentId: z.optional(userId),
     })
 });
 

@@ -1,5 +1,6 @@
 import {createMiddleware} from 'hono/factory'
-import {prettifyError, ZodError, ZodObject, ZodType} from "zod";
+import {flattenError, ZodError, ZodObject, ZodType} from "zod";
+import {ApiException} from "../utils/response";
 
 export type Schema = ZodObject<{
     body: ZodType<any>;
@@ -32,10 +33,11 @@ export const validateWithZod = (schema: Schema) => createMiddleware(async (c, ne
 
         const errors = new ZodError(modifiedIssues);
 
-        return c.json({
-            success: false,
-            message: prettifyError(errors),
-        }, 400);
+        throw new ApiException(400, {
+            code: "VALIDATION_ERROR",
+            message: "Validation failed",
+            details: flattenError(errors),
+        });
     }
     c.set('valid', result.data)
     await next()

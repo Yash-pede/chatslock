@@ -4,7 +4,7 @@ data "aws_iam_policy_document" "assume_role" {
     effect = "Allow"
 
     principals {
-      type = "Service"
+      type        = "Service"
       identifiers = ["lambda.amazonaws.com"]
     }
 
@@ -13,7 +13,7 @@ data "aws_iam_policy_document" "assume_role" {
 }
 
 resource "aws_iam_role" "custom_auth_lambda_role" {
-  name = "custom-auth-lambda-role"
+  name               = "custom-auth-lambda-role"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json
 }
 
@@ -51,9 +51,9 @@ resource "aws_security_group" "lambda_sg" {
   vpc_id = var.vpc_id
 
   egress {
-    from_port = 0
-    to_port   = 0
-    protocol  = "-1"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
@@ -61,19 +61,19 @@ resource "aws_security_group" "lambda_sg" {
 
 data "archive_file" "define_auth_zip" {
   type        = "zip"
-  source_dir = "${path.module}/custom_auth_lambda/define_auth/code"
+  source_dir  = "${path.module}/custom_auth_lambda/define_auth/code"
   output_path = "${path.module}/custom_auth_lambda/define_auth/define_auth.zip"
 }
 
 data "archive_file" "create_auth_zip" {
   type        = "zip"
-  source_dir = "${path.module}/custom_auth_lambda/create_auth/code"
+  source_dir  = "${path.module}/custom_auth_lambda/create_auth/code"
   output_path = "${path.module}/custom_auth_lambda/create_auth/create_auth.zip"
 }
 
 data "archive_file" "verify_auth_zip" {
   type        = "zip"
-  source_dir = "${path.module}/custom_auth_lambda/verify_auth/code"
+  source_dir  = "${path.module}/custom_auth_lambda/verify_auth/code"
   output_path = "${path.module}/custom_auth_lambda/verify_auth/verify_auth.zip"
 }
 
@@ -85,7 +85,11 @@ resource "aws_lambda_function" "define_auth" {
   handler       = "index.handler"
   code_sha256   = data.archive_file.define_auth_zip.output_base64sha256
   timeout       = 10
-  runtime = "nodejs24.x"
+  runtime       = "nodejs24.x"
+  vpc_config {
+    security_group_ids = [aws_security_group.lambda_sg.id]
+    subnet_ids         = var.private_subnet_ids
+  }
 }
 
 resource "aws_lambda_function" "create_auth" {
@@ -95,11 +99,7 @@ resource "aws_lambda_function" "create_auth" {
   handler       = "index.handler"
   code_sha256   = data.archive_file.create_auth_zip.output_base64sha256
   timeout       = 10
-  runtime = "nodejs24.x"
-  vpc_config {
-    security_group_ids = [aws_security_group.lambda_sg.id]
-    subnet_ids = var.private_subnet_ids
-  }
+  runtime       = "nodejs24.x"
   environment {
     variables = {
       SECRET_NAME = var.auth_lambda_secret_name
@@ -114,7 +114,11 @@ resource "aws_lambda_function" "verify_auth" {
   handler       = "index.handler"
   code_sha256   = data.archive_file.verify_auth_zip.output_base64sha256
   timeout       = 10
-  runtime = "nodejs24.x"
+  runtime       = "nodejs24.x"
+  vpc_config {
+    security_group_ids = [aws_security_group.lambda_sg.id]
+    subnet_ids         = var.private_subnet_ids
+  }
 }
 
 

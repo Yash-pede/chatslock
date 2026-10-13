@@ -1,3 +1,14 @@
+import {createMiddleware} from "hono/factory";
+import type {ApiGatewayRequestContextV2} from "@hono/aws-lambda";
+import {HTTPException} from "hono/http-exception";
+
+export type AuthClaims = Record<string, string | number | boolean | string[]>;
+
+export type LambdaEnv = {
+    Bindings: { requestContext: ApiGatewayRequestContextV2 };
+    Variables: { userId: string; claims: AuthClaims };
+};
+
 export const ROLE_NAMES = ["user", "agent", "moderator", "admin"] as const;
 
 export type RoleName = (typeof ROLE_NAMES)[number];
@@ -54,3 +65,10 @@ export function checkPermission(
 ): boolean {
     return ROLE_PERMISSION_MAP[role].includes(permission);
 }
+
+export const withAuth = createMiddleware<LambdaEnv>(async (c, next) => {
+    const username = c.env.requestContext?.authorizer?.jwt?.claims?.username;
+    if (typeof username !== "string") throw new HTTPException(401, {message: "Unauthorized"});
+    c.set("userId", username);
+    await next();
+});

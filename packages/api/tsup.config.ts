@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export default defineConfig({
-    entry: ['src/index.ts', 'src/auth/index.ts', 'src/schema/index.ts', 'src/utils/index.ts'],
+    entry: ['src/index.ts', 'src/auth/index.ts', 'src/schema/index.ts', 'src/utils/index.ts', 'src/types/index.ts'],
     clean: true,
     format: ['esm'],
     target: 'es2022',

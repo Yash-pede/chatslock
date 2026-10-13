@@ -1,25 +1,23 @@
 import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
-import {HTTPException} from "hono/http-exception";
 import {validateWithZod, userOnboardingSchema} from "@repo/api/schema"
 import {onboardingController} from "./users.controller"
+import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
+import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
 
-const app = new Hono({strict: false}).basePath("/api/users")
+type Bindings = {
+    event: LambdaEvent
+    requestContext: ApiGatewayRequestContextV2
+    context: LambdaContext
+}
+
+const app = new Hono<{ Bindings: Bindings }>({strict: false}).basePath("/api/users")
+
+app.use(withResponse)
+app.use(withAuth)
 
 app.post("/onboarding", validateWithZod(userOnboardingSchema), onboardingController)
 
-app.onError((err, c) => {
-    const status = err instanceof HTTPException ? err.status : 500;
-    if (!(err instanceof HTTPException)) {
-        console.error(err);
-    }
-    return c.json(
-        {
-            success: false,
-            message: err.message || "Something went wrong.",
-        },
-        status,
-    )
-})
+app.onError(apiErrorHandler)
 
 export const handler = handle(app)
