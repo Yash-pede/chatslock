@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["REPLACE_WITH_TEAM_ID.com.chatslock.app"],
+        "components": [
+          {
+            "/": "/u/*",
+            "comment": "chat share links"
+          }
+        ]
+      }
+    ]
+  }
+}

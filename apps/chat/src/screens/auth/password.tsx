@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
-import { AuthShell, Button, Text, TextField, spacing } from "@chatslock/ui";
+import { AuthShell, Button, Text, TextField, spacing } from "@repo/ui";
 import { useAuth } from "@/utils/AuthContext";
 import { extractErrorMessage } from "@repo/utils/auth";
 

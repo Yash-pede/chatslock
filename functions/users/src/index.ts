@@ -16,6 +16,7 @@ const app = new Hono<{ Bindings: Bindings }>({strict: false}).basePath("/api/use
 app.use(withResponse)
 app.use(withAuth)
 
+
 app.post("/onboarding", validateWithZod(userOnboardingSchema), onboardingController)
 
 app.onError(apiErrorHandler)

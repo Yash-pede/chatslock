@@ -7,7 +7,7 @@ import {
   Text,
   spacing,
   useTheme,
-} from "@chatslock/ui";
+} from "@repo/ui";
 
 export function AuthMethodScreen() {
   const router = useRouter();

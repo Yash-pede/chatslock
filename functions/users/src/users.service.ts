@@ -1,6 +1,6 @@
 import {AWSManager, awsManagerInstance} from "@repo/api/utils";
 import {AdminAddUserToGroupCommand} from "@aws-sdk/client-cognito-identity-provider"
-import {usersDao} from "./users.dao";
+import {usersDao} from "@repo/api/dao";
 import {HTTPException} from "hono/http-exception";
 
 export const onboardUser = async ({cognitoUsername, fullName, username}: {

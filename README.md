@@ -17,7 +17,7 @@ This Turborepo includes the following packages/apps:
 ### Apps and Packages
 
 - `chat`: the Expo (React Native) app
-- `@chatslock/ui`: design tokens and shared React Native components
+- `@repo/ui`: design tokens and shared React Native components
 - `@repo/utils`: API client and auth services
 - `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
 - `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo

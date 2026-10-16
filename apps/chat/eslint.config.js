@@ -31,7 +31,7 @@ module.exports = defineConfig([
               // Matched on the *imported* name, not the local one, so this also
               // catches `Text as RNText` and `import * as RN` + `RN.Text`.
               message:
-                "Use Text from @chatslock/ui — it carries the type scale and the tone vocabulary. React Native's Text is not part of this app's component vocabulary.",
+                "Use Text from @repo/ui — it carries the type scale and the tone vocabulary. React Native's Text is not part of this app's component vocabulary.",
             },
           ],
           // `paths` matches the exact specifier, so the deep import
@@ -46,7 +46,7 @@ module.exports = defineConfig([
                 "react-native/Libraries/Text/*",
               ],
               message:
-                "Import Text from @chatslock/ui. Reaching into react-native's internals for it also opts out of the type scale and the tone vocabulary.",
+                "Import Text from @repo/ui. Reaching into react-native's internals for it also opts out of the type scale and the tone vocabulary.",
             },
           ],
         },

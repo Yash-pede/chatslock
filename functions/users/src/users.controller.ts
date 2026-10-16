@@ -1,6 +1,5 @@
 import type {Context} from "hono";
 import {userOnboardingSchema} from "@repo/api/schema";
-import {usersDao} from "./users.dao";
 import {onboardUser} from "./users.service";
 
 export const onboardingController = async (c: Context) => {

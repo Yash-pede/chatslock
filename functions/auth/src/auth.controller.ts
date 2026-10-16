@@ -1,6 +1,13 @@
 import {Context} from "hono";
 import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/api/schema"
-import {cognitoLogout, cognitoRefreshCall, getCognitoUserGroups, sendOtp, verifyOtp} from "./auth.service";
+import {
+    adminCreateUser,
+    cognitoLogout,
+    cognitoRefreshCall,
+    getCognitoUserGroups,
+    sendOtp,
+    verifyOtp
+} from "./auth.service";
 import {AdminInitiateAuthCommand} from "@aws-sdk/client-cognito-identity-provider";
 import {AWSManager, awsManagerInstance} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
@@ -89,4 +96,10 @@ export const logOutUserController = async (c: Context) => {
     return c.json({
         message: "Logged out",
     })
+}
+
+export const adminCreateUserController = async (c: Context) => {
+    const {fullName, username, password, role} = await c.req.json()
+    const resp = await adminCreateUser(username, password, role, fullName)
+    return c.json(resp)
 }

@@ -10,7 +10,7 @@ import {
   TextField,
   spacing,
   useTheme,
-} from "@chatslock/ui";
+} from "@repo/ui";
 
 /** Lowercase handle: 3–20 letters, digits or underscores. */
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;

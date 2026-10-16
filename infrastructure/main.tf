@@ -67,6 +67,18 @@ module "s3_media" {
   s3_media_bucket_name = "${local.name}-media"
 }
 
+module "main_site" {
+  source = "./modules/static-site"
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
+  domain_name   = var.domain_name
+  resource_name = local.name
+}
+
 resource "aws_secretsmanager_secret" "auth_lambda_env" {
   name = "auth-lambdas/env"
 }

@@ -11,7 +11,7 @@ import {
     spacing,
     type,
     useTheme,
-} from "@chatslock/ui";
+} from "@repo/ui";
 import {useAuth} from "@/utils/AuthContext";
 import {extractErrorMessage} from "@repo/utils/auth";
 

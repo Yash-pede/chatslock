@@ -1,7 +1,7 @@
 /**
  * The single theme entry point for chatslock.
  *
- * Screens and components import from `@chatslock/ui/theme` only — never reach
+ * Screens and components import from `@repo/ui/theme` only — never reach
  * into individual token files — so there is exactly one source of truth for
  * colour, spacing, radius, elevation and type.
  *

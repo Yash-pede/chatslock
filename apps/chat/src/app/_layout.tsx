@@ -1,4 +1,4 @@
-import {ThemeProvider} from "@chatslock/ui";
+import {ThemeProvider} from "@repo/ui";
 import {SplashScreen, Stack} from "expo-router";
 import {StatusBar} from "expo-status-bar";
 import {useEffect} from "react";
@@ -53,6 +53,9 @@ function RootNavigator() {
             <Stack.Protected guard={!isAuthenticated}>
                 <Stack.Screen name="auth" options={{animation: "fade"}}/>
             </Stack.Protected>
+
+            {/* Deep links land here in either auth state, then redirect. */}
+            <Stack.Screen name="u/[id]"/>
         </Stack>
     );
 }

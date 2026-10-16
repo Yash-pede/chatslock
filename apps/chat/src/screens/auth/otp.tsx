@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { AuthShell, Button, CodeInput, Text } from "@chatslock/ui";
+import { AuthShell, Button, CodeInput, Text } from "@repo/ui";
 import { useAuth } from "@/utils/AuthContext";
 import { extractErrorMessage } from "@repo/utils/auth";
 
