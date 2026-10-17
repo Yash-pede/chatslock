@@ -20,6 +20,13 @@ export interface ScreenProps {
   footer?: ReactNode;
   scroll?: boolean;
   padded?: boolean;
+  /**
+   * Centre the body vertically in the window.
+   *
+   * Auth and empty-state screens want this. Content screens — a chat list, a
+   * settings page — start at the top instead.
+   */
+  center?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 }
@@ -34,6 +41,7 @@ export function Screen({
   footer,
   scroll = true,
   padded = true,
+  center = true,
   style,
   testID,
 }: ScreenProps) {
@@ -63,7 +71,10 @@ export function Screen({
       {scroll ? (
         <ScrollView
           style={styles.root}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            center ? styles.scrollCenter : styles.scrollTop,
+          ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={
             Platform.OS === "ios" ? "interactive" : "on-drag"
@@ -75,15 +86,17 @@ export function Screen({
         body
       )}
 
-      <View
-        style={[
-          styles.footer,
-          padded && { paddingHorizontal: spacing.xl },
-          { paddingBottom: Math.max(insets.bottom, spacing.lg) },
-        ]}
-      >
-        {footer}
-      </View>
+      {footer ? (
+        <View
+          style={[
+            styles.footer,
+            padded && { paddingHorizontal: spacing.xl },
+            { paddingBottom: Math.max(insets.bottom, spacing.lg) },
+          ]}
+        >
+          {footer}
+        </View>
+      ) : null}
     </KeyboardAvoidingView>
   );
 }
@@ -94,7 +107,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+  },
+  scrollCenter: {
     justifyContent: "center",
+  },
+  scrollTop: {
+    justifyContent: "flex-start",
   },
   body: {
     flexGrow: 1,
