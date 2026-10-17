@@ -3,8 +3,7 @@ resource "aws_dynamodb_table" "environment" {
   name         = "users"
   billing_mode = "PAY_PER_REQUEST"
 
-  hash_key  = "userId"
-  range_key = "createdAt"
+  hash_key = "userId"
 
   attribute {
     name = "userId"
@@ -32,16 +31,6 @@ resource "aws_dynamodb_table" "environment" {
   }
 
   attribute {
-    name = "createdAt"
-    type = "N"
-  }
-
-  attribute {
-    name = "cognitoUsername"
-    type = "S"
-  }
-
-  attribute {
     name = "agentId"
     type = "S"
   }
@@ -50,19 +39,6 @@ resource "aws_dynamodb_table" "environment" {
     name = "agentId_GSI"
     key_schema {
       attribute_name = "agentId"
-      key_type       = "HASH"
-    }
-    key_schema {
-      attribute_name = "lastActiveAt"
-      key_type       = "RANGE"
-    }
-    projection_type = "ALL"
-  }
-
-  global_secondary_index {
-    name = "cognitoUsername_GSI"
-    key_schema {
-      attribute_name = "cognitoUsername"
       key_type       = "HASH"
     }
     key_schema {
@@ -110,14 +86,8 @@ resource "aws_dynamodb_table" "environment" {
     }
   }
 
-  local_secondary_index {
-    name            = "user_lastActiveAt_LSI"
-    range_key       = "lastActiveAt"
-    projection_type = "ALL"
-  }
-
   lifecycle {
-    prevent_destroy = true
+#    prevent_destroy = true
     ignore_changes  = [read_capacity, write_capacity]
   }
 

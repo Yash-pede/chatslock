@@ -9,6 +9,10 @@
       "types": "./dist/schema/index.d.ts",
       "default": "./dist/schema/index.js"
     },
+    "./schema/requests": {
+      "types": "./dist/schema/requests.d.ts",
+      "default": "./dist/schema/requests.js"
+    },
     "./utils": {
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"

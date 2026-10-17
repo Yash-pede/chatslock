@@ -41,7 +41,7 @@ export const getOrCreateUserByPhone = async (phone: string) => {
     const existing = await authDao.getUserByPhone({phone});
     if (existing) return existing;
 
-    const cognitoUsername = crypto.randomUUID();
+    const cognitoUsername = `user_${phone}`;
 
     await authDao.createUser({
         cognitoUsername,
@@ -97,7 +97,6 @@ export async function adminCreateUser(
     const userId = await authDao.getCognitoUserIdWithUsername({cognitoUsername: username});
 
     if (!userId) throw new HTTPException(500, {message: "Unable to create user"})
-
     await usersDao.createUserWithConversation({
         userId,
         cognitoUsername: username,

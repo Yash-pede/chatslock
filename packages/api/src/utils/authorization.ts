@@ -72,7 +72,7 @@ export const withAuth = createMiddleware<LambdaEnv>(async (c, next) => {
     const userId = claims?.sub;
     if (typeof userId !== "string") throw new HTTPException(401, {message: "Unauthorized"});
 
-    const cognitoUsername = claims?.["cognito:username"];
+    const cognitoUsername = claims?.username;
 
     c.set("userId", userId);
     c.set("cognitoUsername", typeof cognitoUsername === "string" ? cognitoUsername : "");

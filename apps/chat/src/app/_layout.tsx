@@ -18,7 +18,7 @@ SplashScreen.preventAutoHideAsync();
  * Keeps the splash screen up while silent auth resolves, then hides it.
  */
 function SplashScreenController() {
-    const {isLoading, isAuthenticated} = useAuth();
+    const {isLoading} = useAuth();
 
     useEffect(() => {
         if (!isLoading) {
@@ -30,13 +30,13 @@ function SplashScreenController() {
 }
 
 /**
- * Guards the two halves of the app with Expo Router's protected routes. The
- * index is only reachable when signed in; the auth flow only when signed out.
- * A signed-out user hitting a protected route is redirected to the first
- * available screen (the auth flow), and vice versa.
+ * Guards the app with Expo Router's protected routes. The index is only
+ * reachable once signed in *and* onboarded; a signed-in user without a profile
+ * row is pinned to onboarding; the auth flow only when signed out. A user
+ * hitting an unavailable route is redirected to the first available screen.
  */
 function RootNavigator() {
-    const {isAuthenticated} = useAuth();
+    const {isAuthenticated, isOnboarded} = useAuth();
 
     return (
         <Stack
@@ -45,8 +45,11 @@ function RootNavigator() {
                 animation: "slide_from_right",
             }}
         >
-            <Stack.Protected guard={isAuthenticated}>
+            <Stack.Protected guard={isAuthenticated && isOnboarded}>
                 <Stack.Screen name="index"/>
+            </Stack.Protected>
+
+            <Stack.Protected guard={isAuthenticated && !isOnboarded}>
                 <Stack.Screen name="onboarding" options={{animation: "fade"}}/>
             </Stack.Protected>
 

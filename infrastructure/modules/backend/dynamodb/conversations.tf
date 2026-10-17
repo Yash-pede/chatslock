@@ -90,7 +90,7 @@ resource "aws_dynamodb_table" "conversations" {
   }
 
   lifecycle {
-    prevent_destroy = true
+#    prevent_destroy = true
     ignore_changes  = [read_capacity, write_capacity]
   }
 

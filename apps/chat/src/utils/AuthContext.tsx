@@ -19,6 +19,8 @@ import {
     type AuthUser,
     type OtpChallenge,
 } from '@repo/utils/auth';
+import {getMe} from '@/api/users';
+import type {User} from '@repo/api/types';
 
 export interface OtpParams {
     otp: string;
@@ -28,8 +30,12 @@ export interface OtpParams {
 
 export interface AuthContextValue {
     isAuthenticated: boolean;
+    /** True once the user has a username and full name in the database. */
+    isOnboarded: boolean;
     isLoading: boolean;
     user: AuthUser | null;
+    /** The signed-in user's database row (null while signed out or loading). */
+    profile: User | null;
     error: string | null;
     /** Step 1 of phone sign-in — sends the code, returns the challenge. */
     requestOtp: (phone: string) => Promise<OtpChallenge>;
@@ -38,26 +44,50 @@ export interface AuthContextValue {
     /** Username + password sign-in. */
     login: (username: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
+    /** Re-reads the profile, e.g. after finishing onboarding. */
+    refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({children}: { children: ReactNode }) {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isOnboarded, setIsOnboarded] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [user, setUser] = useState<AuthUser | null>(null);
+    const [profile, setProfile] = useState<User | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const applySession = useCallback(() => {
+    /**
+     * Whether onboarding is complete is a database fact, not a token fact — a
+     * signed-in user can still be missing a row (or a username/name), and must
+     * be sent through onboarding before the app is usable.
+     */
+    const loadProfile = useCallback(async () => {
+        try {
+            // null means the API answered NOT_FOUND — no row in the users table.
+            const current = await getMe<User>();
+            setProfile(current);
+            setIsOnboarded(Boolean(current?.username && current?.fullName));
+        } catch {
+            setProfile(null);
+            setIsOnboarded(false);
+        }
+    }, []);
+
+    const applySession = useCallback(async () => {
         setUser(tokenManager.getUser());
         setIsAuthenticated(true);
         tokenRefreshService.startAutoRefresh();
-    }, []);
+        await loadProfile();
+    }, [loadProfile]);
 
     const clearSession = useCallback(() => {
         tokenRefreshService.stopAutoRefresh();
         setUser(null);
+        setProfile(null);
         setIsAuthenticated(false);
+        setIsOnboarded(false);
     }, []);
 
     useEffect(() => {
@@ -68,6 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!active) return;
             setUser(state.user);
             setIsAuthenticated(state.isAuthenticated);
+            if (state.isAuthenticated) {
+                await loadProfile();
+                if (!active) return;
+            }
             setIsLoading(false);
         })();
 
@@ -78,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             active = false;
             unsubscribe();
         };
-    }, [clearSession]);
+    }, [clearSession, loadProfile]);
 
     const requestOtp = useCallback(async (phone: string) => {
         setError(null);
@@ -95,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setError(null);
             try {
                 await verifyOtpRequest(params);
-                applySession();
+                await applySession();
             } catch (e) {
                 setError(extractErrorMessage(e));
                 throw e;
@@ -108,8 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         async (username: string, password: string) => {
             setError(null);
             try {
-                await loginRequest({ username, password });
-                applySession();
+                await loginRequest({username, password});
+                await applySession();
             } catch (e) {
                 setError(extractErrorMessage(e));
                 throw e;
@@ -127,13 +161,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         <AuthContext.Provider
             value={{
                 isAuthenticated,
+                isOnboarded,
                 isLoading,
                 user,
+                profile,
                 error,
                 requestOtp,
                 verifyOtp,
                 login,
                 logout,
+                refreshProfile: loadProfile,
             }}
         >
             {children}
@@ -147,4 +184,12 @@ export function useAuth(): AuthContextValue {
         throw new Error('useAuth must be used within an AuthProvider');
     }
     return context;
+}
+
+/**
+ * The signed-in user's database row, available anywhere in the app.
+ * Null while signed out or before the profile has loaded.
+ */
+export function useCurrentUser(): User | null {
+    return useAuth().profile;
 }

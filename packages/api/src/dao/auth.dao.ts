@@ -67,7 +67,7 @@ export const authDao = {
             }),
         );
     },
-    getUser: async ({cognitoUsername}: { cognitoUsername: string }) => {
+    getUser: async ({cognitoUsername}: {cognitoUsername: string}) => {
         return await AWSManager.cognitoClient.send(
             new AdminGetUserCommand({
                 UserPoolId: await getUserPoolId(),
@@ -75,11 +75,11 @@ export const authDao = {
             }),
         );
     },
-    getCognitoUserIdWithUsername: async ({cognitoUsername}: { cognitoUsername: string }) => {
+    getCognitoUserIdWithUsername: async ({cognitoUsername}: {cognitoUsername: string}) => {
         const user = await authDao.getUser({cognitoUsername});
         return user.UserAttributes?.find((attr) => attr.Name === "sub")?.Value;
     },
-    userExists: async ({cognitoUsername}: { cognitoUsername: string }) => {
+    userExists: async ({cognitoUsername}: {cognitoUsername: string}) => {
         try {
             await authDao.getUser({cognitoUsername});
             return true;
@@ -88,7 +88,7 @@ export const authDao = {
             throw e;
         }
     },
-    getUserStatus: async ({cognitoUsername}: { cognitoUsername: string }) => {
+    getUserStatus: async ({cognitoUsername}: {cognitoUsername: string}) => {
         try {
             const user = await authDao.getUser({cognitoUsername});
             return user.UserStatus;
@@ -97,7 +97,7 @@ export const authDao = {
             throw e;
         }
     },
-    listGroupsForUser: async ({cognitoUsername}: { cognitoUsername: string }) => {
+    listGroupsForUser: async ({cognitoUsername}: {cognitoUsername: string}) => {
         const response = await AWSManager.cognitoClient.send(
             new AdminListGroupsForUserCommand({
                 UserPoolId: await getUserPoolId(),

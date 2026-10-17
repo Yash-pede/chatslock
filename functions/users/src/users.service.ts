@@ -1,4 +1,5 @@
-import {usersDao, authDao, conversationsDao} from "@repo/api/dao";
+import {usersDao, authDao, conversationsDao, isUsernameTakenError} from "@repo/api/dao";
+import {ApiException} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
 
 export const onboardUser = async ({userId, cognitoUsername, fullName, username, agentId}: {
@@ -31,6 +32,12 @@ export const onboardUser = async ({userId, cognitoUsername, fullName, username, 
     } catch (err) {
         console.error("Failed to onboard user", err);
         if (err instanceof HTTPException) throw err;
+        if (isUsernameTakenError(err)) {
+            throw new ApiException(409, {
+                code: "USERNAME_TAKEN",
+                message: "Username already exists",
+            });
+        }
 
         throw new HTTPException(500, {
             message: "Failed to onboard user",

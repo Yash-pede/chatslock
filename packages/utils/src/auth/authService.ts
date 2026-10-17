@@ -34,6 +34,8 @@ export interface OtpChallenge {
 export interface ApiErrorBody {
     message?: string;
     errors?: unknown;
+    /** Envelope shape returned by the users lambda: `{ ok: false, error }`. */
+    error?: { code?: string; message?: string };
 }
 
 /** Pull the backend's human-readable message out of an axios error. */
@@ -41,9 +43,12 @@ export function extractErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
         const data = error.response?.data;
 
-        // A JSON body ({ success, message } / { message, errors }).
+        // A JSON body ({ error } / { message } / { message, errors }).
         if (data && typeof data === 'object') {
             const body = data as ApiErrorBody;
+            if (typeof body.error?.message === 'string' && body.error.message.trim()) {
+                return body.error.message;
+            }
             if (typeof body.message === 'string' && body.message.trim()) {
                 return body.message;
             }

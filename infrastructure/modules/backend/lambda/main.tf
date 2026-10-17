@@ -33,9 +33,9 @@ module "auth_lambda" {
   timeout       = 10
   layers        = [aws_lambda_layer_version.lambda_layer.arn]
   lambda_role   = aws_iam_role.api_lambda_role.arn
-  # 
-  # vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
-  # vpc_subnet_ids         = var.vpc_subnet_ids
+
+  vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
+  vpc_subnet_ids         = var.vpc_subnet_ids
 
   source_path = "${path.root}/../functions/auth/dist/index.mjs"
 }

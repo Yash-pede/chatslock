@@ -6,6 +6,7 @@
     "@expo/metro-runtime": "^57.0.16",
     "@expo/ui": "~57.0.21",
     "@react-native-async-storage/async-storage": "catalog:",
+    "@repo/api": "workspace:*",
     "@repo/ui": "workspace:*",
     "@repo/utils": "workspace:*",
     "expo": "~57.0.26",

@@ -21,8 +21,8 @@ module "vpc" {
   public_subnets  = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k)]     # /24
   private_subnets = [for k, v in local.azs : cidrsubnet(local.vpc_cidr, 8, k + 3)] # /24
 
-  enable_nat_gateway = false
-  # single_nat_gateway = true
+  enable_nat_gateway = true
+  single_nat_gateway = true
 
   tags = local.tags
 }
@@ -96,7 +96,6 @@ resource "aws_secretsmanager_secret_version" "example" {
   })
 }
 
-# infrastructure/main.tf
 resource "aws_vpc_endpoint" "dynamodb" {
   vpc_id            = module.vpc.vpc_id
   service_name      = "com.amazonaws.${var.aws_region}.dynamodb"
@@ -104,4 +103,13 @@ resource "aws_vpc_endpoint" "dynamodb" {
   route_table_ids   = module.vpc.private_route_table_ids
 
   tags = { Name = "dynamodb-endpoint" }
+}
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id            = module.vpc.vpc_id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = module.vpc.private_route_table_ids
+
+  tags = { Name = "s3-endpoint" }
 }
