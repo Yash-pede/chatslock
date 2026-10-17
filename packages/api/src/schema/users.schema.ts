@@ -27,6 +27,13 @@ export const userOnboardingSchema = baseSchema.extend({
     })
 });
 
+export const getUserConversationsSchema = baseSchema.extend({
+    query: z.strictObject({
+        limit: z.coerce.number().int().min(1).max(50).optional(),
+        cursor: z.string().optional(),
+    })
+});
+
 export const getUserProfileImagePresignUrlSchema = baseSchema.extend({
     body: z.strictObject({
         contentType: str(),
@@ -42,8 +49,6 @@ export const updateUserProfileSchema = baseSchema.extend({
     })
 });
 
-export const getConversationByUserIdSchema = baseSchema.extend({
-    params: z.strictObject({userId})
-});
 
 export type userOnboardingSchema = z.infer<typeof userOnboardingSchema>;
+export type getUserConversationsSchema = z.infer<typeof getUserConversationsSchema>;

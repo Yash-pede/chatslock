@@ -6,7 +6,7 @@ export type AuthClaims = Record<string, string | number | boolean | string[]>;
 
 export type LambdaEnv = {
     Bindings: { requestContext: ApiGatewayRequestContextV2 };
-    Variables: { userId: string; claims: AuthClaims };
+    Variables: { userId: string; cognitoUsername: string; claims: AuthClaims };
 };
 
 export const ROLE_NAMES = ["user", "agent", "moderator", "admin"] as const;
@@ -67,8 +67,14 @@ export function checkPermission(
 }
 
 export const withAuth = createMiddleware<LambdaEnv>(async (c, next) => {
-    const username = c.env.requestContext?.authorizer?.jwt?.claims?.username;
-    if (typeof username !== "string") throw new HTTPException(401, {message: "Unauthorized"});
-    c.set("userId", username);
+    const claims = c.env.requestContext?.authorizer?.jwt?.claims;
+
+    const userId = claims?.sub;
+    if (typeof userId !== "string") throw new HTTPException(401, {message: "Unauthorized"});
+
+    const cognitoUsername = claims?.["cognito:username"];
+
+    c.set("userId", userId);
+    c.set("cognitoUsername", typeof cognitoUsername === "string" ? cognitoUsername : "");
     await next();
 });

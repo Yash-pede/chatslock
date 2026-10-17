@@ -278,6 +278,9 @@ importers:
       '@aws-sdk/client-secrets-manager':
         specifier: ^3.1147.0
         version: 3.1147.0
+      '@aws-sdk/util-dynamodb':
+        specifier: ^3.996.9
+        version: 3.996.9(@aws-sdk/client-dynamodb@3.1149.0)
       '@hono/aws-lambda':
         specifier: ^1.0.0
         version: 1.0.1(hono@4.13.13)
@@ -294,9 +297,6 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
     devDependencies:
-      '@aws-sdk/util-dynamodb':
-        specifier: ^3.996.9
-        version: 3.996.9(@aws-sdk/client-dynamodb@3.1149.0)
       '@repo/eslint-config':
         specifier: workspace:*
         version: link:../eslint-config

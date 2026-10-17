@@ -1,35 +1,14 @@
-import {
-    AdminCreateUserCommand,
-    AdminListGroupsForUserCommand,
-    InitiateAuthCommand,
-    ListUsersCommand,
-    RespondToAuthChallengeCommand,
-    GlobalSignOutCommand,
-    AdminInitiateAuthCommand,
-    AdminGetUserCommand,
-    AdminAddUserToGroupCommand,
-    AdminSetUserPasswordCommand,
-    UserNotFoundException,
-} from "@aws-sdk/client-cognito-identity-provider";
-import {AWSManager, awsManagerInstance} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
-import {usersDao} from "@repo/api/dao"
+import {authDao, usersDao} from "@repo/api/dao";
+import type {RoleName} from "@repo/api/utils";
 
 export async function sendOtp(phone: string) {
     const username = await getOrCreateUserByPhone(phone);
-    const clientId = await awsManagerInstance.getSecretValue(
-        "cognito_user_client_id",
-    );
     try {
-        const response = await AWSManager.cognitoClient.send(
-            new InitiateAuthCommand({
-                AuthFlow: "CUSTOM_AUTH",
-                ClientId: clientId,
-                AuthParameters: {
-                    USERNAME: username,
-                },
-            }),
-        );
+        const response = await authDao.initiateAuth({
+            authFlow: "CUSTOM_AUTH",
+            authParameters: {USERNAME: username},
+        });
 
         return {
             ...response,
@@ -46,115 +25,48 @@ export const verifyOtp = async (
     session: string,
 ) => {
     try {
-        const clientId = await awsManagerInstance.getSecretValue(
-            "cognito_user_client_id",
-        );
-        return await AWSManager.cognitoClient.send(
-            new RespondToAuthChallengeCommand({
-                ChallengeName: "CUSTOM_CHALLENGE",
-                ClientId: clientId,
-                Session: session,
-                ChallengeResponses: {
-                    USERNAME: username,
-                    ANSWER: otp,
-                },
-            }),
-        );
+        return await authDao.respondToAuthChallenge({
+            session,
+            challengeResponses: {
+                USERNAME: username,
+                ANSWER: otp,
+            },
+        });
     } catch (err) {
         throw new HTTPException(500, {message: "unable to verify otp."});
     }
 };
 
 export const getOrCreateUserByPhone = async (phone: string) => {
-    const userPoolId = await awsManagerInstance.getSecretValue(
-        "cognito_user_pool_id",
-    );
+    const existing = await authDao.getUserByPhone({phone});
+    if (existing) return existing;
 
-    const list = await AWSManager.cognitoClient.send(
-        new ListUsersCommand({
-            UserPoolId: userPoolId,
-            Filter: `phone_number = "${phone}"`,
-            Limit: 1,
-        }),
-    );
+    const cognitoUsername = crypto.randomUUID();
 
-    if (list.Users && list.Users.length > 0) {
-        return list.Users[0].Username!;
-    }
+    await authDao.createUser({
+        cognitoUsername,
+        attributes: [
+            {Name: "phone_number", Value: phone},
+            {Name: "phone_number_verified", Value: "true"},
+        ],
+    });
 
-    const username = crypto.randomUUID();
-
-    await AWSManager.cognitoClient.send(
-        new AdminCreateUserCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            UserAttributes: [
-                {Name: "phone_number", Value: phone},
-                {Name: "phone_number_verified", Value: "true"},
-            ],
-            MessageAction: "SUPPRESS",
-        }),
-    );
-
-    return username;
+    return cognitoUsername;
 };
 
 export async function getCognitoUserGroups(username: string) {
-    const userPoolId = await awsManagerInstance.getSecretValue(
-        "cognito_user_pool_id",
-    );
-    const response = await AWSManager.cognitoClient.send(
-        new AdminListGroupsForUserCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-        }),
-    );
-
-    return response.Groups || [];
+    return await authDao.listGroupsForUser({cognitoUsername: username});
 }
 
 export async function cognitoRefreshCall(refreshToken: string) {
-    const clientId = await awsManagerInstance.getSecretValue(
-        "cognito_user_client_id",
-    );
-
-    return await AWSManager.cognitoClient.send(
-        new InitiateAuthCommand({
-            AuthFlow: "REFRESH_TOKEN_AUTH",
-            ClientId: clientId,
-            AuthParameters: {
-                REFRESH_TOKEN: refreshToken,
-            },
-        }),
-    );
+    return await authDao.initiateAuth({
+        authFlow: "REFRESH_TOKEN_AUTH",
+        authParameters: {REFRESH_TOKEN: refreshToken},
+    });
 }
 
 export async function cognitoLogout(accessToken: string) {
-    return await AWSManager.cognitoClient.send(
-        new GlobalSignOutCommand({
-            AccessToken: accessToken,
-        }),
-    );
-}
-
-/** True when the username is already taken in the user pool. */
-async function cognitoUserExists(userPoolId: string, username: string) {
-    try {
-        await AWSManager.cognitoClient.send(
-            new AdminGetUserCommand({
-                UserPoolId: userPoolId,
-                Username: username,
-            }),
-        );
-        return true;
-    } catch (e) {
-        // AdminGetUser throws (it does not return an empty result) when the
-        // user is missing; anything else is a real failure.
-        if (e instanceof UserNotFoundException) {
-            return false;
-        }
-        throw e;
-    }
+    return await authDao.globalSignOut({accessToken});
 }
 
 export async function adminCreateUser(
@@ -163,54 +75,36 @@ export async function adminCreateUser(
     role: string,
     fullName?: string,
 ) {
-    const userPoolId = await awsManagerInstance.getSecretValue(
-        "cognito_user_pool_id",
-    );
-    const adminClientId = await awsManagerInstance.getSecretValue(
-        "cognito_admin_client_id",
-    );
+    const status = await authDao.getUserStatus({cognitoUsername: username});
 
-    if (await cognitoUserExists(userPoolId, username)) {
+    // A leftover FORCE_CHANGE_PASSWORD user is a half-finished create (e.g. the
+    // password failed the pool policy after AdminCreateUser succeeded), so
+    // resume it instead of failing. Anything else is a real duplicate.
+    if (status && status !== "FORCE_CHANGE_PASSWORD") {
         throw new HTTPException(409, {message: "User already exists"});
     }
 
-    await AWSManager.cognitoClient.send(
-        new AdminCreateUserCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            MessageAction: "SUPPRESS",
-            UserAttributes: [{Name: "given_name", Value: fullName || ""}],
-        }),
-    );
+    if (!status) {
+        await authDao.createUser({
+            cognitoUsername: username,
+            attributes: [{Name: "given_name", Value: fullName || ""}],
+        });
+    }
 
-    await AWSManager.cognitoClient.send(
-        new AdminSetUserPasswordCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            Password: password,
-            Permanent: true,
-        }),
-    );
+    await authDao.setUserPassword({cognitoUsername: username, password});
+    await authDao.addUserToGroup({cognitoUsername: username, groupName: role as RoleName});
 
-    await AWSManager.cognitoClient.send(
-        new AdminAddUserToGroupCommand({
-            UserPoolId: userPoolId,
-            Username: username,
-            GroupName: role,
-        }),
-    )
+    const userId = await authDao.getCognitoUserIdWithUsername({cognitoUsername: username});
 
-    const command = new AdminInitiateAuthCommand({
-        UserPoolId: userPoolId,
-        ClientId: adminClientId,
-        AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
-        AuthParameters: {
-            USERNAME: username,
-            PASSWORD: password,
-        },
+    if (!userId) throw new HTTPException(500, {message: "Unable to create user"})
+
+    await usersDao.createUserWithConversation({
+        userId,
+        cognitoUsername: username,
+        username,
+        fullName: fullName || "",
+        role: role as RoleName,
     });
 
-    await usersDao.createUserWithConversation({userId:})
-
-    return await AWSManager.cognitoClient.send(command);
+    return await authDao.adminInitiateAuth({username, password});
 }
