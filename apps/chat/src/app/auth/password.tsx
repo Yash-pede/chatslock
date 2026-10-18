@@ -17,14 +17,16 @@ export default function AuthPasswordRoute() {
     const canSubmit = username.trim().length > 0 && password.length > 0;
 
     const handleSignIn = async () => {
+        if (loading) return;
         setError(null);
         setLoading(true);
         try {
-            await login(username.trim(), password);
-            router.replace("/");
+            // Resolves only after /me: agents land on home, users without a
+            // username/full name on onboarding. Stay here until then.
+            const destination = await login(username.trim(), password);
+            router.replace(destination);
         } catch (e) {
             setError(extractErrorMessage(e));
-        } finally {
             setLoading(false);
         }
     };

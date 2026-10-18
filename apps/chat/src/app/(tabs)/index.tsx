@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet, View } from "react-native";
 import {
   AppHeader,
   ConversationRow,
@@ -13,6 +13,7 @@ import {
   useTheme,
 } from "@repo/ui";
 import { takePendingChatId } from "@/utils/pendingChat";
+import { useToast } from "@/utils/ToastProvider";
 
 type Conversation = {
   id: string;
@@ -85,11 +86,11 @@ const CONVERSATIONS: Conversation[] = [
   },
 ];
 
-const comingSoon = (title: string) =>
-  Alert.alert(title, "This screen is coming soon.");
-
 export default function ChatsScreen() {
   const { colors } = useTheme();
+  const { showToast } = useToast();
+
+  const comingSoon = (title: string) => showToast({ title });
   const [pendingChatId, setPendingChatId] = useState<string | null>(null);
 
   useEffect(() => {

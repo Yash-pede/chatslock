@@ -20,6 +20,7 @@ import CircleQuestionMark from "lucide-react-native/icons/circle-question-mark";
 import Clock from "lucide-react-native/icons/clock";
 import Database from "lucide-react-native/icons/database";
 import KeyRound from "lucide-react-native/icons/key-round";
+import Link from "lucide-react-native/icons/link";
 import Lock from "lucide-react-native/icons/lock";
 import LogOut from "lucide-react-native/icons/log-out";
 import MessageCircle from "lucide-react-native/icons/message-circle";
@@ -86,6 +87,8 @@ const icons = {
   at: AtSign,
   /** A clock — a date or time detail. */
   clock: Clock,
+  /** A chain link — copying a shareable URL. */
+  link: Link,
 } as const satisfies Record<string, LucideIcon>;
 
 /**

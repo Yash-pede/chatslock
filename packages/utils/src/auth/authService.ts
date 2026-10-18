@@ -123,6 +123,12 @@ export async function refresh(): Promise<AuthTokens> {
     }
 
     const { data } = await http.post<AuthTokens>('/refresh', { refreshToken });
+    // Cognito only returns an access token here — the ID token rides along as
+    // `idToken` for our own session restore. Without either, the session is
+    // unusable and must not be reported as signed in.
+    if (!data?.accessToken || !data?.idToken) {
+        throw new Error('Refresh response did not include usable tokens');
+    }
     tokenManager.setTokens({
         accessToken: data.accessToken,
         idToken: data.idToken,

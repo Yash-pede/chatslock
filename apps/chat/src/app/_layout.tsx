@@ -5,6 +5,7 @@ import {useEffect} from "react";
 import {SafeAreaProvider} from "react-native-safe-area-context";
 import {configureApi} from "@repo/utils";
 import {AuthProvider, useAuth} from "@/utils/AuthContext";
+import {ToastProvider} from "@/utils/ToastProvider";
 
 // Hand the API URL (from EXPO_PUBLIC_API_URL in .env) to the shared client.
 // Expo inlines EXPO_PUBLIC_* into the app bundle, so no URL lives in code.
@@ -30,13 +31,17 @@ function SplashScreenController() {
 }
 
 /**
- * Guards the app with Expo Router's protected routes. The index is only
- * reachable once signed in *and* onboarded; a signed-in user without a profile
- * row is pinned to onboarding; the auth flow only when signed out. A user
- * hitting an unavailable route is redirected to the first available screen.
+ * Guards the app with Expo Router's protected routes.
+ *
+ * `isAuthenticated` only becomes true once the profile has been fetched, so
+ * the guard never picks a destination from a half-known session: on sign-in the
+ * screen goes straight to `/` (agent) or `/onboarding` (user without a profile).
+ *
+ * @see https://docs.expo.dev/router/advanced/protected/
  */
 function RootNavigator() {
-    const {isAuthenticated, isOnboarded} = useAuth();
+    const {isAuthenticated, profile} = useAuth();
+    const needsOnboarding = isAuthenticated && !(profile?.username && profile?.fullName);
 
     return (
         <Stack
@@ -45,11 +50,11 @@ function RootNavigator() {
                 animation: "slide_from_right",
             }}
         >
-            <Stack.Protected guard={isAuthenticated && isOnboarded}>
+            <Stack.Protected guard={isAuthenticated && !needsOnboarding}>
                 <Stack.Screen name="(tabs)"/>
             </Stack.Protected>
 
-            <Stack.Protected guard={isAuthenticated && !isOnboarded}>
+            <Stack.Protected guard={needsOnboarding}>
                 <Stack.Screen name="onboarding" options={{animation: "fade"}}/>
             </Stack.Protected>
 
@@ -68,10 +73,12 @@ export default function RootLayout() {
         <SafeAreaProvider>
             <ThemeProvider>
                 <StatusBar style="auto"/>
-                <AuthProvider>
-                    <SplashScreenController/>
-                    <RootNavigator/>
-                </AuthProvider>
+                <ToastProvider>
+                    <AuthProvider>
+                        <SplashScreenController/>
+                        <RootNavigator/>
+                    </AuthProvider>
+                </ToastProvider>
             </ThemeProvider>
         </SafeAreaProvider>
     );

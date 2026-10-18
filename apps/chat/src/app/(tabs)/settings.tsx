@@ -1,4 +1,4 @@
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import {
   AppHeader,
   Avatar,
@@ -12,9 +12,7 @@ import {
   useThemeMode,
 } from "@repo/ui";
 import { useAuth } from "@/utils/AuthContext";
-
-const comingSoon = (title: string) =>
-  Alert.alert(title, "This screen is coming soon.");
+import { useToast } from "@/utils/ToastProvider";
 
 const MODE_LABEL = {
   system: "System",
@@ -26,22 +24,16 @@ export default function SettingsScreen() {
   const { colors } = useTheme();
   const { mode, cycleMode } = useThemeMode();
   const { profile, user, logout } = useAuth();
+  const { showToast } = useToast();
+
+  const comingSoon = (title: string) => showToast({ title });
 
   const name = profile?.fullName || user?.username || "Your profile";
   const username = profile?.username || user?.username || "";
   const phone = profile?.phone || user?.phone || "";
 
   const confirmSignOut = () => {
-    Alert.alert("Sign out", "You will need to sign in again to use chatslock.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign out",
-        style: "destructive",
-        onPress: () => {
-          void logout();
-        },
-      },
-    ]);
+    void logout();
   };
 
   return (

@@ -21,3 +21,13 @@ class AuthEventBus {
 }
 
 export const authEvents = new AuthEventBus();
+
+/** True when an axios-style failure never reached the server. */
+export function isNetworkError(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false;
+    const { isAxiosError, response } = error as {
+        isAxiosError?: boolean;
+        response?: unknown;
+    };
+    return isAxiosError === true && !response;
+}

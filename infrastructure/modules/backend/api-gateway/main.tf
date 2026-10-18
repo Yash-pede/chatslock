@@ -79,6 +79,16 @@ module "apigateway-v2" {
         timeout_milliseconds   = 12000
       }
     }
+
+    "ANY /api/conversations/{proxy+}" = {
+      authorization_type = "JWT"
+      authorizer_key     = "main"
+      integration = {
+        uri                    = var.lambda_details.conversations.arn
+        payload_format_version = "2.0"
+        timeout_milliseconds   = 12000
+      }
+    }
   }
 
 }

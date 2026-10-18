@@ -44,12 +44,12 @@ export default function AuthOtpRoute() {
     setError(null);
     setLoading(true);
     try {
-      await verifyOtp({ otp: codeToVerify, username, session });
-      router.replace("/onboarding");
+      // Resolves only after /me; stay on this screen until it does.
+      const destination = await verifyOtp({ otp: codeToVerify, username, session });
+      router.replace(destination);
     } catch (e) {
       setError(extractErrorMessage(e));
       setCode("");
-    } finally {
       setLoading(false);
     }
   };

@@ -28,91 +28,107 @@ export interface OtpParams {
     session: string;
 }
 
+/** Where a signed-in session belongs. */
+export type HomeRoute = '/onboarding' | '/';
+
 export interface AuthContextValue {
+    /** Signed in and the profile has been checked. */
     isAuthenticated: boolean;
-    /** True once the user has a username and full name in the database. */
-    isOnboarded: boolean;
+    /** First launch only: the stored session is still being restored. */
     isLoading: boolean;
+    /** The signed-in user decoded from the ID token. */
     user: AuthUser | null;
-    /** The signed-in user's database row (null while signed out or loading). */
+    /** The signed-in user's database row (null if the row doesn't exist yet). */
     profile: User | null;
     error: string | null;
     /** Step 1 of phone sign-in — sends the code, returns the challenge. */
     requestOtp: (phone: string) => Promise<OtpChallenge>;
-    /** Step 2 — exchanges the code for tokens. */
-    verifyOtp: (params: OtpParams) => Promise<void>;
-    /** Username + password sign-in. */
-    login: (username: string, password: string) => Promise<void>;
+    /** Step 2 — exchanges the code for tokens. Resolves to the route to open. */
+    verifyOtp: (params: OtpParams) => Promise<HomeRoute>;
+    /** Username + password sign-in. Resolves to the route to open. */
+    login: (username: string, password: string) => Promise<HomeRoute>;
     logout: () => Promise<void>;
-    /** Re-reads the profile, e.g. after finishing onboarding. */
+    /** Re-reads the profile after onboarding. */
     refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * Agents are provisioned by an admin and never onboard. Everyone else needs a
+ * username and full name on their row before the app is usable.
+ */
+function resolveHome(user: AuthUser | null, profile: User | null): HomeRoute {
+    const isAgent = user?.groups.includes('agent') ?? false;
+    const hasProfile = Boolean(profile?.username && profile?.fullName);
+    return isAgent || hasProfile ? '/' : '/onboarding';
+}
+
 export function AuthProvider({children}: { children: ReactNode }) {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [isOnboarded, setIsOnboarded] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [user, setUser] = useState<AuthUser | null>(null);
     const [profile, setProfile] = useState<User | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    /**
-     * Whether onboarding is complete is a database fact, not a token fact — a
-     * signed-in user can still be missing a row (or a username/name), and must
-     * be sent through onboarding before the app is usable.
-     */
-    const loadProfile = useCallback(async () => {
+    const fetchProfile = useCallback(async (): Promise<User | null> => {
         try {
-            // null means the API answered NOT_FOUND — no row in the users table.
-            const current = await getMe<User>();
-            setProfile(current);
-            setIsOnboarded(Boolean(current?.username && current?.fullName));
+            return await getMe<User>();
         } catch {
-            setProfile(null);
-            setIsOnboarded(false);
+            return null;
         }
     }, []);
-
-    const applySession = useCallback(async () => {
-        setUser(tokenManager.getUser());
-        setIsAuthenticated(true);
-        tokenRefreshService.startAutoRefresh();
-        await loadProfile();
-    }, [loadProfile]);
 
     const clearSession = useCallback(() => {
         tokenRefreshService.stopAutoRefresh();
         setUser(null);
         setProfile(null);
         setIsAuthenticated(false);
-        setIsOnboarded(false);
     }, []);
 
+    /**
+     * Restores a stored session on launch. Authentication is only published
+     * once the profile is known, so the guards never see a half-signed-in state.
+     */
     useEffect(() => {
         let active = true;
 
         void (async () => {
             const state = await silentAuthService.attemptSilentAuth();
             if (!active) return;
-            setUser(state.user);
-            setIsAuthenticated(state.isAuthenticated);
+            setError(state.error);
             if (state.isAuthenticated) {
-                await loadProfile();
+                const current = await fetchProfile();
                 if (!active) return;
+                setUser(state.user);
+                setProfile(current);
+                setIsAuthenticated(true);
             }
             setIsLoading(false);
         })();
 
-        // The API layer emits this when a refresh fails for good.
         const unsubscribe = authEvents.onLogout(() => clearSession());
 
         return () => {
             active = false;
             unsubscribe();
         };
-    }, [clearSession, loadProfile]);
+    }, [clearSession, fetchProfile]);
+
+    /**
+     * Turns fresh tokens into an app session: checks the profile first and only
+     * then marks the user signed in, so the route guards never render against a
+     * half-known state. The caller navigates to the returned route.
+     */
+    const signIn = useCallback(async () => {
+        const user = tokenManager.getUser();
+        const current = await fetchProfile();
+        tokenRefreshService.startAutoRefresh();
+        setUser(user);
+        setProfile(current);
+        setIsAuthenticated(true);
+        return resolveHome(user, current);
+    }, [fetchProfile]);
 
     const requestOtp = useCallback(async (phone: string) => {
         setError(null);
@@ -125,31 +141,31 @@ export function AuthProvider({children}: { children: ReactNode }) {
     }, []);
 
     const verifyOtp = useCallback(
-        async (params: OtpParams) => {
+        async (params: OtpParams): Promise<HomeRoute> => {
             setError(null);
             try {
                 await verifyOtpRequest(params);
-                await applySession();
+                return await signIn();
             } catch (e) {
                 setError(extractErrorMessage(e));
                 throw e;
             }
         },
-        [applySession],
+        [signIn],
     );
 
     const login = useCallback(
-        async (username: string, password: string) => {
+        async (username: string, password: string): Promise<HomeRoute> => {
             setError(null);
             try {
                 await loginRequest({username, password});
-                await applySession();
+                return await signIn();
             } catch (e) {
                 setError(extractErrorMessage(e));
                 throw e;
             }
         },
-        [applySession],
+        [signIn],
     );
 
     const logout = useCallback(async () => {
@@ -157,11 +173,15 @@ export function AuthProvider({children}: { children: ReactNode }) {
         clearSession();
     }, [clearSession]);
 
+    const refreshProfile = useCallback(async () => {
+        const current = await fetchProfile();
+        setProfile(current);
+    }, [fetchProfile]);
+
     return (
         <AuthContext.Provider
             value={{
                 isAuthenticated,
-                isOnboarded,
                 isLoading,
                 user,
                 profile,
@@ -170,7 +190,7 @@ export function AuthProvider({children}: { children: ReactNode }) {
                 verifyOtp,
                 login,
                 logout,
-                refreshProfile: loadProfile,
+                refreshProfile,
             }}
         >
             {children}
@@ -190,6 +210,6 @@ export function useAuth(): AuthContextValue {
  * The signed-in user's database row, available anywhere in the app.
  * Null while signed out or before the profile has loaded.
  */
-export function useCurrentUser(): User | null {
-    return useAuth().profile;
+export function useCurrentUser(): User {
+    return useAuth().profile!;
 }

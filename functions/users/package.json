@@ -2,10 +2,7 @@
   "name": "users",
   "type": "module",
   "scripts": {
-    "build": "esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts",
-    "zip": "zip -j lambda.zip dist/index.mjs",
-    "update": "aws lambda update-function-code --zip-file fileb://lambda.zip --function-name hello",
-    "deploy": "run-s build zip update"
+    "build": "esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

@@ -82,53 +82,5 @@ export const conversationsDao = {
         );
 
         return conversation;
-    },
-
-    getConversationsByUser: async ({userId, limit = 20, cursor}: {
-        userId: string;
-        limit?: number;
-        cursor?: string;
-    }) => {
-        const participants = await AWSManager.dynamodbClient.send(
-            new QueryCommand({
-                TableName: conversationParticipantsTableName,
-                IndexName: conversationParticipantIndexes.user,
-                KeyConditionExpression: "#userId = :userId",
-                ExpressionAttributeNames: {"#userId": "userId"},
-                ExpressionAttributeValues: marshall({":userId": userId}),
-                Limit: limit,
-                ExclusiveStartKey: decodeCursor(cursor),
-            })
-        );
-
-        const conversationIds = (participants.Items ?? [])
-            .map((item) => item.conversationId?.S)
-            .filter((id): id is string => Boolean(id));
-
-        let conversations: Conversation[] = [];
-        if (conversationIds.length > 0) {
-            const batch = await AWSManager.dynamodbClient.send(
-                new BatchGetItemCommand({
-                    RequestItems: {
-                        [conversationsTableName]: {
-                            Keys: conversationIds.map((conversationId) => marshall({conversationId})),
-                        },
-                    },
-                })
-            );
-
-            conversations = (batch.Responses?.[conversationsTableName] ?? []).map(
-                (item) => unmarshall(item) as Conversation,
-            );
-        }
-
-        conversations.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
-
-        return {
-            conversations,
-            nextCursor: participants.LastEvaluatedKey
-                ? encodeCursor(participants.LastEvaluatedKey)
-                : null,
-        };
     }
 }

@@ -52,11 +52,3 @@ export const getUserById = async ({userId}: {userId: string}) => {
     }
     return user;
 }
-
-export const getUserConversations = async ({userId, limit, cursor}: {
-    userId: string;
-    limit?: number;
-    cursor?: string;
-}) => {
-    return await conversationsDao.getConversationsByUser({userId, limit, cursor});
-}

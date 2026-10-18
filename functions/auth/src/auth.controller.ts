@@ -40,9 +40,9 @@ export const loginController = async (c: Context) => {
 
     try {
         const cognitoUser = await getCognitoUserGroups(body.username);
-        const role = cognitoUser[0]?.GroupName || "";
+        const isAgent = cognitoUser.some((group) => group.GroupName === "agent");
 
-        if (role === "user") {
+        if (!isAgent) {
             throw new HTTPException(403, {message: "Use phone sign-in instead."});
         }
 

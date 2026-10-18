@@ -21,15 +21,3 @@ export const getUserByIdController = async (c: Context) => {
 
     return c.json(resp);
 }
-
-export const getUserConversationsController = async (c: Context) => {
-    const {query}: getUserConversationsSchema = c.get("valid");
-
-    const resp = await getUserConversations({
-        userId: c.get("userId"),
-        limit: query.limit,
-        cursor: query.cursor,
-    });
-
-    return c.json(resp);
-}
