@@ -11,21 +11,23 @@ export const onboardUser = async ({userId, cognitoUsername, fullName, username, 
 }) => {
     try {
         await authDao.addUserToGroup({cognitoUsername, groupName: "user"});
-        await usersDao.updateUser({
-            userId,
-            cognitoUsername,
-            fullName,
-            username,
-            role: "user",
-            agentId,
-        });
+        // TODO: create the users DAO object for the single-table design, then restore this call.
+        // await usersDao.updateUser({
+        //     userId,
+        //     cognitoUsername,
+        //     fullName,
+        //     username,
+        //     role: "user",
+        //     agentId,
+        // });
 
         if (agentId) {
-            await conversationsDao.createConversation({
-                type: "direct",
-                createdBy: userId,
-                assignedAgentId: agentId,
-            });
+            // TODO: create the conversations DAO object for the single-table design, then restore this call.
+            // await conversationsDao.createConversation({
+            //     type: "direct",
+            //     createdBy: userId,
+            //     assignedAgentId: agentId,
+            // });
         }
 
         return "user Onboarding completed successfully"
@@ -46,7 +48,9 @@ export const onboardUser = async ({userId, cognitoUsername, fullName, username, 
 }
 
 export const getUserById = async ({userId}: {userId: string}) => {
-    const user = await usersDao.getUserById({userId});
+    // TODO: create the users DAO object for the single-table design, then restore this call.
+    // const user = await usersDao.getUserById({userId});
+    const user = undefined as Awaited<ReturnType<typeof usersDao.getUserById>>;
     if (!user) {
         throw new HTTPException(404, {message: "User not found"});
     }

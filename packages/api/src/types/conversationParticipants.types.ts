@@ -1,5 +1,3 @@
-export const conversationParticipantsTableName = "conversation_participants";
-
 export const PARTICIPANT_ROLES = ["owner", "admin", "member"] as const;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 

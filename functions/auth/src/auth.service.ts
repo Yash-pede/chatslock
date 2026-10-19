@@ -97,13 +97,14 @@ export async function adminCreateUser(
     const userId = await authDao.getCognitoUserIdWithUsername({cognitoUsername: username});
 
     if (!userId) throw new HTTPException(500, {message: "Unable to create user"})
-    await usersDao.createUserWithConversation({
-        userId,
-        cognitoUsername: username,
-        username,
-        fullName: fullName || "",
-        role: role as RoleName,
-    });
+    // TODO: create the users DAO object for the single-table design, then restore this call.
+    // await usersDao.createUserWithConversation({
+    //     userId,
+    //     cognitoUsername: username,
+    //     username,
+    //     fullName: fullName || "",
+    //     role: role as RoleName,
+    // });
 
     return await authDao.adminInitiateAuth({username, password});
 }

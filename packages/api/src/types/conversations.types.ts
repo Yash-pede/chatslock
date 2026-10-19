@@ -1,5 +1,3 @@
-export const conversationsTableName = "conversations";
-
 export const CONVERSATION_TYPES = ["direct", "group", "support"] as const;
 export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 

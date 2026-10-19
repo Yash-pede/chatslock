@@ -1,13 +1,5 @@
 import type {RoleName} from "../utils";
 
-export const usersTableName = "users";
-
-/** Usernames are unique case-insensitively; this table holds one reservation per username. */
-export const usernamesTableName = "usernames";
-
-export const usersIndexes = {
-    username: "username_GSI",
-} as const;
 /**
  * A row in the users table.
  * Partition key: `userId` (Cognito `sub`).
