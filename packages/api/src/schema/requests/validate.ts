@@ -1,6 +1,6 @@
 import {createMiddleware} from 'hono/factory'
 import {flattenError, ZodError, ZodObject, ZodType} from "zod";
-import {ApiException} from "../utils/response";
+import {ApiException} from "../../utils/response";
 
 export type Schema = ZodObject<{
     body: ZodType<any>;

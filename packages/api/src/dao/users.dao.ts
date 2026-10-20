@@ -1,4 +1,7 @@
-import { CreateUserInput, UpdateUserInput, User } from "../types";
+import {CreateUserInput, UpdateUserInput, User} from "../types";
+import {AWSManager} from "../utils";
+import {TABLE_NAME} from "../schema";
+import {PutCommand} from "@aws-sdk/lib-dynamodb";
 
 /** Usernames are unique case-insensitively, so the reservation key is lowercased. */
 export const normalizeUsername = (username: string) => username.trim().toLowerCase();
@@ -17,7 +20,20 @@ export const usersDao = {
     updateUser: async (_input: UpdateUserInput): Promise<void> => {
         return;
     },
-    createUserWithConversation: async (_input: CreateUserInput): Promise<void> => {
+    createUser: async (input: CreateUserInput): Promise<void> => {
+
+        await AWSManager.dbClient.send(
+            new PutCommand({
+                TableName: TABLE_NAME,
+                Item: {
+                    PK: `USER#${input.userId}`,
+                    SK: "PROFILE",
+                    ...input,
+                    createdAt: Date.now(),
+                }
+            })
+        )
+
         return;
     },
 }

@@ -1,5 +1,5 @@
 import {
-  getUserConversationsSchema,
+  conversationListSchema,
   userOnboardingSchema,
 } from "@repo/api/schema/requests";
 import { get, post, unwrap, type ApiEnvelope } from "./client";
@@ -48,7 +48,7 @@ export function isUserNotFound(error: unknown): boolean {
 export async function getUserConversations(
   input: { limit?: number; cursor?: string } = {},
 ): Promise<ConversationPage> {
-  const query = getUserConversationsSchema.shape.query.parse(input);
+  const query = conversationListSchema.shape.query.parse(input);
   return unwrap(
     await get<ApiEnvelope<ConversationPage>>("/api/users/conversation", query),
   );

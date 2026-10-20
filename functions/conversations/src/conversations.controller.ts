@@ -1,5 +1,5 @@
 import type {Context} from "hono";
-import {conversationListSchema} from "@repo/api/schema";
+import {conversationListSchema} from "@repo/api/schema/requests";
 import {listUserConversations} from "./conversations.service";
 
 export const conversationsListController = async (c: Context) => {

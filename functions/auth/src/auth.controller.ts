@@ -1,5 +1,5 @@
 import {Context} from "hono";
-import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/api/schema"
+import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/api/schema/requests"
 import {
     adminCreateUser,
     cognitoLogout,

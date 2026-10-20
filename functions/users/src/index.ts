@@ -1,6 +1,6 @@
 import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
-import {validateWithZod, userOnboardingSchema} from "@repo/api/schema"
+import {userOnboardingSchema, validateWithZod} from "@repo/api/schema/requests"
 import {getUserByIdController, getUserConversationsController, onboardingController} from "./users.controller"
 import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
 import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
