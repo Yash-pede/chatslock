@@ -3,6 +3,7 @@
  * in `@repo/types/schema` with the storage schemas; these helpers are server-only.
  */
 import {PREFIXES} from "@repo/types/schema";
+import type {ConversationType} from "@repo/types/schema";
 
 /**
  * Joins a prefix and the parts that follow it: `buildKey(PREFIXES.CONVERSATION, type, conversationId)`
@@ -32,3 +33,20 @@ export const buildKey = (prefix: string, ...parts: readonly (string | number)[])
  */
 export const stripKeyPrefix = <T extends string>(id: T, prefix: string): T | undefined =>
     id.startsWith(prefix) ? id.slice(prefix.length) as T : undefined;
+
+/**
+ * Splits `CONVERSATION#<type>#<id>` so DAOs can expose conversation identity
+ * without leaking the stored sort key.
+ */
+export const parseConversationKey = (key: string): {type: ConversationType; conversationId: string} => {
+    const [, type, ...rest] = key.split("#");
+
+    if (!type || rest.length === 0) {
+        throw new Error(`Cannot parse conversation key "${key}"`);
+    }
+
+    return {
+        type: type as ConversationType,
+        conversationId: rest.join("#"),
+    };
+};

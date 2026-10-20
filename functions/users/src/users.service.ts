@@ -20,7 +20,12 @@ export const onboardUser = async ({userId, cognitoUsername, fullName, username, 
         });
 
         if (agentId) {
-            await conversationsDao.createDirectConversation([userId, agentId]);
+            try {
+                await conversationsDao.createDirectConversation([userId, agentId]);
+            } catch (err) {
+                console.error("Failed to start conversation", err);
+                return "user Onboarding completed but failed to start conversation"
+            }
         }
 
         return "user Onboarding completed successfully"

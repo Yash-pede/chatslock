@@ -3,8 +3,7 @@ import {PREFIXES} from "./keys";
 
 const zodTimestamp = z.number().int().nonnegative();
 
-export const conversationIdRegex = /^[0-9a-z-]{8,64}$/i;
-export const conversationId = z.string().regex(conversationIdRegex, "Invalid conversationId");
+export const conversationId = z.string().min(1);
 
 export const CONVERSATION_TYPE = ["DIRECT", "GROUP", "SUPPORT"] as const;
 export type ConversationType = typeof CONVERSATION_TYPE[number];
@@ -12,12 +11,15 @@ export type ConversationType = typeof CONVERSATION_TYPE[number];
 export const CONVERSATION_SK = ["METADATA"] as const;
 export type ConversationSK = typeof CONVERSATION_SK[number];
 
+/** `CONVERSATION#<type>#<suffix>`; the suffix is `conversationId` (DIRECT: two ids). */
+export const conversationKey = z.string().min(1);
+
 /** A conversation metadata item as stored in DynamoDB; timestamps are epoch milliseconds. */
 export const conversationItem = z.strictObject({
-    PK: z.string().regex(new RegExp(`^${PREFIXES.CONVERSATION}[^#]+$`), "Invalid conversation PK"),
+    PK: conversationKey,
     SK: z.enum(CONVERSATION_SK),
     conversationId,
-    type: z.enum(CONVERSATION_TYPE),
+    conversationType: z.enum(CONVERSATION_TYPE),
     createdAt: zodTimestamp,
     updatedAt: zodTimestamp,
 });
@@ -30,21 +32,29 @@ export const conversationSchema = z.object(conversationItem.omit({PK: true, SK: 
 
 /** A user's membership row for a conversation, stored under `USER#<userId>`. */
 export const userMember_conversationItem = z.strictObject({
-    PK: z.string().regex(new RegExp(`^${PREFIXES.USER}[^#]+$`)),
-    SK: z.string().regex(new RegExp(`^${PREFIXES.CONVERSATION}[^#]+$`)),
-    member_user: z.string().regex(new RegExp(`^${PREFIXES.MEMBER}[^#]+$`)),
+    PK: z.string(),
+    SK: conversationKey,
+    userMember: z.string(),
     unreadCount: z.int().default(0),
-    lastMessageId: z.uuid(),
+    lastMessageId: z.uuid().optional(),
     lastMessagePreview: z.string().optional(),
     lastMessageAt: z.int().optional(),
 });
 
-/** The membership shape returned by the DAO and exposed through the API. */
-export const userMember_conversationSchema = z.object(userMember_conversationItem.omit({
-    PK: true,
-    SK: true,
-    member_user: true,
-}).shape);
+/**
+ * The membership shape returned by the DAO and exposed through the API.
+ * `conversationId`/`conversationType` are projected out of the sort key at the DAO
+ * boundary, so storage keys never reach callers.
+ */
+export const userMember_conversationSchema = z.object({
+    ...userMember_conversationItem.omit({
+        PK: true,
+        SK: true,
+        userMember: true,
+    }).shape,
+    conversationId,
+    conversationType: z.enum(CONVERSATION_TYPE),
+});
 
 export const CONVERSATIONS_MEMBERLIST_GSI = "ConversationsMemberList_GSI";
 

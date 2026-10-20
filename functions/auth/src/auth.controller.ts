@@ -31,6 +31,7 @@ export const verifyOtpController = async (c: Context) => {
         accessToken: resp.AuthenticationResult?.AccessToken,
         idToken: resp.AuthenticationResult?.IdToken,
         expiresIn: resp.AuthenticationResult?.ExpiresIn,
+        client: "otp" as const,
     })
 }
 
@@ -70,6 +71,7 @@ export const loginController = async (c: Context) => {
             accessToken: response.AuthenticationResult?.AccessToken,
             idToken: response.AuthenticationResult?.IdToken,
             expiresIn: response.AuthenticationResult?.ExpiresIn,
+            client: "userpass" as const,
         })
     } catch (error) {
         if (error instanceof HTTPException) throw error;
@@ -80,7 +82,7 @@ export const loginController = async (c: Context) => {
 export const refreshController = async (c: Context) => {
     const {body}: RefreshOtpRequest = c.get("valid");
 
-    const resp = await cognitoRefreshCall(body.refreshToken)
+    const resp = await cognitoRefreshCall(body.refreshToken, body.client)
     return c.json({
         accessToken: resp.AuthenticationResult?.AccessToken,
         idToken: resp.AuthenticationResult?.IdToken,

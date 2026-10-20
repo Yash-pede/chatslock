@@ -1,3 +1,4 @@
+import type {AuthClient} from "@repo/types/schema";
 import {AWSManager, awsManagerInstance, RoleName} from "../utils";
 import {
     AdminAddUserToGroupCommand,
@@ -17,6 +18,10 @@ import {
 const getUserPoolId = () => awsManagerInstance.getSecretValue("cognito_user_pool_id");
 const getUserClientId = () => awsManagerInstance.getSecretValue("cognito_user_client_id");
 const getAdminClientId = () => awsManagerInstance.getSecretValue("cognito_admin_client_id");
+
+/** Refresh tokens are bound to their issuing app client, so this must match. */
+const getClientId = (client: AuthClient) =>
+    client === "userpass" ? getAdminClientId() : getUserClientId();
 
 export const authDao = {
     getUserByPhone: async ({phone}: { phone: string }) => {
@@ -106,14 +111,15 @@ export const authDao = {
         );
         return response.Groups || [];
     },
-    initiateAuth: async ({authFlow, authParameters}: {
+    initiateAuth: async ({authFlow, authParameters, client = "otp"}: {
         authFlow: "CUSTOM_AUTH" | "REFRESH_TOKEN_AUTH";
         authParameters: Record<string, string>;
+        client?: AuthClient;
     }) => {
         return await AWSManager.cognitoClient.send(
             new InitiateAuthCommand({
                 AuthFlow: authFlow,
-                ClientId: await getUserClientId(),
+                ClientId: await getClientId(client),
                 AuthParameters: authParameters,
             }),
         );

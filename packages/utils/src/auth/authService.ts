@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getAuthApiUrl } from '../config';
+import { secureStorage } from './secureStorage';
 import { tokenManager } from './tokenManager';
 
 /**
@@ -18,11 +19,15 @@ http.interceptors.request.use((config) => {
     return config;
 });
 
+/** Sign-in flow that produced the session; refresh tokens are client-bound. */
+export type AuthClient = 'otp' | 'userpass';
+
 export interface AuthTokens {
     accessToken: string;
     idToken?: string;
     refreshToken?: string;
     expiresIn: number;
+    client?: AuthClient;
 }
 
 export interface OtpChallenge {
@@ -80,6 +85,8 @@ async function persist(data: AuthTokens): Promise<AuthTokens> {
     });
     if (data.refreshToken) {
         await tokenManager.setRefreshToken(data.refreshToken);
+        // Remember the issuing client so /refresh can present the same one.
+        await secureStorage.storeAuthClient(data.client ?? 'otp');
     }
     return data;
 }
@@ -122,7 +129,11 @@ export async function refresh(): Promise<AuthTokens> {
         throw new Error('No refresh token available');
     }
 
-    const { data } = await http.post<AuthTokens>('/refresh', { refreshToken });
+    const client = (await secureStorage.getAuthClient()) as AuthClient | null;
+    const { data } = await http.post<AuthTokens>('/refresh', {
+        refreshToken,
+        client: client ?? 'otp',
+    });
     // Cognito only returns an access token here — the ID token rides along as
     // `idToken` for our own session restore. Without either, the session is
     // unusable and must not be reported as signed in.

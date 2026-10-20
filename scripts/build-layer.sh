@@ -21,6 +21,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_PKG="$ROOT/packages/api"
+TYPES_PKG="$ROOT/packages/types"
 OUT_ZIP="$ROOT/layers/api/build.zip"
 PUSH=1
 [ "${1:-}" = "--no-push" ] && PUSH=0
@@ -51,8 +52,8 @@ fi
 # The layer ships packages/api/dist, and the lambdas import it at runtime. A
 # stale dist silently shadows source edits (e.g. a removed export only blows up
 # inside Lambda), so rebuild unconditionally rather than reusing whatever is there.
-echo "==> Building @repo/api"
-( cd "$ROOT" && pnpm --filter @repo/api build )
+echo "==> Building @repo/types and @repo/api"
+( cd "$ROOT" && pnpm --filter @repo/types --filter @repo/api build )
 
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/api-layer.XXXXXX")"
 #cleanup() { rm -rf "$BUILD_DIR"; }
@@ -60,15 +61,20 @@ BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/api-layer.XXXXXX")"
 NODEJS="$BUILD_DIR/nodejs"
 
 # --- 1. layer package.json = @repo/api's production deps (single source) ------
+# Workspace deps (@repo/types) use the "workspace:" protocol, which npm cannot
+# resolve; their built output is copied into the layer in step 3 instead.
 mkdir -p "$NODEJS"
 node -e '
   const fs = require("fs");
   const api = require(process.argv[1]);
+  const deps = Object.fromEntries(
+    Object.entries(api.dependencies || {}).filter(([, spec]) => !String(spec).startsWith("workspace:")),
+  );
   const layer = {
     name: "api-layer",
     version: "1.0.0",
     private: true,
-    dependencies: api.dependencies || {},
+    dependencies: deps,
   };
   fs.writeFileSync(process.argv[2], JSON.stringify(layer, null, 2) + "\n");
 ' "$API_PKG/package.json" "$NODEJS/package.json"
@@ -77,11 +83,17 @@ node -e '
 echo "==> Installing layer dependencies (real files)"
 ( cd "$NODEJS" && npm install --omit=dev --no-package-lock --ignore-scripts --silent )
 
-# --- 3. add the compiled @repo/api so Lambdas can import it -------------------
-echo "==> Adding @repo/api into the layer"
-mkdir -p "$NODEJS/node_modules/@repo/api"
-cp "$API_PKG/package.json" "$NODEJS/node_modules/@repo/api/package.json"
-rsync -a --exclude 'build.zip' --exclude '*.map' "$API_PKG/dist/" "$NODEJS/node_modules/@repo/api/dist/"
+# --- 3. add the compiled workspace packages so Lambdas can import them --------
+# @repo/types is a runtime dependency of @repo/api (its DAOs import the storage
+# schemas), so it has to ship in the layer too.
+for pkg in "$API_PKG" "$TYPES_PKG"; do
+  name="$(node -p "require('$pkg/package.json').name")"
+  dest="$NODEJS/node_modules/$name"
+  echo "==> Adding $name into the layer"
+  mkdir -p "$dest"
+  cp "$pkg/package.json" "$dest/package.json"
+  rsync -a --exclude '*.map' "$pkg/dist/" "$dest/dist/"
+done
 
 # --- 4. zip with the required nodejs/node_modules/ layout ---------------------
 echo "==> Zipping layer"

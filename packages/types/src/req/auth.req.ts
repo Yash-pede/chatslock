@@ -1,5 +1,6 @@
 import {z} from "zod";
 import {baseSchema} from "./base";
+import {AUTH_CLIENTS} from "../schema/auth.schema";
 
 const phonePipe = z.string()
     .trim()
@@ -41,6 +42,7 @@ export const initiateOtpSchema = baseSchema.extend({
 export const refreshOtpSchema = baseSchema.extend({
     body: z.strictObject({
         refreshToken: z.string(),
+        client: z.enum(AUTH_CLIENTS).optional().default("otp"),
     }),
 });
 

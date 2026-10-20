@@ -20,10 +20,10 @@ resource "aws_dynamodb_table" "environment" {
     type = "S"
   }
 
-  attribute {
-    name = "member_user"
-    type = "S"
-  }
+  # attribute {
+  #   name = "userMember"
+  #   type = "S"
+  # }
 
   global_secondary_index {
     name            = "SK_username_GSI"
@@ -40,20 +40,20 @@ resource "aws_dynamodb_table" "environment" {
     }
   }
 
-  global_secondary_index {
-    name            = "ConversationsMemberList_GSI"
-    projection_type = "ALL"
-
-    key_schema {
-      attribute_name = "SK"
-      key_type       = "HASH"
-    }
-
-    key_schema {
-      attribute_name = "member_user"
-      key_type       = "RANGE"
-    }
-  }
+  # global_secondary_index {
+  #   name            = "ConversationsMemberList_GSI"
+  #   projection_type = "ALL"
+  #
+  #   key_schema {
+  #     attribute_name = "SK"
+  #     key_type       = "HASH"
+  #   }
+  #
+  #   key_schema {
+  #     attribute_name = "userMember"
+  #     key_type       = "RANGE"
+  #   }
+  # }
 
   lifecycle {
     #    prevent_destroy = true

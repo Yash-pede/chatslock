@@ -7,6 +7,7 @@ export interface TokenPair {
 
 const ACCESS_TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
+const AUTH_CLIENT_KEY = 'auth_client';
 
 class SecureStorageService {
     // Store refresh token securely using Keychain/Keystore
@@ -42,9 +43,40 @@ class SecureStorageService {
         }
     }
 
+    /**
+     * Cognito app client that issued the stored refresh token. Refresh tokens are
+     * client-bound, so this must be sent back to /refresh. Absent for sessions
+     * created before this was recorded.
+     */
+    async storeAuthClient(client: string): Promise<void> {
+        try {
+            await SecureStore.setItemAsync(AUTH_CLIENT_KEY, client);
+        } catch (error) {
+            console.error('Failed to store auth client:', error);
+        }
+    }
+
+    async getAuthClient(): Promise<string | null> {
+        try {
+            return await SecureStore.getItemAsync(AUTH_CLIENT_KEY);
+        } catch (error) {
+            console.error('Failed to retrieve auth client:', error);
+            return null;
+        }
+    }
+
+    async removeAuthClient(): Promise<void> {
+        try {
+            await SecureStore.deleteItemAsync(AUTH_CLIENT_KEY);
+        } catch (error) {
+            console.error('Failed to remove auth client:', error);
+        }
+    }
+
     // Clear all authentication data
     async clearAllTokens(): Promise<void> {
         await this.removeRefreshToken();
+        await this.removeAuthClient();
     }
 }
 
