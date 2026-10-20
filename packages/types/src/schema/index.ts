@@ -1,5 +1,4 @@
-export const TABLE_NAME = "chat";
-
+export * from "./chat.schema";
 export * from "./keys";
 export * from "./roles";
 export * from "./conversation.schema";

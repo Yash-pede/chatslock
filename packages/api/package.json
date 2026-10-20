@@ -2,28 +2,18 @@
   "name": "@repo/api",
   "version": "1.0.0",
   "description": "",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    "./schema": {
-      "types": "./dist/schema/index.d.ts",
-      "default": "./dist/schema/index.js"
-    },
-    "./schema/requests": {
-      "types": "./dist/schema/requests/index.d.ts",
-      "default": "./dist/schema/requests/index.js"
+    "./dao": {
+      "types": "./dist/dao/index.d.ts",
+      "default": "./dist/dao/index.js"
     },
     "./utils": {
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"
     },
-    "./types": {
-      "types": "./dist/types/index.d.ts",
-      "default": "./dist/types/index.js"
-    },
-    "./dao": {
-      "types": "./dist/dao/index.d.ts",
-      "default": "./dist/dao/index.js"
+    "./req": {
+      "types": "./dist/req/index.d.ts",
+      "default": "./dist/req/index.js"
     }
   },
   "scripts": {
@@ -44,7 +34,8 @@
     "@hono/zod-validator": "^0.9.1",
     "dotenv": "^18.0.6",
     "hono": "^4.13.13",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@repo/types": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

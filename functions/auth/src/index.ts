@@ -8,7 +8,8 @@ import {
     refreshController,
     verifyOtpController
 } from "./auth.controller"
-import {initiateOtpSchema, loginSchema, refreshOtpSchema, validateWithZod, verifyOtpSchema} from "@repo/api/schema/requests";
+import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/types/req";
+import {validateWithZod} from "@repo/api/req";
 import {HTTPException} from "hono/http-exception";
 
 const app = new Hono({strict: false}).basePath("/api/auth")

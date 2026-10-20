@@ -1,5 +1,5 @@
-import {z} from "zod"
-import {baseSchema} from "./base"
+import {z} from "zod";
+import {baseSchema} from "./base";
 
 const phonePipe = z.string()
     .trim()
@@ -7,7 +7,7 @@ const phonePipe = z.string()
     .refine((val) => /^[6-9]\d{9}$/.test(val), "Invalid phone number")
     .transform((val) => `+91${val}`);
 
-const usernamePipe = z.string().min(1, "Username is required").toLowerCase()
+const usernamePipe = z.string().min(1, "Username is required").toLowerCase();
 
 export const loginSchema = baseSchema.extend({
     body: z.strictObject({
@@ -32,20 +32,19 @@ export const verifyOtpSchema = baseSchema.extend({
 export const initiateOtpSchema = baseSchema.extend({
     body: z.strictObject({
         phone: phonePipe,
-        role: z
-            .literal("user", {
-                error: "Only users can initiate OTP",
-            }),
+        role: z.literal("user", {
+            error: "Only users can initiate OTP",
+        }),
     }),
 });
 
 export const refreshOtpSchema = baseSchema.extend({
     body: z.strictObject({
         refreshToken: z.string(),
-    })
-})
+    }),
+});
 
-export type loginSchema = z.infer<typeof loginSchema>;
-export type initiateOtpSchema = z.infer<typeof initiateOtpSchema>;
-export type verifyOtpSchema = z.infer<typeof verifyOtpSchema>;
-export type refreshOtpSchema = z.infer<typeof refreshOtpSchema>;
+export type LoginRequest = z.infer<typeof loginSchema>;
+export type VerifyOtpRequest = z.infer<typeof verifyOtpSchema>;
+export type InitiateOtpRequest = z.infer<typeof initiateOtpSchema>;
+export type RefreshOtpRequest = z.infer<typeof refreshOtpSchema>;

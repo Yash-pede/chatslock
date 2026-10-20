@@ -1,4 +1,4 @@
-import { userOnboardingSchema } from "@repo/api/schema/requests";
+import { userOnboardingSchema } from "@repo/types/req";
 import { get, post, unwrap, type ApiEnvelope } from "./client";
 
 export interface OnboardUserInput {

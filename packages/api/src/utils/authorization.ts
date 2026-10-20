@@ -1,6 +1,9 @@
 import {createMiddleware} from "hono/factory";
 import type {ApiGatewayRequestContextV2} from "@hono/aws-lambda";
 import {HTTPException} from "hono/http-exception";
+import {ROLE_NAMES, type RoleName} from "@repo/types/schema";
+
+export {ROLE_NAMES, type RoleName};
 
 export type AuthClaims = Record<string, string | number | boolean | string[]>;
 
@@ -8,10 +11,6 @@ export type LambdaEnv = {
     Bindings: { requestContext: ApiGatewayRequestContextV2 };
     Variables: { userId: string; cognitoUsername: string; claims: AuthClaims };
 };
-
-import {ROLE_NAMES, type RoleName} from "../schema/roles";
-
-export {ROLE_NAMES, type RoleName};
 
 export const PERMISSIONS = [
     {key: "message:send", description: "Send messages"},

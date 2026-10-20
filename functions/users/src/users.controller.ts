@@ -1,9 +1,9 @@
 import type {Context} from "hono";
-import {userOnboardingSchema} from "@repo/api/schema/requests";
+import type {UserOnboardingRequest} from "@repo/types/req";
 import {getUserById, onboardUser} from "./users.service";
 
 export const onboardingController = async (c: Context) => {
-    const {body}: userOnboardingSchema = c.get("valid");
+    const {body}: UserOnboardingRequest = c.get("valid");
 
     const resp = await onboardUser({
         userId: c.get("userId"),

@@ -1,8 +1,18 @@
 import {PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
-import type {z} from "zod";
-import {buildKey, createUserSchema, PREFIXES, TABLE_NAME, USER_SK, updateUserSchema, userItem, userSchema, USERNAME_GSI} from "../schema";
-import type {CreateUserInput, UpdateUserInput, User} from "../types";
-import {AWSManager, definedEntries, parseOrThrow} from "../utils";
+import {
+    createUserSchema,
+    PREFIXES,
+    TABLE_NAME,
+    USER_SK,
+    updateUserSchema,
+    userItem,
+    userSchema,
+    USERNAME_GSI,
+    type CreateUserInput,
+    type UpdateUserInput,
+    type User,
+} from "@repo/types/schema";
+import {AWSManager, buildKey, definedEntries, parseOrThrow} from "../utils";
 
 /** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
 const userKey = (userId: string) => ({PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0]});

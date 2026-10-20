@@ -1,12 +1,17 @@
-import z from "zod"
-import {buildKey, CONVERSATION_SK, conversationSchema, PREFIXES, TABLE_NAME, USER_SK, userId} from "../schema";
-import * as crypto from "node:crypto";
-import {AWSManager, parseOrThrow} from "../utils";
+import crypto from "node:crypto";
 import {BatchWriteCommand, QueryCommand} from "@aws-sdk/lib-dynamodb";
-import {Conversation} from "../types";
+import {
+    CONVERSATION_SK,
+    PREFIXES,
+    TABLE_NAME,
+    userMember_conversationItem,
+    userMember_conversationSchema,
+    type UserMemberConversation,
+} from "@repo/types/schema";
+import {AWSManager, buildKey, parseOrThrow} from "../utils";
 
 export const conversationsDao = {
-    createDirectConversation: async (userIds: [z.infer<typeof userId>, z.infer<typeof userId>]): Promise<string> => {
+    createDirectConversation: async (userIds: [string, string]): Promise<string> => {
 
         const conversationId = crypto.randomUUID();
         const now = Date.now();
@@ -30,11 +35,12 @@ export const conversationsDao = {
                         },
                         ...userIds.map((id) => ({
                             PutRequest: {
-                                Item: {
+                                Item: parseOrThrow(userMember_conversationItem, {
                                     PK: buildKey(PREFIXES.USER, id),
                                     SK: buildKey(PREFIXES.CONVERSATION, type, conversationId),
                                     member_user: buildKey(PREFIXES.MEMBER, id),
-                                }
+                                    unreadCount: 0,
+                                })
                             }
                         }))
                     ]
@@ -45,7 +51,7 @@ export const conversationsDao = {
         return conversationId;
 
     },
-    getConversationsByUserId: async (id: z.infer<typeof userId>) => {
+    getConversationsByUserId: async (id: string): Promise<Array<UserMemberConversation>> => {
         const resp = await AWSManager.dbClient.send(
             new QueryCommand({
                 TableName: TABLE_NAME,
@@ -57,6 +63,6 @@ export const conversationsDao = {
                 },
             })
         );
-        return resp.Items?.map((item) => parseOrThrow(conversationSchema, item));
+        return (resp.Items ?? []).map((item) => parseOrThrow(userMember_conversationSchema, item));
     }
 }

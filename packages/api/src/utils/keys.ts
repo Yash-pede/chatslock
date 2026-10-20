@@ -1,16 +1,8 @@
 /**
- * Single-table prefixes: partition keys (`USER#`, `CONVERSATION#`), sort keys
- * (`CONVERSATION#<type>#<id>`) and GSI values (`MEMBER#`). Every key is built
- * from these, so the shape of the table lives in one place.
- * Import them from `@repo/api/schema`.
+ * Key building/parsing for the single-table layout. The prefixes themselves live
+ * in `@repo/types/schema` with the storage schemas; these helpers are server-only.
  */
-export const PREFIXES = {
-    USER: "USER#",
-    CONVERSATION: "CONVERSATION#",
-    MEMBER: "MEMBER#",
-} as const;
-
-export type PrefixName = keyof typeof PREFIXES;
+import {PREFIXES} from "@repo/types/schema";
 
 /**
  * Joins a prefix and the parts that follow it: `buildKey(PREFIXES.CONVERSATION, type, conversationId)`

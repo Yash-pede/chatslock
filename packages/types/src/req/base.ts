@@ -1,4 +1,4 @@
-import * as z from "zod"
+import * as z from "zod";
 
 export const baseSchema = z.strictObject({
     body: z.strictObject({}),

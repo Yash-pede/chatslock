@@ -20,7 +20,7 @@ import {
     type OtpChallenge,
 } from '@repo/utils/auth';
 import {getMe} from '@/api/users';
-import type {User} from '@repo/api/types';
+import type {User} from '@repo/types/schema';
 
 export interface OtpParams {
     otp: string;

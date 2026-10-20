@@ -1,5 +1,5 @@
 import {Context} from "hono";
-import {initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema} from "@repo/api/schema/requests"
+import type {InitiateOtpRequest, LoginRequest, RefreshOtpRequest, VerifyOtpRequest} from "@repo/types/req"
 import {
     adminCreateUser,
     cognitoLogout,
@@ -13,7 +13,7 @@ import {awsManagerInstance} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
 
 export const otpController = async (c: Context) => {
-    const {body}: initiateOtpSchema = c.get("valid")
+    const {body}: InitiateOtpRequest = c.get("valid")
 
     const resp = await sendOtp(body.phone)
     return c.json({
@@ -24,7 +24,7 @@ export const otpController = async (c: Context) => {
 }
 
 export const verifyOtpController = async (c: Context) => {
-    const {body}: verifyOtpSchema = c.get("valid")
+    const {body}: VerifyOtpRequest = c.get("valid")
     const resp = await verifyOtp(body.otp, body.username, body.session)
     return c.json({
         refreshToken: resp.AuthenticationResult?.RefreshToken,
@@ -35,7 +35,7 @@ export const verifyOtpController = async (c: Context) => {
 }
 
 export const loginController = async (c: Context) => {
-    const {body}: loginSchema = c.get("valid")
+    const {body}: LoginRequest = c.get("valid")
     body.username = body.username.toLowerCase();
 
     try {
@@ -78,7 +78,7 @@ export const loginController = async (c: Context) => {
 }
 
 export const refreshController = async (c: Context) => {
-    const {body}: refreshOtpSchema = c.get("valid");
+    const {body}: RefreshOtpRequest = c.get("valid");
 
     const resp = await cognitoRefreshCall(body.refreshToken)
     return c.json({

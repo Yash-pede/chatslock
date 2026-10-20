@@ -25,7 +25,6 @@ export const userKeys = z.strictObject({
     SK: z.enum(USER_SK),
 });
 
-
 /**
  * A user item as stored in DynamoDB.
  * Timestamps are epoch milliseconds and are populated by the DAO, never by callers.
@@ -61,7 +60,11 @@ export const updateUserSchema = userSchema
     .partial()
     .extend({userId});
 
+export const USERNAME_GSI = "SK_username_GSI";
 
-// GSI's
-export const USERNAME_GSI = "SK_username_GSI"
-
+/** A user row as returned by the DAO and exposed through the API. */
+export type User = z.infer<typeof userSchema>;
+/** A user row exactly as stored in DynamoDB. */
+export type UserItem = z.infer<typeof userItem>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;

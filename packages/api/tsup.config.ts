@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 export default defineConfig({
-    entry: ['src/index.ts', 'src/auth/index.ts', 'src/schema/index.ts', 'src/schema/requests/index.ts', 'src/utils/index.ts', 'src/types/index.ts', 'src/dao/index.ts'],
+    entry: ['src/dao/index.ts', 'src/utils/index.ts', 'src/req/index.ts'],
     clean: true,
     splitting: false,
     format: ['esm'],

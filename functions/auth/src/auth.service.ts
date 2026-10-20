@@ -1,6 +1,6 @@
 import {HTTPException} from "hono/http-exception";
 import {authDao, usersDao} from "@repo/api/dao";
-import type {RoleName} from "@repo/api/utils";
+import type {RoleName} from "@repo/types/schema";
 
 export async function sendOtp(phone: string) {
     const username = await getOrCreateUserByPhone(phone);

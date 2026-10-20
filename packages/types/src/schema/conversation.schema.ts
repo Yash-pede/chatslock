@@ -28,6 +28,7 @@ export const conversationItem = z.strictObject({
  */
 export const conversationSchema = z.object(conversationItem.omit({PK: true, SK: true}).shape);
 
+/** A user's membership row for a conversation, stored under `USER#<userId>`. */
 export const userMember_conversationItem = z.strictObject({
     PK: z.string().regex(new RegExp(`^${PREFIXES.USER}[^#]+$`)),
     SK: z.string().regex(new RegExp(`^${PREFIXES.CONVERSATION}[^#]+$`)),
@@ -36,12 +37,22 @@ export const userMember_conversationItem = z.strictObject({
     lastMessageId: z.uuid(),
     lastMessagePreview: z.string().optional(),
     lastMessageAt: z.int().optional(),
-})
+});
 
+/** The membership shape returned by the DAO and exposed through the API. */
 export const userMember_conversationSchema = z.object(userMember_conversationItem.omit({
     PK: true,
     SK: true,
-    member_user: true
+    member_user: true,
 }).shape);
 
-export const CONVERSATIONS_MEMBERLIST_GSI = "ConversationsMemberList_GSI"
+export const CONVERSATIONS_MEMBERLIST_GSI = "ConversationsMemberList_GSI";
+
+/** A conversation metadata row as returned by the DAO and exposed through the API. */
+export type Conversation = z.infer<typeof conversationSchema>;
+/** A conversation metadata row exactly as stored in DynamoDB. */
+export type ConversationItem = z.infer<typeof conversationItem>;
+
+/** A membership row as returned by the DAO and exposed through the API. */
+export type UserMemberConversation = z.infer<typeof userMember_conversationSchema>;
+export type UserMemberConversationItem = z.infer<typeof userMember_conversationItem>;
