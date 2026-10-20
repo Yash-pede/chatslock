@@ -1,5 +1,6 @@
 import z from "zod";
 import {ROLE_NAMES} from "./roles";
+import {PREFIXES} from "./keys";
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max);
 const zodTimestamp = z.number().int().nonnegative();
@@ -20,7 +21,7 @@ export type UserSK = typeof USER_SK[number];
 
 /** Key attributes of a user item in the single-table design. */
 export const userKeys = z.strictObject({
-    PK: z.string().regex(/^USER#[^#]+$/, "Invalid user PK"),
+    PK: z.string().regex(new RegExp(`^${PREFIXES.USER}[^#]+$`), "Invalid user PK"),
     SK: z.enum(USER_SK),
 });
 
@@ -44,8 +45,12 @@ export const userItem = z.strictObject({
     updatedAt: zodTimestamp,
 });
 
-/** The user shape returned by the DAO and exposed through the API. */
-export const userSchema = userItem.omit({PK: true, SK: true});
+/**
+ * The user shape returned by the DAO and exposed through the API.
+ * Non-strict, so a full DynamoDB item can be parsed directly: `PK`/`SK` and any
+ * other storage-only attributes are dropped from the result.
+ */
+export const userSchema = z.object(userItem.omit({PK: true, SK: true}).shape);
 
 /** Fields required to create a user; keys and timestamps are added by the DAO. */
 export const createUserSchema = userSchema.omit({createdAt: true, updatedAt: true});
@@ -60,15 +65,3 @@ export const updateUserSchema = userSchema
 // GSI's
 export const USERNAME_GSI = "SK_username_GSI"
 
-
-/** Builds the single-table key for a user item; `sk` defaults to `PROFILE`. */
-export const toUserKeys = ({
-    userId,
-    sk = USER_SK[0],
-}: {
-    userId: string;
-    sk?: UserSK | string;
-}): { PK: string; SK: string } => ({
-    PK: `USER#${userId}`,
-    SK: sk,
-});

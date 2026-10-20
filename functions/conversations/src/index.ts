@@ -2,6 +2,9 @@ import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
 import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
 import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
+import {validateWithZod, getChatPageConversationSchema} from "@repo/api/schema/requests"
+import {chatPageConversationsController} from "./conversatinos.controller";
+
 
 type Bindings = {
     event: LambdaEvent
@@ -13,6 +16,8 @@ const app = new Hono<{ Bindings: Bindings }>({strict: false}).basePath("/api/con
 
 app.use(withResponse)
 app.use(withAuth)
+
+app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 
 app.onError(apiErrorHandler)
 

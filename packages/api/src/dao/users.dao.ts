@@ -1,23 +1,26 @@
 import {PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
 import type {z} from "zod";
-import {createUserSchema, TABLE_NAME, toUserKeys, USER_SK, updateUserSchema, userItem, USERNAME_GSI} from "../schema";
-import type {CreateUserInput, UpdateUserInput} from "../types";
+import {buildKey, createUserSchema, PREFIXES, TABLE_NAME, USER_SK, updateUserSchema, userItem, userSchema, USERNAME_GSI} from "../schema";
+import type {CreateUserInput, UpdateUserInput, User} from "../types";
 import {AWSManager, definedEntries, parseOrThrow} from "../utils";
 
+/** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
+const userKey = (userId: string) => ({PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0]});
+
 export const usersDao = {
-    getUserById: async (input: { userId: string }): Promise<z.infer<typeof userItem> | undefined> => {
+    getUserById: async (input: { userId: string }) => {
         const result = await AWSManager.dbClient.send(
             new QueryCommand({
                 TableName: TABLE_NAME,
                 KeyConditionExpression: "#pk = :pk AND #sk = :sk",
                 ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
-                ExpressionAttributeValues: {":pk": `USER#${input.userId}`, ":sk": USER_SK[0]}
+                ExpressionAttributeValues: {":pk": buildKey(PREFIXES.USER, input.userId), ":sk": USER_SK[0]}
             })
         )
 
-        return result.Items?.map((item) => parseOrThrow(userItem, item))[0];
+        return result.Items?.map((item) => parseOrThrow(userSchema, item))[0];
     },
-    getUserByUsername: async (input: { username: string }): Promise<Array<z.infer<typeof userItem>> | undefined> => {
+    getUserByUsername: async (input: { username: string })=> {
 
         const result = await AWSManager.dbClient.send(
             new QueryCommand({
@@ -36,7 +39,7 @@ export const usersDao = {
             })
         );
 
-        return result.Items?.map((item) => parseOrThrow(userItem, item));
+        return result.Items?.map((item) => parseOrThrow(userSchema, item));
     },
     updateUser: async (input: UpdateUserInput): Promise<void> => {
         const {userId} = parseOrThrow(updateUserSchema, input);
@@ -47,7 +50,7 @@ export const usersDao = {
         await AWSManager.dbClient.send(
             new UpdateCommand({
                 TableName: TABLE_NAME,
-                Key: toUserKeys({userId}),
+                Key: userKey(userId),
                 UpdateExpression: `SET #updatedAt = :updatedAt${sets.map((set) => `, ${set}`).join("")}`,
                 ConditionExpression: "attribute_exists(PK)",
                 ExpressionAttributeNames: {
@@ -66,7 +69,7 @@ export const usersDao = {
         const now = Date.now();
 
         const item = parseOrThrow(userItem, {
-            ...toUserKeys({userId: data.userId}),
+            ...userKey(data.userId),
             ...data,
             createdAt: now,
             updatedAt: now,

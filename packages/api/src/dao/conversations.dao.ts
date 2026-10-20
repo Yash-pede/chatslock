@@ -1,14 +1,16 @@
 import z from "zod"
-import {TABLE_NAME, toConversationKeys, toUserKeys, userId} from "../schema";
+import {buildKey, CONVERSATION_SK, conversationSchema, PREFIXES, TABLE_NAME, USER_SK, userId} from "../schema";
 import * as crypto from "node:crypto";
-import {AWSManager} from "../utils";
-import {BatchWriteCommand, PutCommand} from "@aws-sdk/lib-dynamodb";
+import {AWSManager, parseOrThrow} from "../utils";
+import {BatchWriteCommand, QueryCommand} from "@aws-sdk/lib-dynamodb";
+import {Conversation} from "../types";
 
 export const conversationsDao = {
     createDirectConversation: async (userIds: [z.infer<typeof userId>, z.infer<typeof userId>]): Promise<string> => {
 
         const conversationId = crypto.randomUUID();
         const now = Date.now();
+        const type = "DIRECT" as const;
 
         await AWSManager.dbClient.send(
             new BatchWriteCommand({
@@ -17,8 +19,10 @@ export const conversationsDao = {
                         {
                             PutRequest: {
                                 Item: {
-                                    ...toConversationKeys({conversationId, type: "DIRECT"}),
-                                    type: "DIRECT",
+                                    PK: buildKey(PREFIXES.CONVERSATION, type, conversationId),
+                                    SK: CONVERSATION_SK[0],
+                                    conversationId,
+                                    type,
                                     createdAt: now,
                                     updatedAt: now,
                                 }
@@ -27,8 +31,9 @@ export const conversationsDao = {
                         ...userIds.map((id) => ({
                             PutRequest: {
                                 Item: {
-                                    ...toUserKeys({userId: id, sk: `CONVERSATION#DIRECT#${conversationId}`}),
-                                    member_user: `MEMBER#${id}`
+                                    PK: buildKey(PREFIXES.USER, id),
+                                    SK: buildKey(PREFIXES.CONVERSATION, type, conversationId),
+                                    member_user: buildKey(PREFIXES.MEMBER, id),
                                 }
                             }
                         }))
@@ -39,5 +44,19 @@ export const conversationsDao = {
 
         return conversationId;
 
+    },
+    getConversationsByUserId: async (id: z.infer<typeof userId>) => {
+        const resp = await AWSManager.dbClient.send(
+            new QueryCommand({
+                TableName: TABLE_NAME,
+                KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
+                ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
+                ExpressionAttributeValues: {
+                    ":pk": buildKey(PREFIXES.USER, id),
+                    ":sk": PREFIXES.CONVERSATION,
+                },
+            })
+        );
+        return resp.Items?.map((item) => parseOrThrow(conversationSchema, item));
     }
 }
