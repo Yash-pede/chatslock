@@ -1,7 +1,5 @@
 import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
-import {conversationListSchema, validateWithZod} from "@repo/api/schema/requests"
-import {conversationsListController} from "./conversations.controller"
 import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
 import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
 
@@ -15,8 +13,6 @@ const app = new Hono<{ Bindings: Bindings }>({strict: false}).basePath("/api/con
 
 app.use(withResponse)
 app.use(withAuth)
-
-app.get("/list", validateWithZod(conversationListSchema), conversationsListController)
 
 app.onError(apiErrorHandler)
 

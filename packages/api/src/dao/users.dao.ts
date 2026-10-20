@@ -1,39 +1,83 @@
-import {CreateUserInput, UpdateUserInput, User} from "../types";
-import {AWSManager} from "../utils";
-import {TABLE_NAME} from "../schema";
-import {PutCommand} from "@aws-sdk/lib-dynamodb";
+import {PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
+import type {z} from "zod";
+import {createUserSchema, TABLE_NAME, toUserKeys, USER_SK, updateUserSchema, userItem, USERNAME_GSI} from "../schema";
+import type {CreateUserInput, UpdateUserInput} from "../types";
+import {AWSManager, definedEntries, parseOrThrow} from "../utils";
 
-/** Usernames are unique case-insensitively, so the reservation key is lowercased. */
-export const normalizeUsername = (username: string) => username.trim().toLowerCase();
-
-export const isUsernameTakenError = (err: unknown) =>
-    err instanceof Error && (err as { code?: string }).code === "USERNAME_TAKEN";
-
-// TODO: recreate the users DAO against the single-table DynamoDB design.
 export const usersDao = {
-    getUserById: async (_input: { userId: string }): Promise<User | undefined> => {
-        return undefined;
+    getUserById: async (input: { userId: string }): Promise<z.infer<typeof userItem> | undefined> => {
+        const result = await AWSManager.dbClient.send(
+            new QueryCommand({
+                TableName: TABLE_NAME,
+                KeyConditionExpression: "#pk = :pk AND #sk = :sk",
+                ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
+                ExpressionAttributeValues: {":pk": `USER#${input.userId}`, ":sk": USER_SK[0]}
+            })
+        )
+
+        return result.Items?.map((item) => parseOrThrow(userItem, item))[0];
     },
-    getUserByUsername: async (_input: { username: string }): Promise<User | undefined> => {
-        return undefined;
+    getUserByUsername: async (input: { username: string }): Promise<Array<z.infer<typeof userItem>> | undefined> => {
+
+        const result = await AWSManager.dbClient.send(
+            new QueryCommand({
+                TableName: TABLE_NAME,
+                IndexName: USERNAME_GSI,
+
+                KeyConditionExpression: "#sk = :sk AND #username = :username",
+                ExpressionAttributeNames: {
+                    "#sk": "SK",
+                    "#username": "username",
+                },
+                ExpressionAttributeValues: {
+                    ":sk": USER_SK[0],
+                    ":username": input.username.toLowerCase(),
+                },
+            })
+        );
+
+        return result.Items?.map((item) => parseOrThrow(userItem, item));
     },
-    updateUser: async (_input: UpdateUserInput): Promise<void> => {
-        return;
+    updateUser: async (input: UpdateUserInput): Promise<void> => {
+        const {userId} = parseOrThrow(updateUserSchema, input);
+        const attributes = definedEntries(input, ["userId"]);
+
+        const sets = attributes.map(([field]) => `#${field} = :${field}`);
+
+        await AWSManager.dbClient.send(
+            new UpdateCommand({
+                TableName: TABLE_NAME,
+                Key: toUserKeys({userId}),
+                UpdateExpression: `SET #updatedAt = :updatedAt${sets.map((set) => `, ${set}`).join("")}`,
+                ConditionExpression: "attribute_exists(PK)",
+                ExpressionAttributeNames: {
+                    "#updatedAt": "updatedAt",
+                    ...Object.fromEntries(attributes.map(([field]) => [`#${field}`, field])),
+                },
+                ExpressionAttributeValues: {
+                    ":updatedAt": Date.now(),
+                    ...Object.fromEntries(attributes.map(([field, value]) => [`:${field}`, value])),
+                },
+            }),
+        );
     },
     createUser: async (input: CreateUserInput): Promise<void> => {
+        const data = parseOrThrow(createUserSchema, input);
+        const now = Date.now();
+
+        const item = parseOrThrow(userItem, {
+            ...toUserKeys({userId: data.userId}),
+            ...data,
+            createdAt: now,
+            updatedAt: now,
+        });
 
         await AWSManager.dbClient.send(
             new PutCommand({
                 TableName: TABLE_NAME,
-                Item: {
-                    PK: `USER#${input.userId}`,
-                    SK: "PROFILE",
-                    ...input,
-                    createdAt: Date.now(),
-                }
-            })
-        )
-
-        return;
+                Item: item,
+                ConditionExpression: "attribute_not_exists(PK)",
+            }),
+        );
     },
-}
+};

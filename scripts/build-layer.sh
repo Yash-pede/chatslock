@@ -47,11 +47,12 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- make sure @repo/api is built ---------------------------------------------
-if [ ! -d "$API_PKG/dist" ]; then
-  echo "==> @repo/api not built, building it"
-  ( cd "$ROOT" && pnpm --filter @repo/api build )
-fi
+# --- always rebuild @repo/api --------------------------------------------------
+# The layer ships packages/api/dist, and the lambdas import it at runtime. A
+# stale dist silently shadows source edits (e.g. a removed export only blows up
+# inside Lambda), so rebuild unconditionally rather than reusing whatever is there.
+echo "==> Building @repo/api"
+( cd "$ROOT" && pnpm --filter @repo/api build )
 
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/api-layer.XXXXXX")"
 #cleanup() { rm -rf "$BUILD_DIR"; }

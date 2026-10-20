@@ -2,7 +2,8 @@
   "name": "auth",
   "type": "module",
   "scripts": {
-    "build": "esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts"
+    "build": "pnpm run check-types && esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts",
+    "check-types": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

@@ -1,30 +1,11 @@
-import type {RoleName} from "../utils";
+import type z from "zod";
+import type {createUserSchema, updateUserSchema, userSchema} from "../schema";
 
-/**
- * A row in the users table.
- * Partition key: `userId` (Cognito `sub`).
- * Timestamps are epoch milliseconds and are populated by the DAO, never by
- * callers.
- */
-export type User = {
-    userId: string;
-    cognitoUsername: string;
-    username: string;
-    fullName: string;
-    imageUrl?: string;
-    phone?: string;
-    role: RoleName;
-    agentId?: string;
-    createdAt: number;
-    updatedAt: number;
-};
-
-/** Primary key of the users table. */
-export type UserKey = Pick<User, "userId">;
+/** A row in the users table; partition key `USER#<userId>`, sort key `PROFILE`. */
+export type User = z.infer<typeof userSchema>;
 
 /** Fields required to create a user; timestamps are added by the DAO. */
-export type CreateUserInput = Omit<User, "createdAt" | "updatedAt">;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 /** A user update: the partition key plus any fields to change. */
-export type UpdateUserInput = Pick<User, "userId"> &
-    Partial<Omit<User, "userId" | "createdAt" | "updatedAt">>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;

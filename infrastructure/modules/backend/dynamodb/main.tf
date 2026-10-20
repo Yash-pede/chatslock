@@ -15,6 +15,46 @@ resource "aws_dynamodb_table" "environment" {
     type = "S"
   }
 
+  attribute {
+    name = "username"
+    type = "S"
+  }
+
+  attribute {
+    name = "member_user"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "SK_username_GSI"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "SK"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "username"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "ConversationsMemberList_GSI"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "SK"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "member_user"
+      key_type       = "RANGE"
+    }
+  }
+
   lifecycle {
     #    prevent_destroy = true
     ignore_changes = [read_capacity, write_capacity]

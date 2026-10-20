@@ -1,14 +1,9 @@
 import z from "zod";
 import {baseSchema} from "./base"
+import {fullName, imageUrl, userId, username} from "../user.schema";
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max);
-const cognitoIdRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const fullName = str(3, 50);
-const username = str(3, 20);
-const imageUrl = z.url("Invalid image URL format");
-const userId = z.string().regex(cognitoIdRegex, "Invalid userId")
-
+const usernamePipe = username.toLowerCase();
 
 // SCHEMAS
 
@@ -21,7 +16,7 @@ export const userSearchSchema = baseSchema.extend({
 
 export const userOnboardingSchema = baseSchema.extend({
     body: z.strictObject({
-        username,
+        username: usernamePipe,
         fullName,
         agentId: z.optional(userId),
     })

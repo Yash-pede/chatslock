@@ -1,4 +1,3 @@
 export * from "./validate"
-export * from "./auth.schema"
-export * from "./users.schema"
-export * from "./conversations.schema"
+export * from "./auth.req"
+export * from "./users.req"

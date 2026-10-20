@@ -9,9 +9,9 @@ export type LambdaEnv = {
     Variables: { userId: string; cognitoUsername: string; claims: AuthClaims };
 };
 
-export const ROLE_NAMES = ["user", "agent", "moderator", "admin"] as const;
+import {ROLE_NAMES, type RoleName} from "../schema/roles";
 
-export type RoleName = (typeof ROLE_NAMES)[number];
+export {ROLE_NAMES, type RoleName};
 
 export const PERMISSIONS = [
     {key: "message:send", description: "Send messages"},

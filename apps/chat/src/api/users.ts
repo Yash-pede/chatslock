@@ -1,18 +1,10 @@
-import {
-  conversationListSchema,
-  userOnboardingSchema,
-} from "@repo/api/schema/requests";
+import { userOnboardingSchema } from "@repo/api/schema/requests";
 import { get, post, unwrap, type ApiEnvelope } from "./client";
 
 export interface OnboardUserInput {
   username: string;
   fullName: string;
   agentId?: string;
-}
-
-export interface ConversationPage {
-  conversations: unknown[];
-  nextCursor: string | null;
 }
 
 /**
@@ -42,14 +34,4 @@ export function isUserNotFound(error: unknown): boolean {
   if (typeof body !== "object" || body === null) return false;
   const envelope = body as { error?: { code?: string } };
   return envelope.error?.code === "NOT_FOUND";
-}
-
-/** A page of the caller's conversations. */
-export async function getUserConversations(
-  input: { limit?: number; cursor?: string } = {},
-): Promise<ConversationPage> {
-  const query = conversationListSchema.shape.query.parse(input);
-  return unwrap(
-    await get<ApiEnvelope<ConversationPage>>("/api/users/conversation", query),
-  );
 }

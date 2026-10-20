@@ -1,22 +1,43 @@
-import {
-    Conversation,
-    ConversationParticipant,
-    CreateConversationInput,
-} from "../types";
+import z from "zod"
+import {TABLE_NAME, toConversationKeys, toUserKeys, userId} from "../schema";
+import * as crypto from "node:crypto";
+import {AWSManager} from "../utils";
+import {BatchWriteCommand, PutCommand} from "@aws-sdk/lib-dynamodb";
 
-// TODO: recreate the conversations DAO against the single-table DynamoDB design.
 export const conversationsDao = {
-    createConversation: async (_input: CreateConversationInput): Promise<Conversation | undefined> => {
-        return undefined;
-    },
-    listUserConversations: async (_input: {
-        userId: string;
-        limit: number;
-        cursor?: string;
-    }): Promise<{ items: { conversation: Conversation; participant: ConversationParticipant }[]; nextCursor: string | null }> => {
-        return {items: [], nextCursor: null};
-    },
-    getConversationsByIds: async (_input: { conversationIds: string[] }): Promise<Conversation[]> => {
-        return [];
-    },
+    createDirectConversation: async (userIds: [z.infer<typeof userId>, z.infer<typeof userId>]): Promise<string> => {
+
+        const conversationId = crypto.randomUUID();
+        const now = Date.now();
+
+        await AWSManager.dbClient.send(
+            new BatchWriteCommand({
+                RequestItems: {
+                    [TABLE_NAME]: [
+                        {
+                            PutRequest: {
+                                Item: {
+                                    ...toConversationKeys({conversationId, type: "DIRECT"}),
+                                    type: "DIRECT",
+                                    createdAt: now,
+                                    updatedAt: now,
+                                }
+                            }
+                        },
+                        ...userIds.map((id) => ({
+                            PutRequest: {
+                                Item: {
+                                    ...toUserKeys({userId: id, sk: `CONVERSATION#DIRECT#${conversationId}`}),
+                                    member_user: `MEMBER#${id}`
+                                }
+                            }
+                        }))
+                    ]
+                }
+            })
+        );
+
+        return conversationId;
+
+    }
 }

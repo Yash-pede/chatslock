@@ -9,7 +9,7 @@ import {
     verifyOtp
 } from "./auth.service";
 import {AdminInitiateAuthCommand} from "@aws-sdk/client-cognito-identity-provider";
-import {AWSManager, awsManagerInstance} from "@repo/api/utils";
+import {awsManagerInstance} from "@repo/api/utils";
 import {HTTPException} from "hono/http-exception";
 
 export const otpController = async (c: Context) => {
@@ -58,7 +58,7 @@ export const loginController = async (c: Context) => {
                 PASSWORD: body.password,
             },
         });
-        const response = await AWSManager.cognitoClient.send(command);
+        const response = await awsManagerInstance.cognitoClient.send(command);
         const {AccessToken, RefreshToken} = response.AuthenticationResult || {};
 
         if (!AccessToken || !RefreshToken) {

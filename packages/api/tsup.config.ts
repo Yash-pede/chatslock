@@ -6,6 +6,7 @@ dotenv.config();
 export default defineConfig({
     entry: ['src/index.ts', 'src/auth/index.ts', 'src/schema/index.ts', 'src/schema/requests/index.ts', 'src/utils/index.ts', 'src/types/index.ts', 'src/dao/index.ts'],
     clean: true,
+    splitting: false,
     format: ['esm'],
     target: 'es2022',
     sourcemap: true,
