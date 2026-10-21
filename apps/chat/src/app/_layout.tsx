@@ -151,6 +151,8 @@ function RootNavigator() {
       </Stack.Protected>
       <Stack.Protected guard={phase === "ready"} redirectTo="/login">
         <Stack.Screen name="(app)" />
+        {/* Pushed above the tabs so the conversation list stays mounted behind it. */}
+        <Stack.Screen name="conversation/[id]" />
       </Stack.Protected>
     </Stack>
   );

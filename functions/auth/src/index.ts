@@ -16,7 +16,13 @@ const app = new Hono({strict: false}).basePath("/api/auth")
 
 app.post("/otp/request", validateWithZod(initiateOtpSchema), otpController)
 app.post("/otp/verify", validateWithZod(verifyOtpSchema), verifyOtpController)
-app.post("/login", validateWithZod(loginSchema), loginController)
+app.post("/login", validateWithZod(loginSchema, {
+    onInvalid: {
+        status: 401,
+        code: "INVALID_CREDENTIALS",
+        message: "Incorrect username or password.",
+    },
+}), loginController)
 app.post("/refresh", validateWithZod(refreshOtpSchema), refreshController)
 app.post("/logout", logOutUserController)
 

@@ -33,19 +33,30 @@ export default function AgentLoginScreen() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const usernameValid = useMemo(() => isUsernameValid(username), [username]);
   const passwordValid = password.length >= 8;
-  const canSubmit = usernameValid && passwordValid;
+  // Never submit empty/invalid fields, and never twice while a sign-in is in flight.
+  const canSubmit = usernameValid && passwordValid && !submitting;
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      throw new Error("Enter a valid username and password.");
+    }
+
+    setSubmitting(true);
+    setError(null);
 
     try {
       await signInAsAgent({ username: username.trim(), password });
       // The provider flips the route once the profile has loaded.
     } catch (e) {
       setError(extractErrorMessage(e));
+      // Rethrowing lets SaveButton drop back to idle instead of showing success.
+      throw e;
+    } finally {
+      setSubmitting(false);
     }
   };
 

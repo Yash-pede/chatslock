@@ -73,7 +73,11 @@ export function extractErrorMessage(error: unknown): string {
         return 'Something went wrong. Please try again.';
     }
 
-    if (error instanceof Error && error.message) return error.message;
+    // Axios/HTTP messages ("Request failed with status code 400") are never
+    // useful to a user; only messages we raised ourselves are shown as-is.
+    if (error instanceof Error && error.message && !/^Request failed with status code \d+$/.test(error.message)) {
+        return error.message;
+    }
     return 'Something went wrong. Please try again.';
 }
 
@@ -93,11 +97,23 @@ async function persist(data: AuthTokens): Promise<AuthTokens> {
 
 /** Step 1 of phone sign-in — sends the OTP. */
 export async function requestOtp(phone: string): Promise<OtpChallenge> {
-    const { data } = await http.post<OtpChallenge>('/otp/request', {
-        phone,
-        role: 'user',
-    });
-    return data;
+    try {
+        const { data } = await http.post<OtpChallenge>('/otp/request', {
+            phone,
+            role: 'user',
+        });
+        return data;
+    } catch (error) {
+        const message = extractErrorMessage(error);
+        // Backend validation/rate-limit messages are specific ("Invalid phone
+        // number", "Too many requests"); anything generic is replaced with a
+        // message about this number so the user knows what to do next.
+        throw new Error(
+            message === 'Something went wrong. Please try again.'
+                ? `We couldn't send a code to ${phone}. Try again in a moment.`
+                : message,
+        );
+    }
 }
 
 /** Step 2 of phone sign-in — exchanges the code for tokens. */

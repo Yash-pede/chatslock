@@ -1,32 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { Pressable, View } from "react-native";
-import {
-  Alert,
-  AlertDescription,
-  InputOtp,
-  Label,
-  PhoneInput,
-  SaveButton,
-  Text,
-  useThemeColors,
-} from "@repo/ui";
-import { AlertCircle } from "lucide-react-native";
+import { InputOtp, Label, PhoneInput, SaveButton, Text } from "@repo/ui";
 import type { OtpChallenge } from "@repo/utils";
 import { useAuth } from "@/auth/AuthContext";
 import { AuthScreen } from "@/auth/components/auth-screen";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 const PHONE_DIGITS = 10;
-// Boxes sit in a row with an "equal" gap, so the digit width scales with the
-// screen instead of overflowing on small phones.
 const OTP_DIGIT_HEIGHT = 58;
+const SEND_TRANSITION_DELAY_MS = 500;
 
-/**
- * Strip the dial code and separators so we can validate the local number.
- * India is the only supported market, so the prefix is matched literally:
- * a greedy `/^\+\d{1,3}/` would also eat the first digit of `+9198...`.
- */
 function localNumber(fullPhone: string): string {
   return fullPhone.replace(/^\+91/, "").replace(/\D/g, "");
 }
@@ -35,13 +19,16 @@ function isPhoneValid(phone: string): boolean {
   return new RegExp(`^\\d{${PHONE_DIGITS}}$`).test(localNumber(phone));
 }
 
-/**
- * User sign-in with a phone number: request an SMS code, then exchange it for a
- * session. Users are created in Cognito on first request and onboarded later.
- */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export default function UserLoginScreen() {
   const { requestCode, submitCode, error: authError } = useAuth();
-  const colors = useThemeColors();
 
   const [phone, setPhone] = useState("+91");
   const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
@@ -49,9 +36,16 @@ export default function UserLoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
   const [attemptedSend, setAttemptedSend] = useState(false);
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [requesting, setRequesting] = useState(false);
 
   const phoneValid = useMemo(() => isPhoneValid(phone), [phone]);
   const otpValid = otp.length === 6;
+  const phoneHint = `Enter a ${PHONE_DIGITS}-digit phone number.`;
+  const shownError = error ?? authError;
+  const requestDone = challenge !== null;
+  const canSend = phoneValid && !requesting;
+  const canVerify = otpValid && requestDone && !requesting;
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -59,45 +53,69 @@ export default function UserLoginScreen() {
     return () => clearTimeout(timer);
   }, [resendIn]);
 
-  useEffect(() => {
-    if (authError) setError(authError);
-  }, [authError]);
+  const requestOtp = async () => {
+    setRequesting(true);
+    try {
+      const next = await requestCode(phone);
+      setChallenge(next);
+      setError(null);
+      setResendIn(RESEND_COOLDOWN_SECONDS);
+    } catch (e) {
+      setChallenge(null);
+      setOtp("");
+      setStep("phone");
+      setAttemptedSend(false);
+      setError(errorMessage(e, `We couldn't send a code to ${phone}. Try again in a moment.`));
+    } finally {
+      setRequesting(false);
+    }
+  };
 
-  const sendCode = async () => {
+  const handleSendCode = async () => {
     setAttemptedSend(true);
     setError(null);
 
     if (!phoneValid) {
-      setError(`Enter a ${PHONE_DIGITS}-digit phone number.`);
-      return;
+      setError(phoneHint);
+      throw new Error(phoneHint);
     }
 
-    try {
-      const next = await requestCode(phone);
-      setChallenge(next);
-      setOtp("");
-      setError(null);
-      setAttemptedSend(false);
-      setResendIn(RESEND_COOLDOWN_SECONDS);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not send the code.");
-      throw e;
-    }
+    setOtp("");
+    setChallenge(null);
+
+    const request = requestOtp();
+    await delay(SEND_TRANSITION_DELAY_MS);
+    setStep("otp");
+    await request;
   };
 
-  const verify = async () => {
-    if (!challenge || !otpValid) return;
+  const handleResend = async () => {
+    if (resendIn > 0 || requesting) return;
+    setError(null);
+    await requestOtp();
+  };
+
+  const handleVerify = async () => {
+    if (!challenge || !otpValid) {
+      throw new Error("Enter the 6-digit code to continue.");
+    }
 
     try {
       await submitCode({ otp, username: challenge.username, session: challenge.session });
-      // The provider flips the route once the profile has loaded.
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not verify the code.");
+      setError(errorMessage(e, "Could not verify the code."));
       throw e;
     }
   };
 
-  if (!challenge) {
+  const handleChangeNumber = () => {
+    setStep("phone");
+    setChallenge(null);
+    setError(null);
+    setOtp("");
+  };
+
+  if (step === "phone") {
     return (
       <AuthScreen
         back
@@ -130,29 +148,31 @@ export default function UserLoginScreen() {
             autoComplete="tel"
             textContentType="telephoneNumber"
             returnKeyType="done"
-            onSubmitEditing={() => void sendCode()}
+            onSubmitEditing={() => {
+              if (canSend) void handleSendCode().catch(() => {});
+              else setAttemptedSend(true);
+            }}
             accessibilityLabel="Phone number"
-            />
-          {attemptedSend && !phoneValid ? (
+          />
+          {shownError ? (
             <Text variant="small" className="text-destructive">
-              Enter a {PHONE_DIGITS}-digit phone number.
+              {shownError}
+            </Text>
+          ) : attemptedSend && !phoneValid ? (
+            <Text variant="small" className="text-destructive">
+              {phoneHint}
             </Text>
           ) : null}
         </View>
-
-        {error ? (
-          <Alert variant="destructive" className="flex-row items-center gap-2 rounded-xl py-3">
-            <AlertCircle size={16} color={colors.destructive} />
-            <AlertDescription className="flex-1">{error}</AlertDescription>
-          </Alert>
-        ) : null}
 
         <View className="items-center">
           <SaveButton
             label="Send code"
             savedLabel="Code sent"
-            onSave={sendCode}
-            resetAfter={1200}
+            onSave={handleSendCode}
+            minLoading={SEND_TRANSITION_DELAY_MS}
+            resetAfter={0}
+            disabled={!canSend}
             contract
             className="min-w-40"
           />
@@ -171,29 +191,21 @@ export default function UserLoginScreen() {
           <View className="flex-row items-center gap-1.5">
             <Text variant="muted">{"Didn't get the code?"}</Text>
             <Pressable
-              disabled={resendIn > 0}
-              onPress={() => void sendCode()}
+              disabled={resendIn > 0 || requesting}
+              onPress={() => void handleResend()}
               accessibilityRole="button"
-              accessibilityState={{ disabled: resendIn > 0 }}
+              accessibilityState={{ disabled: resendIn > 0 || requesting }}
               hitSlop={8}
             >
               <Text
                 variant="small"
-                className={resendIn > 0 ? "text-muted-foreground" : "text-primary"}
+                className={resendIn > 0 || requesting ? "text-muted-foreground" : "text-primary"}
               >
-                {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend"}
+                {requesting ? "Sending…" : resendIn > 0 ? `Resend in ${resendIn}s` : "Resend"}
               </Text>
             </Pressable>
           </View>
-          <Pressable
-            onPress={() => {
-              setChallenge(null);
-              setError(null);
-              setOtp("");
-            }}
-            accessibilityRole="button"
-            hitSlop={8}
-          >
+          <Pressable onPress={handleChangeNumber} accessibilityRole="button" hitSlop={8}>
             <Text variant="small" className="text-primary">
               Change number
             </Text>
@@ -215,19 +227,18 @@ export default function UserLoginScreen() {
       </View>
 
       {error ? (
-        <Alert variant="destructive" className="flex-row items-center gap-2 rounded-xl py-3">
-          <AlertCircle size={16} color={colors.destructive} />
-          <AlertDescription className="flex-1">{error}</AlertDescription>
-        </Alert>
+        <Text variant="small" className="text-center text-destructive">
+          {error}
+        </Text>
       ) : null}
 
       <View className="items-center">
         <SaveButton
           label="Verify"
           savedLabel="Signed in"
-          onSave={verify}
+          onSave={handleVerify}
           minLoading={600}
-          disabled={!otpValid}
+          disabled={!canVerify}
           contract
           className="min-w-40"
         />

@@ -69,7 +69,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-native-sheet-emojis"
     ],
     "experiments": {
       "typedRoutes": true,

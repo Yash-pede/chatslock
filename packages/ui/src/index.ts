@@ -12,6 +12,8 @@ export * from "./components/spinner";
 export * from "./components/separator";
 export * from "./components/alert";
 export * from "./components/alert-dialog";
+export * from "./components/chat-bubble";
+export * from "./components/typing-indicator";
 export * from "./components/brand";
 export * from "./components/tab-bar";
 export * from "./components/settings-row";

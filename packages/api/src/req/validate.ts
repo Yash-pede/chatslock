@@ -1,5 +1,5 @@
 import {createMiddleware} from "hono/factory";
-import {flattenError, ZodError, type ZodObject, type ZodType} from "zod";
+import type {ZodObject, ZodType} from "zod";
 import {ApiException} from "../utils/apiException";
 
 /** Request envelope shared by every route: `{body, query, params}`. */
@@ -9,8 +9,20 @@ export type RequestSchema = ZodObject<{
     params: ZodType;
 }>;
 
-/** Parses `{body, query, params}` from the request and puts the result on `c.get("valid")`. */
-export const validateWithZod = (schema: RequestSchema) => createMiddleware(async (c, next) => {
+export interface ValidateOptions {
+    /**
+     * Override the failure for a schema whose validation details must not reach
+     * the client (e.g. credentials: telling someone the password shape is wrong
+     * leaks information and is worse UX than a single generic message).
+     */
+    onInvalid?: {status?: 400 | 401 | 403; code?: string; message: string};
+}
+
+/**
+ * Parses `{body, query, params}` from the request and puts the result on
+ * `c.get("valid")`.
+ */
+export const validateWithZod = (schema: RequestSchema, options: ValidateOptions = {}) => createMiddleware(async (c, next) => {
     const contentType = c.req.header('content-type') || '';
     let parsedBody = {};
 
@@ -25,6 +37,13 @@ export const validateWithZod = (schema: RequestSchema) => createMiddleware(async
     });
 
     if (!result.success) {
+        if (options.onInvalid) {
+            throw new ApiException(options.onInvalid.status ?? 400, {
+                code: options.onInvalid.code ?? "VALIDATION_ERROR",
+                message: options.onInvalid.message,
+            });
+        }
+
         const modifiedIssues = result.error.issues.map((e) => {
             const message = e.code === "unrecognized_keys"
                 ? "Unrecognized fields are not allowed"
@@ -33,10 +52,12 @@ export const validateWithZod = (schema: RequestSchema) => createMiddleware(async
             return {...e, message, path};
         });
 
+        // The schema's own messages (e.g. "Must contain uppercase", "OTP must be
+        // 6 digits") are what the client displays, so the first failure becomes
+        // the top-level message instead of a generic "Validation failed".
         throw new ApiException(400, {
             code: "VALIDATION_ERROR",
-            message: "Validation failed",
-            details: flattenError(new ZodError(modifiedIssues)),
+            message: modifiedIssues[0]?.message ?? "Validation failed",
         });
     }
 

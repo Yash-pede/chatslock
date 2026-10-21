@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { router } from "expo-router";
 import { Pressable, RefreshControl, ScrollView, SectionList, View } from "react-native";
 import { Search } from "lucide-react-native";
 import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui";
@@ -71,6 +72,17 @@ export default function ChatsScreen() {
   const refresh = () => {
     setRefreshing(true);
     void load(new AbortController().signal);
+  };
+
+  const openConversation = (item: ChatListItem) => {
+    router.push({
+      pathname: "/conversation/[id]",
+      params: {
+        id: item.conversationId,
+        name: item.peer?.fullName ?? item.peer?.username ?? "Chat",
+        ...(item.peer?.avatar ? {avatar: item.peer.avatar} : {}),
+      },
+    });
   };
 
   const counts = useMemo(
@@ -188,7 +200,9 @@ export default function ChatsScreen() {
                 tintColor={colors.mutedForeground}
               />
             }
-            renderItem={({ item }) => <ConversationRow item={item} />}
+            renderItem={({ item }) => (
+              <ConversationRow item={item} onPress={openConversation} />
+            )}
             ListEmptyComponent={
               <View className="items-center justify-center px-8 py-16">
                 <Text variant="large">
