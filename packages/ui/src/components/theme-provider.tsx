@@ -79,8 +79,8 @@ export function ThemeProvider({
 }
 
 export const THEME_COLORS = {
-  light: { background: "#ffffff", foreground: "#09090b", card: "#ffffff", cardForeground: "#09090b", primary: "#2563eb", primaryForeground: "#f8fafc", secondary: "#f4f4f5", secondaryForeground: "#18181b", muted: "#f4f4f5", mutedForeground: "#71717a", accent: "#f4f4f5", accentForeground: "#18181b", destructive: "#ef4444", destructiveForeground: "#fafafa", border: "#e4e4e7", input: "#e4e4e7", ring: "#18181b" },
-  dark: { background: "#09090b", foreground: "#fafafa", card: "#09090b", cardForeground: "#fafafa", primary: "#3b82f6", primaryForeground: "#0f172a", secondary: "#27272a", secondaryForeground: "#fafafa", muted: "#27272a", mutedForeground: "#a1a1aa", accent: "#27272a", accentForeground: "#fafafa", destructive: "#7f1d1d", destructiveForeground: "#fafafa", border: "#27272a", input: "#27272a", ring: "#d4d4d8" },
+  light: { background: "#f8fafc", foreground: "#0f172a", card: "#ffffff", cardForeground: "#0f172a", primary: "#2563eb", primaryForeground: "#f8fafc", secondary: "#eef2f6", secondaryForeground: "#0f172a", muted: "#eef2f6", mutedForeground: "#64748b", accent: "#e0edff", accentForeground: "#1d4ed8", destructive: "#ef4444", destructiveForeground: "#fafafa", border: "#dbe2ea", input: "#dbe2ea", ring: "#2563eb" },
+  dark: { background: "#090f1b", foreground: "#f8fafc", card: "#101a2b", cardForeground: "#f8fafc", primary: "#3b82f6", primaryForeground: "#0f172a", secondary: "#1e293b", secondaryForeground: "#f8fafc", muted: "#1e293b", mutedForeground: "#94a3b8", accent: "#243449", accentForeground: "#f8fafc", destructive: "#dc2626", destructiveForeground: "#fafafa", border: "#27364d", input: "#27364d", ring: "#60a5fa" },
 } as const;
 
 export function useThemeColors() {

@@ -1,4 +1,4 @@
-module "lambdas" {
+  module "lambdas" {
   source               = "./lambda"
   user_pool_arn        = aws_cognito_user_pool.chat_user_pool.arn
   vpc_id               = var.vpc_id

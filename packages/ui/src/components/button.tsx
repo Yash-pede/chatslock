@@ -2,10 +2,11 @@ import React from "react";
 import { Pressable, Text, ActivityIndicator } from "react-native";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "../lib/utils";
+import { radius } from "../lib/radius";
 import { useThemeColors } from "./theme-provider";
 
 const buttonVariants = cva(
-  "flex-row items-center justify-center rounded-md min-h-12 min-w-12",
+  `flex-row items-center justify-center ${radius.control} min-h-12 min-w-12`,
   {
     variants: {
       variant: {

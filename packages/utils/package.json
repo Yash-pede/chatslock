@@ -30,6 +30,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@repo/types": "workspace:*",
     "axios": "^1.20.0",
     "expo-secure-store": "catalog:"
   }

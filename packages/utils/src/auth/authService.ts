@@ -120,6 +120,23 @@ export async function login(params: {
 }
 
 /**
+ * Agent (staff) sign-in. The backend only issues a `userpass` session to users
+ * in the `agent` group and rejects everyone else with 403, so this is the
+ * app-facing counterpart of {@link login} with the client recorded up front.
+ */
+export async function loginAsAgent(params: {
+    username: string;
+    password: string;
+}): Promise<AuthTokens> {
+    const tokens = await login({
+        username: params.username.trim().toLowerCase(),
+        password: params.password,
+    });
+    return { ...tokens, client: 'userpass' };
+}
+
+
+/**
  * Exchange the stored refresh token for a fresh access token. Cognito keeps
  * the refresh token the same here, so the caller's stored one stays valid.
  */

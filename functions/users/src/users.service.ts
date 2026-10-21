@@ -16,6 +16,7 @@ export const onboardUser = async ({userId, cognitoUsername, fullName, username, 
             fullName,
             username,
             role: "user",
+            phone: cognitoUsername.split("_")[1], // extracting phone number
             ...(agentId !== undefined ? {agentId} : {}),
         });
 

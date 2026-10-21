@@ -8,17 +8,19 @@ import {
     userItem,
     userSchema,
     USERNAME_GSI,
+    getUserSchema,
     type CreateUserInput,
     type UpdateUserInput,
     type User,
 } from "@repo/types/schema";
+import z from "zod";
 import {AWSManager, buildKey, definedEntries, parseOrThrow} from "../utils";
 
 /** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
 const userKey = (userId: string) => ({PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0]});
 
 export const usersDao = {
-    getUserById: async (input: { userId: string }) => {
+    getUserById: async (input: { userId: string }): Promise<z.infer<typeof getUserSchema> | undefined> => {
         const result = await AWSManager.dbClient.send(
             new QueryCommand({
                 TableName: TABLE_NAME,
@@ -28,9 +30,10 @@ export const usersDao = {
             })
         )
 
-        return result.Items?.map((item) => parseOrThrow(userSchema, item))[0];
+        const item = result.Items?.[0];
+        return item === undefined ? undefined : parseOrThrow(getUserSchema, item);
     },
-    getUserByUsername: async (input: { username: string })=> {
+    getUserByUsername: async (input: { username: string }) => {
 
         const result = await AWSManager.dbClient.send(
             new QueryCommand({
