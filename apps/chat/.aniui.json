@@ -1,0 +1,20 @@
+{
+  "componentsDir": "src/components/ui",
+  "utilPath": "lib/utils.ts",
+  "theme": "blue",
+  "style": "uniwind",
+  "tsx": true,
+  "sdkGeneration": "v5",
+  "installed": {
+    "button": {
+      "version": "0.8.0",
+      "hash": "73e8c13a",
+      "addedAt": "2026-10-21T06:18:35.032Z"
+    },
+    "theme-provider": {
+      "version": "0.8.0",
+      "hash": "72d50f8c",
+      "addedAt": "2026-10-21T06:18:35.032Z"
+    }
+  }
+}

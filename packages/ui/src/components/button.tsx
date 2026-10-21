@@ -1,177 +1,79 @@
-import type { ReactNode } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
+import React from "react";
+import { Pressable, Text, ActivityIndicator } from "react-native";
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "../lib/utils";
+import { useThemeColors } from "./theme-provider";
 
-import { radius, sizing, spacing, useTheme } from "../theme";
-import { Icon, isIconName, type IconName } from "./icon";
-import { Text } from "./text";
+const buttonVariants = cva(
+  "flex-row items-center justify-center rounded-md min-h-12 min-w-12",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary",
+        secondary: "bg-secondary",
+        outline: "border border-input bg-transparent",
+        ghost: "bg-transparent",
+        destructive: "bg-destructive",
+        link: "bg-transparent",
+      },
+      size: {
+        sm: "px-3 py-1.5 gap-1.5",
+        md: "px-4 py-2.5 gap-2",
+        lg: "px-6 py-3.5 gap-2.5",
+        icon: "h-10 w-10 p-0",
+      },
+    },
+    defaultVariants: { variant: "default", size: "md" },
+  }
+);
 
-/**
- * `outline` is the sibling of `primary`, not a lighter `secondary`: it draws a
- * hairline and leaves the surface showing, which is what a sign-in method the
- * user did *not* choose by default should look like.
- */
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost";
-export type ButtonSize = "md" | "lg";
+const buttonTextVariants = cva("text-center font-medium", {
+  variants: {
+    variant: {
+      default: "text-primary-foreground",
+      secondary: "text-secondary-foreground",
+      outline: "text-foreground",
+      ghost: "text-foreground",
+      destructive: "text-destructive-foreground",
+      link: "text-primary underline",
+    },
+    size: { sm: "text-sm", md: "text-base", lg: "text-lg", icon: "text-sm" },
+  },
+  defaultVariants: { variant: "default", size: "md" },
+});
 
-export interface ButtonProps {
-  label: string;
-  onPress?: () => void;
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-  disabled?: boolean;
+export interface ButtonProps
+  extends React.ComponentPropsWithoutRef<typeof Pressable>,
+    VariantProps<typeof buttonVariants> {
+  className?: string;
+  textClassName?: string;
+  children?: string;
+  icon?: React.ReactNode;
+  iconAfter?: React.ReactNode;
   loading?: boolean;
-  /** Shown instead of `label` while `loading` is true. */
-  loadingLabel?: string;
-  /**
-   * A glyph leading the label.
-   *
-   * Takes a name or a node. A name is the common case — `icon="phone"` — and
-   * resolves to an `<Icon>` tinted to the button's own foreground, so the
-   * variant cannot end up with a mismatched icon. Pass a node only when the
-   * icon is already built or is not an icon at all.
-   */
-  icon?: IconName | ReactNode;
-  /** Stretch to the width of the column. The default for a stacked form. */
-  block?: boolean;
-  style?: StyleProp<ViewStyle>;
-  accessibilityHint?: string;
-  testID?: string;
 }
 
-export function Button({
-  label,
-  onPress,
-  variant = "primary",
-  size = "lg",
-  disabled = false,
-  loading = false,
-  loadingLabel,
-  icon,
-  block = false,
-  style,
-  accessibilityHint,
-  testID,
-}: ButtonProps) {
-  const { colors } = useTheme();
-  const inert = disabled || loading;
-
-  // `ghost` paints nothing and `outline` paints only a hairline; the other two
-  // are the filled shadcn variants.
-  const background =
-    variant === "primary"
-      ? colors.primary
-      : variant === "secondary"
-        ? colors.secondary
-        : "transparent";
-  const foreground =
-    variant === "primary"
-      ? colors.primaryForeground
-      : variant === "secondary"
-        ? colors.secondaryForeground
-        : variant === "outline"
-          ? colors.foreground
-          : colors.primary;
-
-  // The icon is dropped while loading: a spinner already says "working", and
-  // two indicators side by side reads as a glitch.
-  const leading =
-    !loading &&
-    (isIconName(icon) ? (
-      <Icon name={icon} size={sizing.iconSmall} color={foreground} />
-    ) : (
-      icon
-    ));
+export function Button({ variant, size, className, textClassName, children, icon, iconAfter, loading, disabled, ...props }: ButtonProps) {
+  const isDisabled = disabled || loading;
+  const colors = useThemeColors();
+  const onFilledBg = variant === "default" || variant === "destructive";
+  const spinnerColor = onFilledBg ? colors.primaryForeground : colors.foreground;
 
   return (
     <Pressable
-      testID={testID}
+      className={cn(buttonVariants({ variant, size }), isDisabled && "opacity-50", "active:opacity-80", className)}
       accessibilityRole="button"
-      accessibilityState={{ disabled: inert, busy: loading }}
-      accessibilityHint={accessibilityHint}
-      // A screen reader announces the button, not its label and icon as two
-      // separate things, so the icon is hidden unless it is the only content.
-      disabled={inert}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.base,
-        {
-          backgroundColor: background,
-          borderRadius: radius.md,
-          paddingVertical: spacing.md,
-          paddingHorizontal: spacing.xxl,
-          minHeight: sizing.hitSlop,
-        },
-        // `block` beats the parent row rather than the variant's own width, so
-        // a full-width button stays full width whatever its variant.
-        block && styles.block,
-        size === "md" && {
-          paddingVertical: spacing.sm,
-        },
-        variant === "ghost" && { paddingHorizontal: spacing.md },
-        variant === "outline" && [
-          { borderColor: colors.border },
-          styles.outline,
-          // Outline has no fill to dim, so the press state shows as a surface
-          // tint instead of an opacity change.
-          pressed && { backgroundColor: colors.accent },
-        ],
-        // Press feedback lives here, not in the base style — a filled button
-        // dims under the press the way `active:bg-primary/90` does in shadcn.
-        pressed && variant === "primary" && { opacity: 0.85 },
-        pressed &&
-          (variant === "secondary" || variant === "ghost") && {
-            opacity: 0.7,
-          },
-        inert && styles.inert,
-        style,
-      ]}
+      accessible={true}
+      disabled={isDisabled}
+      {...props}
     >
-      {leading ? <View style={styles.leading}>{leading}</View> : null}
-
       {loading ? (
-        <>
-          <ActivityIndicator color={foreground} size="small" />
-          {loadingLabel ? (
-            <Text
-              variant="headline"
-              style={{ color: foreground, marginLeft: spacing.sm }}
-            >
-              {loadingLabel}
-            </Text>
-          ) : null}
-        </>
-      ) : (
-        <Text variant="headline" style={{ color: foreground }}>
-          {label}
-        </Text>
-      )}
+        <ActivityIndicator size="small" color={spinnerColor} />
+      ) : icon ?? null}
+      {children ? (
+        <Text className={cn(buttonTextVariants({ variant, size }), textClassName)}>{children}</Text>
+      ) : null}
+      {!loading && iconAfter ? iconAfter : null}
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-  },
-  block: {
-    width: "100%",
-  },
-  outline: {
-    borderWidth: StyleSheet.hairlineWidth * 2,
-  },
-  leading: {
-    marginRight: spacing.sm,
-  },
-  inert: {
-    opacity: 0.5,
-  },
-});
