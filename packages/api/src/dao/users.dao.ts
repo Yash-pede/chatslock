@@ -1,4 +1,4 @@
-import {PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
+import {BatchGetCommand, PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
 import {
     createUserSchema,
     PREFIXES,
@@ -6,13 +6,16 @@ import {
     USER_SK,
     updateUserSchema,
     userItem,
+    conversationUserProfileSchema,
     userSchema,
     USERNAME_GSI,
     getUserSchema,
     type CreateUserInput,
     type UpdateUserInput,
     type User,
+    type ConversationUserProfile,
 } from "@repo/types/schema";
+import {MAX_PROFILE_LOOKUP} from "@repo/types/req";
 import z from "zod";
 import {AWSManager, buildKey, definedEntries, parseOrThrow} from "../utils";
 
@@ -32,6 +35,29 @@ export const usersDao = {
 
         const item = result.Items?.[0];
         return item === undefined ? undefined : parseOrThrow(getUserSchema, item);
+    },
+    /**
+     * Fetch the public profile of several users in one call. BatchGet caps at
+     * 100 keys, so callers stay far below that (the chat page asks for <= 25).
+     * Missing ids are simply absent from the result.
+     */
+    getPublicProfilesByIds: async (input: { userIds: string[] }): Promise<ConversationUserProfile[]> => {
+        const ids = [...new Set(input.userIds)].slice(0, MAX_PROFILE_LOOKUP);
+        if (ids.length === 0) return [];
+
+        const result = await AWSManager.dbClient.send(
+            new BatchGetCommand({
+                RequestItems: {
+                    [TABLE_NAME]: {
+                        Keys: ids.map((id) => userKey(id)),
+                        ProjectionExpression: "userId, username, fullName, avatar",
+                    },
+                },
+            }),
+        );
+
+        const items = result.Responses?.[TABLE_NAME] ?? [];
+        return items.map((item) => parseOrThrow(conversationUserProfileSchema, item));
     },
     getUserByUsername: async (input: { username: string }) => {
 

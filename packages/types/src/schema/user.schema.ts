@@ -12,7 +12,8 @@ export const userId = z.string().regex(userIdRegex, "Invalid userId");
 export const role = z.enum(ROLE_NAMES);
 export const fullName = str(3, 50);
 export const username = str(3, 20);
-export const imageUrl = z.url("Invalid image URL format");
+/** Public profile image URL. Stored as `avatar` everywhere. */
+export const avatar = z.url("Invalid avatar URL format");
 export const phone = z.string().regex(/^\+\d{10,15}$/, "Invalid phone number");
 
 export const USER_SK = ["PROFILE"] as const;
@@ -39,7 +40,7 @@ export const userItem = z.strictObject({
   cognitoUsername: str(1, 255),
   username,
   fullName,
-  imageUrl: imageUrl.optional(),
+  avatar: avatar.optional(),
   phone: phone.optional(),
   role,
   agentId: userId.optional(),

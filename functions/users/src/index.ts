@@ -1,8 +1,19 @@
 import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
-import {userOnboardingSchema} from "@repo/types/req"
+import {
+    avatarImagePresignUrlSchema,
+    confirmAvatarUploadSchema,
+    updateMyProfileSchema,
+    userOnboardingSchema,
+} from "@repo/types/req"
 import {validateWithZod} from "@repo/api/req"
-import {getUserByIdController, onboardingController} from "./users.controller"
+import {
+    confirmAvatarUploadController,
+    getAvatarPresignedUrlController,
+    getUserByIdController,
+    onboardingController,
+    updateMyProfileController,
+} from "./users.controller"
 import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
 import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
 
@@ -20,6 +31,9 @@ app.use(withAuth)
 
 app.post("/onboarding", validateWithZod(userOnboardingSchema), onboardingController)
 app.get("/me", getUserByIdController)
+app.post("/avatar", validateWithZod(avatarImagePresignUrlSchema), getAvatarPresignedUrlController)
+app.post("/avatar/confirm", validateWithZod(confirmAvatarUploadSchema), confirmAvatarUploadController)
+app.patch("/me", validateWithZod(updateMyProfileSchema), updateMyProfileController)
 
 app.onError(apiErrorHandler)
 

@@ -10,6 +10,4 @@ export const radius = {
   surface: "rounded-xl",
   /** Icon tiles and the brand mark. */
   tile: "rounded-xl",
-  /** Same radius in px, for components that style with `borderRadius`. */
-  controlPx: 12,
 } as const;

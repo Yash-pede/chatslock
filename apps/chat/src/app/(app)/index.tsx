@@ -1,106 +1,221 @@
-import { Pressable, View } from "react-native";
-import { CircleUserRound, LogOut, ShieldCheck } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, SectionList, View } from "react-native";
+import { Search } from "lucide-react-native";
+import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui";
+import { extractErrorMessage } from "@repo/utils";
+import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api";
+import { useAuth } from "@/auth/AuthContext";
+import { ComposeButton } from "@/components/chats/compose-button";
+import { ConversationRow } from "@/components/chats/conversation-row";
 import {
-  Button,
-  SafeArea,
-  SectionHeader,
-  Spinner,
-  Text,
-  useThemeColors,
-} from "@repo/ui";
-import { useAuth, useUser } from "@/auth/AuthContext";
+  buildChatList,
+  collectPeerIds,
+  fetchPeerProfiles,
+  type ChatListItem,
+} from "@/components/chats/chat-list";
 
-/** Landing screen once the session and profile are confirmed. */
-export default function HomeScreen() {
-  const { user, isLoading, error, reload } = useUser();
-  const { signOut } = useAuth();
+type FilterKey = "all" | "unread" | "empty";
+
+const FILTERS: { key: FilterKey; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "unread", label: "Unread" },
+  { key: "empty", label: "Get started" },
+];
+
+/**
+ * Telegram-like chats screen backed by `GET /api/conversations/chat`. Peer
+ * profiles are resolved separately through `POST /api/conversations/profiles`
+ * (ids extracted from the `u1#u2` conversation id), then joined and sorted by
+ * last activity.
+ */
+export default function ChatsScreen() {
   const colors = useThemeColors();
+  const { identity } = useAuth();
+  const currentUserId = identity?.id ?? null;
 
-  const displayName = user?.fullName || user?.username || "there";
-  const initials = getInitials(displayName);
+  const [items, setItems] = useState<ChatListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<FilterKey>("all");
+
+  const load = useCallback(async (signal: AbortSignal) => {
+    try {
+      const { conversations } = await conversationsApi.getChatPage({
+        pageSize: MAX_PROFILE_LOOKUP,
+      });
+      const peerIds = collectPeerIds(conversations, currentUserId);
+      const profiles = await fetchPeerProfiles(peerIds);
+      if (signal.aborted) return;
+      setItems(buildChatList(conversations, profiles, currentUserId));
+      setError(null);
+    } catch (e) {
+      if (signal.aborted) return;
+      setError(extractErrorMessage(e));
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [currentUserId]);
+
+  // Fetches from an external system in response to mount (not a state sync),
+  // so the immediate call is intentional; state lands in the promise callbacks.
+  useEffect(() => {
+    const controller = new AbortController();
+    void Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
+  }, [load]);
+
+  const refresh = () => {
+    setRefreshing(true);
+    void load(new AbortController().signal);
+  };
+
+  const counts = useMemo(
+    () => ({
+      all: items.length,
+      unread: items.filter((item) => item.unreadCount > 0).length,
+      empty: items.filter((item) => !item.lastMessageAt && !item.lastMessagePreview).length,
+    }),
+    [items],
+  );
+
+  const sections = useMemo(() => {
+    if (filter === "unread") {
+      return [{ title: "Unread", data: items.filter((item) => item.unreadCount > 0) }];
+    }
+    if (filter === "empty") {
+      return [
+        {
+          title: "Get started",
+          data: items.filter((item) => !item.lastMessageAt && !item.lastMessagePreview),
+        },
+      ];
+    }
+    return [{ title: "All chats", data: items }];
+  }, [items, filter]);
 
   return (
-    <SafeArea>
-      <View className="flex-1 gap-6 px-5 pt-4">
-        <View className="flex-row items-center gap-3">
-          <View className="h-12 w-12 items-center justify-center rounded-full bg-accent">
-            <Text variant="large" className="text-accent-foreground">
-              {initials}
+    <SafeArea edges={["top", "left", "right"]}>
+      <View className="flex-1">
+        <View className="flex-row items-center justify-between px-4 pb-1 pt-2">
+          <Text className="text-[1.9rem] font-bold tracking-tight text-foreground">Chats</Text>
+          <View className="flex-row items-center gap-4">
+            <Text variant="small" className="text-muted-foreground">
+              {counts.unread > 0 ? `${counts.unread} unread` : `${counts.all} chats`}
             </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Search chats"
+              hitSlop={8}
+              className="h-9 w-9 items-center justify-center rounded-full active:bg-secondary"
+            >
+              <Search size={21} color={colors.foreground} strokeWidth={2} />
+            </Pressable>
           </View>
-          <View className="flex-1">
-            <Text variant="muted">Signed in as</Text>
-            <Text variant="h4">{displayName}</Text>
-          </View>
-          <Pressable
-            onPress={() => void signOut()}
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
-          >
-            <LogOut size={18} color={colors.mutedForeground} />
-          </Pressable>
         </View>
 
-        {isLoading ? (
-          <View className="items-center justify-center rounded-2xl border border-border bg-card py-10">
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerClassName="gap-5 px-4 py-2"
+          className="grow-0"
+        >
+          {FILTERS.map(({ key, label }) => {
+            const active = filter === key;
+
+            return (
+              <Pressable
+                key={key}
+                onPress={() => setFilter(key)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={label}
+                className="items-center gap-1.5 pb-1"
+              >
+                <View className="flex-row items-center gap-1.5">
+                  <Text
+                    className={`text-base ${active ? "font-semibold text-primary" : "font-medium text-muted-foreground"}`}
+                  >
+                    {label}
+                  </Text>
+                  {key !== "all" && counts[key] > 0 ? (
+                    <View className="rounded-full bg-secondary px-1.5 py-0.5">
+                      <Text className="text-[11px] font-semibold text-muted-foreground">
+                        {counts[key]}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View
+                  className={`h-[3px] w-8 rounded-full ${active ? "bg-primary" : "bg-transparent"}`}
+                />
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+
+        {loading ? (
+          <View className="flex-1 items-center justify-center gap-3 pb-20">
             <Spinner />
+            <Text variant="muted">Loading conversations…</Text>
           </View>
         ) : error ? (
-          <View className="gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4">
-            <Text variant="small" className="text-destructive">
+          <View className="flex-1 items-center justify-center gap-4 px-8 pb-20">
+            <Text variant="large" className="text-center">
+              Couldn&apos;t load your chats
+            </Text>
+            <Text variant="muted" className="text-center">
               {error}
             </Text>
-            <Button variant="outline" size="sm" onPress={() => void reload()}>
+            <Button size="sm" onPress={() => void load(new AbortController().signal)}>
               Try again
             </Button>
           </View>
         ) : (
-          <>
-            <View className="rounded-2xl border border-border bg-card p-5">
-              <SectionHeader title="Account" />
-              <View className="mt-3 gap-3">
-                <InfoRow icon={<CircleUserRound size={16} color={colors.mutedForeground} />} label="Username" value={user?.username ?? "—"} />
-                <InfoRow icon={<ShieldCheck size={16} color={colors.mutedForeground} />} label="Phone" value={user?.phone ?? "Not provided"} />
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.conversationId}
+            stickySectionHeadersEnabled={false}
+            contentContainerClassName="pb-8"
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={refresh}
+                tintColor={colors.mutedForeground}
+              />
+            }
+            renderItem={({ item }) => <ConversationRow item={item} />}
+            ListEmptyComponent={
+              <View className="items-center justify-center px-8 py-16">
+                <Text variant="large">
+                  {filter === "all" ? "No conversations yet" : "Nothing here"}
+                </Text>
+                <Text variant="muted" className="mt-1 text-center">
+                  {filter === "all"
+                    ? "Start a chat and it will show up here."
+                    : "Conversations matching this filter will appear here."}
+                </Text>
               </View>
-            </View>
-
-            <View className="items-center rounded-2xl border border-dashed border-border p-6">
-              <Text variant="h4" className="text-center">
-                You're all set
-              </Text>
-              <Text variant="muted" className="mt-1 text-center">
-                Your conversations will show up here.
-              </Text>
-            </View>
-          </>
+            }
+            ListFooterComponent={
+              filter === "all" && items.length > 0 ? (
+                <Text
+                  variant="small"
+                  className="py-4 text-center font-normal text-muted-foreground"
+                >
+                  {items.length} conversations
+                </Text>
+              ) : undefined
+            }
+          />
         )}
+
+        <ComposeButton />
       </View>
     </SafeArea>
   );
-}
-
-function InfoRow({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <View className="flex-row items-center gap-3">
-      {icon}
-      <Text variant="muted" className="flex-1">
-        {label}
-      </Text>
-      <Text variant="small">{value}</Text>
-    </View>
-  );
-}
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((part) => part.charAt(0).toUpperCase()).join("") || "?";
 }

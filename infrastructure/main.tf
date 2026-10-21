@@ -93,6 +93,7 @@ resource "aws_secretsmanager_secret_version" "example" {
     cognito_user_pool_id    = module.cognito.user_pool_id
     cognito_admin_client_id = module.cognito.admin_client
     cognito_user_client_id  = module.cognito.user_client
+    s3_media_bucket         = module.s3_media.bucket_name
   })
 }
 

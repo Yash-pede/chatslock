@@ -1,6 +1,6 @@
 import z from "zod";
 import {baseSchema} from "./base";
-import {conversationId} from "../schema";
+import {conversationId, userId} from "../schema";
 
 /** Base64url-encoded JSON of DynamoDB `LastEvaluatedKey`; opaque to clients. */
 export const maxStartKeyLength = 2048;
@@ -25,3 +25,18 @@ export const conversationIdParamsSchema = baseSchema.extend({
 export type GetChatPageConversationRequest = z.infer<typeof getChatPageConversationSchema>;
 export type GetChatPageConversationInput = z.input<typeof getChatPageConversationSchema>;
 export type ConversationIdParamsRequest = z.infer<typeof conversationIdParamsSchema>;
+
+/** Max peers resolvable in one request (the chat page's page size). */
+export const MAX_PROFILE_LOOKUP = 25;
+
+export const getConversationProfilesSchema = baseSchema.extend({
+    body: z.strictObject({
+        userIds: z.array(userId)
+            .min(1, "At least one userId is required")
+            .max(MAX_PROFILE_LOOKUP, `At most ${MAX_PROFILE_LOOKUP} userIds are allowed`)
+            .refine((ids) => new Set(ids).size === ids.length, "userIds must be unique"),
+    }),
+});
+
+export type GetConversationProfilesRequest = z.infer<typeof getConversationProfilesSchema>;
+export type GetConversationProfilesInput = z.input<typeof getConversationProfilesSchema>;

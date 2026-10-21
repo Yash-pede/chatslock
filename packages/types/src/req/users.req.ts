@@ -1,6 +1,6 @@
 import z from "zod";
 import {baseSchema} from "./base";
-import {fullName, imageUrl, role, userId, username} from "../schema";
+import {avatar, fullName, role, userId, username} from "../schema";
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max);
 
@@ -26,15 +26,32 @@ export const getUserProfileImagePresignUrlSchema = baseSchema.extend({
     }),
 });
 
-export const updateUserProfileSchema = baseSchema.extend({
+/**
+ * Self-service profile update. The caller can only change their own name and
+ * avatar; `otherUserId` is not accepted (it would let a user edit someone else).
+ * The avatar is stored as a full URL so clients can render it directly.
+ */
+export const updateMyProfileSchema = baseSchema.extend({
     body: z.strictObject({
         fullName: fullName.optional(),
-        imageUrl: imageUrl.optional(),
-        otherUserId: userId.optional(),
+        avatar: avatar.optional(),
+    }).refine((body) => body.fullName !== undefined || body.avatar !== undefined, {
+        message: "Nothing to update",
+    }),
+});
+
+/** Confirms a completed upload by its S3 key and returns the stored avatar URL. */
+export const confirmAvatarUploadSchema = baseSchema.extend({
+    body: z.strictObject({
+        key: str(1, 512).regex(
+            /^uploads\/users\/[A-Za-z0-9-]+\/profile-image\/[A-Za-z0-9-]+\.[a-z]{3,4}$/,
+            "Invalid upload key",
+        ),
     }),
 });
 
 export type UserSearchRequest = z.infer<typeof userSearchSchema>;
 export type UserOnboardingRequest = z.infer<typeof userOnboardingSchema>;
 export type GetUserProfileImagePresignUrlRequest = z.infer<typeof getUserProfileImagePresignUrlSchema>;
-export type UpdateUserProfileRequest = z.infer<typeof updateUserProfileSchema>;
+export type UpdateMyProfileRequest = z.infer<typeof updateMyProfileSchema>;
+export type ConfirmAvatarUploadRequest = z.infer<typeof confirmAvatarUploadSchema>;

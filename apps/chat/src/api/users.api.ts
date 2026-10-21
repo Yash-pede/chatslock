@@ -1,6 +1,6 @@
 import {apiClient} from "@/api/client";
 import type {getUser} from "@repo/types/schema";
-import type {UserOnboardingRequest} from "@repo/types/req";
+import type {AvatarContentType, UserOnboardingRequest} from "@repo/types/req";
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser;
@@ -40,5 +40,44 @@ export const usersApi = {
     /** `POST /api/users/onboarding` — creates the profile row for a fresh session. */
     onboard: async (input: OnboardingInput): Promise<void> => {
         await apiClient.post("/api/users/onboarding", input);
+    },
+
+    /** `PATCH /api/users/me` — rename and/or set the avatar URL; returns the updated profile. */
+    updateMe: async (input: {fullName?: string; avatar?: string}): Promise<Profile> => {
+        const {data} = await apiClient.patch("/api/users/me", input);
+        return unwrap<Profile>(data);
+    },
+
+    /**
+     * Full avatar change: asks for a short-lived presigned PUT, uploads the file
+     * bytes directly to S3, then confirms the key so the profile row stores the
+     * resulting public URL. Returns the new avatar URL.
+     */
+    uploadAvatar: async (input: {
+        uri: string;
+        contentType: AvatarContentType;
+        fileName: string;
+    }): Promise<string> => {
+        const {data} = await apiClient.post("/api/users/avatar", {
+            contentType: input.contentType,
+            fileName: input.fileName,
+        });
+        const {uploadUrl, key} = unwrap<{uploadUrl: string; key: string}>(data);
+
+        const file = await fetch(input.uri);
+        const blob = await file.blob();
+
+        // S3 presigned PUT: no auth header, the signature is in the URL.
+        const upload = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: {"Content-Type": input.contentType},
+            body: blob,
+        });
+        if (!upload.ok) throw new Error("Could not upload the image. Please try again.");
+
+        const confirmed = await apiClient.post("/api/users/avatar/confirm", {key});
+        const {avatar} = unwrap<{avatar: string}>(confirmed.data);
+
+        return avatar;
     },
 };

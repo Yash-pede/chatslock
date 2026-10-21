@@ -106,7 +106,6 @@ export function InputOtp({
             width: digitWidth,
             marginHorizontal: 4,
             height: digitHeight,
-            borderRadius: radius.controlPx,
             borderWidth: focused === i ? 2 : 1,
             borderColor: focused === i ? borderFocused : borderDefault,
             backgroundColor: bg,
@@ -115,6 +114,9 @@ export function InputOtp({
             fontWeight: "600",
             color: textColor,
           }}
+          // Radius comes from className so uniwind owns it (an inline radius
+          // would be re-resolved away on theme changes).
+          className={radius.control}
           value={digit}
           onChangeText={(t) => handleChange(t, i)}
           onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, i)}

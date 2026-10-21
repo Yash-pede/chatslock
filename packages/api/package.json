@@ -27,15 +27,17 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1147.0",
     "@aws-sdk/client-dynamodb": "^3.1149.0",
+    "@aws-sdk/client-s3": "^3.1153.0",
     "@aws-sdk/client-secrets-manager": "^3.1147.0",
     "@aws-sdk/lib-dynamodb": "^3.1152.0",
+    "@aws-sdk/s3-request-presigner": "^3.1153.0",
     "@aws-sdk/util-dynamodb": "^3.996.9",
     "@hono/aws-lambda": "^1.0.0",
     "@hono/zod-validator": "^0.9.1",
+    "@repo/types": "workspace:*",
     "dotenv": "^18.0.6",
     "hono": "^4.13.13",
-    "zod": "^4.6.5",
-    "@repo/types": "workspace:*"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

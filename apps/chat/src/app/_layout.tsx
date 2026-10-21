@@ -13,14 +13,17 @@ import {
 } from "@repo/ui";
 import { AlertCircle, LogOut, RefreshCw } from "lucide-react-native";
 import { AuthProvider, useAuth } from "@/auth/AuthContext";
+import { SettingsProvider } from "@/settings/SettingsContext";
 import "../../global.css";
 
 export default function RootLayout() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <StatusBar style="auto" />
-        <RootNavigator />
+        <SettingsProvider>
+          <StatusBar style="auto" />
+          <RootNavigator />
+        </SettingsProvider>
       </AuthProvider>
     </ThemeProvider>
   );
