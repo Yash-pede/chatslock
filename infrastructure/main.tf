@@ -40,21 +40,25 @@ module "cognito" {
 module "backend_api_gateway" {
   source = "./modules/backend/api-gateway"
 
-  domain_name          = var.domain_name
-  cognito_user_client  = module.cognito.user_client
-  cognito_admin_client = module.cognito.admin_client
-  cognito_issuer       = module.cognito.cognito_issuer
-  lambda_details       = module.api_lambdas.lambda_details
+  domain_name                     = var.domain_name
+  cognito_user_client             = module.cognito.user_client
+  cognito_admin_client            = module.cognito.admin_client
+  cognito_issuer                  = module.cognito.cognito_issuer
+  lambda_details                  = module.api_lambdas.lambda_details
+  ws_authorizer_lambda_invoke_arn = module.api_lambdas.ws_authorizer_lambda_invoke_arn
+  ws_events_lambda_invoke_arn     = module.api_lambdas.ws_events_lambda_invoke_arn
 }
 
 module "api_lambdas" {
   source = "./modules/backend/lambda"
 
-  api_gateway_execution_arn = module.backend_api_gateway.api_gateway_execution_arn
-  api_lambda_secret_arn     = aws_secretsmanager_secret.backend_lambda_env.arn
-  vpc_id                    = module.vpc.vpc_id
-  vpc_subnet_ids            = module.vpc.private_subnets
-  s3_media_bucket_name      = module.s3_media.bucket_name
+  api_gateway_execution_arn    = module.backend_api_gateway.api_gateway_execution_arn
+  ws_api_gateway_execution_arn = module.backend_api_gateway.ws_api_gateway_execution_arn
+  api_lambda_secret_arn        = aws_secretsmanager_secret.backend_lambda_env.arn
+  api_lambda_secret_name       = aws_secretsmanager_secret.backend_lambda_env.name
+  vpc_id                       = module.vpc.vpc_id
+  vpc_subnet_ids               = module.vpc.private_subnets
+  s3_media_bucket_name         = module.s3_media.bucket_name
 }
 
 module "dynamodb" {

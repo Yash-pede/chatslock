@@ -61,6 +61,43 @@ module "conversations_lambda" {
   source_path = "${path.root}/../functions/conversations/dist/index.mjs"
 }
 
+module "ws_authorizer_lambda" {
+  source = "terraform-aws-modules/lambda/aws"
+
+  function_name  = "wsAuthorizer"
+  handler        = "index.handler"
+  runtime        = "nodejs24.x"
+  create_role    = false
+  timeout        = 10
+  lambda_role    = aws_iam_role.api_lambda_role.arn
+  vpc_subnet_ids = var.vpc_subnet_ids
+
+  # Bundled ESM (`pnpm build` in the function) — a bare index.js is loaded as
+  # CommonJS and its imports would fail at init.
+  source_path = "${path.root}/../functions/wsAuthorizer/dist/index.mjs"
+  environment_variables = {
+    SECRET_NAME = var.api_lambda_secret_name
+
+  }
+}
+
+module "ws_events_lambda" {
+  source = "terraform-aws-modules/lambda/aws"
+
+  function_name          = "wsEvents"
+  description            = "Lambda For Websocket Events."
+  handler                = "index.handler"
+  runtime                = "nodejs24.x"
+  create_role            = false
+  timeout                = 10
+  layers                 = [aws_lambda_layer_version.lambda_layer.arn]
+  lambda_role            = aws_iam_role.api_lambda_role.arn
+  vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
+  vpc_subnet_ids         = var.vpc_subnet_ids
+
+  source_path = "${path.root}/../functions/wsConnectionEvents/dist/index.mjs"
+}
+
 locals {
   api_lambdas = {
     auth = {

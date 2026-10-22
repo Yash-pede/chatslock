@@ -1,0 +1,83 @@
+import { CognitoJwtVerifier } from "aws-jwt-verify";
+import {
+  GetSecretValueCommand,
+  SecretsManagerClient,
+} from "@aws-sdk/client-secrets-manager";
+
+const secretsClient = new SecretsManagerClient({});
+
+/** Header lookup is case-insensitive: proxies and clients vary the casing. */
+function getHeader(event, name) {
+  const target = name.toLowerCase();
+  const headers = event?.headers ?? {};
+  const key = Object.keys(headers).find(
+    (header) => header.toLowerCase() === target,
+  );
+  return key ? headers[key] : undefined;
+}
+
+let cachedSecret;
+
+async function getSecrets() {
+  if (cachedSecret) return cachedSecret;
+
+  const command = new GetSecretValueCommand({
+    SecretId: process.env.SECRET_NAME,
+  });
+
+  const response = await secretsClient.send(command);
+
+  cachedSecret = JSON.parse(response.SecretString);
+
+  return cachedSecret;
+}
+
+export const handler = async (event) => {
+  const secrets = await getSecrets();
+  const verifier = CognitoJwtVerifier.create({
+    userPoolId: secrets.cognito_user_pool_id,
+    tokenUse: "access",
+    clientId: [secrets.cognito_admin_client_id, secrets.cognito_user_client_id],
+  });
+
+  // Browsers cannot set headers on a WebSocket handshake, so the token also
+  // travels in the query string.
+  const token =
+    event.queryStringParameters?.token || getHeader(event, "authorization");
+
+  if (typeof token !== "string" || !token.trim()) {
+    return { statusCode: 401, body: "Missing token" };
+  }
+
+  const cleanToken = token.startsWith("Bearer ") ? token.substring(7) : token;
+
+  try {
+    const payload = await verifier.verify(cleanToken);
+
+    return generateAllowPolicy(payload.sub, event.methodArn, payload);
+  } catch (error) {
+    console.error("WS auth failed", error?.message ?? error);
+    return { statusCode: 401, body: "Unauthorized" };
+  }
+};
+
+function generateAllowPolicy(principalId, resource, payload) {
+  return {
+    principalId,
+    usageIdentifierKey: payload.sub,
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Effect: "Allow",
+          Resource: resource,
+        },
+      ],
+    },
+    context: {
+      userId: payload.sub,
+      clientId: payload.client_id,
+    },
+  };
+}

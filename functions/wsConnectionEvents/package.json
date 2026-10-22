@@ -1,0 +1,25 @@
+{
+  "name": "ws-connections",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run check-types && esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts",
+    "check-types": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.28.1",
+    "npm-run-all2": "^9.0.2"
+  },
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.1154.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1147.0",
+    "@aws-sdk/client-dynamodb": "^3.1149.0",
+    "@aws-sdk/client-s3": "^3.1153.0",
+    "@aws-sdk/s3-request-presigner": "^3.1153.0",
+    "@aws-sdk/util-dynamodb": "^3.996.9",
+    "@hono/aws-lambda": "^1.0.0",
+    "@repo/api": "workspace:*",
+    "@repo/types": "workspace:*",
+    "hono": "^4.13.13"
+  }
+}

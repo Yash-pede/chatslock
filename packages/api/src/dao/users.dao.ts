@@ -1,4 +1,4 @@
-import {BatchGetCommand, PutCommand, QueryCommand, UpdateCommand} from "@aws-sdk/lib-dynamodb";
+import {BatchGetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand} from "@aws-sdk/lib-dynamodb";
 import {
     createUserSchema,
     PREFIXES,
@@ -12,12 +12,14 @@ import {
     getUserSchema,
     type CreateUserInput,
     type UpdateUserInput,
-    type User,
     type ConversationUserProfile,
 } from "@repo/types/schema";
 import {MAX_PROFILE_LOOKUP} from "@repo/types/req";
 import z from "zod";
 import {AWSManager, buildKey, definedEntries, parseOrThrow} from "../utils";
+
+/** How long a stored WebSocket connection row is kept (DynamoDB TTL). */
+const CONNECTION_TTL_SECONDS = 2 * 60 * 60;
 
 /** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
 const userKey = (userId: string) => ({PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0]});
@@ -121,5 +123,52 @@ export const usersDao = {
                 ConditionExpression: "attribute_not_exists(PK)",
             }),
         );
-    },
+  },
+  /** Records an open WebSocket connection for a user (one row per socket). */
+  createUserConnection: async ({ userId, connectionId }: { userId: string; connectionId: string }) => {
+    await AWSManager.dbClient.send(
+        new PutCommand({
+            TableName: TABLE_NAME,
+            Item: {
+                PK: buildKey(PREFIXES.USER, userId),
+                SK: buildKey(PREFIXES.CONNECTION, connectionId),
+                userId,
+                connectionId,
+                connectedAt: Date.now(),
+                expiresAt: Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS,
+            },
+            ConditionExpression: "attribute_not_exists(PK)",
+        }),
+    );
+  },
+  /** All open connection ids for a user (multiple devices). */
+  getUserConnections: async (input: { userId: string }): Promise<string[]> => {
+    const result = await AWSManager.dbClient.send(
+        new QueryCommand({
+            TableName: TABLE_NAME,
+            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
+            ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
+            ExpressionAttributeValues: {
+                ":pk": buildKey(PREFIXES.USER, input.userId),
+                ":sk": PREFIXES.CONNECTION,
+            },
+            ProjectionExpression: "connectionId",
+        })
+    );
+
+    return (result.Items ?? [])
+        .map((item) => item.connectionId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+  },
+  deleteUserConnection: (input: { userId: string; connectionId: string }) => {
+    return AWSManager.dbClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: buildKey(PREFIXES.USER, input.userId),
+          SK: buildKey(PREFIXES.CONNECTION, input.connectionId),
+        }
+      })
+    )
+  }
 };

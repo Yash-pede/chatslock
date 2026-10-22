@@ -60,10 +60,12 @@ resource "aws_dynamodb_table" "environment" {
     ignore_changes = [read_capacity, write_capacity]
   }
 
-  # Delete older messages
-  # ttl {
-  #
-  # }
+  # Connection rows carry `expiresAt` so stale WebSocket entries are swept even
+  # when `$disconnect` never fires (network drop, crashed client).
+  ttl {
+    attribute_name = "expiresAt"
+    enabled        = true
+  }
 
   tags = {
     Name = "only chats table"

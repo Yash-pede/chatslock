@@ -78,6 +78,14 @@ resource "aws_iam_role_policy" "api_lambda_policy" {
         Resource = ["*"]
       },
       {
+        Sid    = "AllowPostToWebSocketConnections"
+        Effect = "Allow"
+        Action = [
+          "execute-api:ManageConnections"
+        ]
+        Resource = ["arn:aws:execute-api:*:*:*/*"]
+      },
+      {
         Sid    = "AllowDynamodb"
         Effect = "Allow",
         Action = [
@@ -101,6 +109,26 @@ resource "aws_lambda_permission" "api_gateway" {
   principal = "apigateway.amazonaws.com"
 
   source_arn = "${var.api_gateway_execution_arn}/*/*/api/${each.value.name}/{proxy+}"
+}
+
+resource "aws_lambda_permission" "ws_api_gateway" {
+  statement_id  = "AllowApiGatewayInvoke-ws"
+  action        = "lambda:InvokeFunction"
+  function_name = module.ws_authorizer_lambda.lambda_function_name
+
+  principal = "apigateway.amazonaws.com"
+
+  source_arn = "${var.ws_api_gateway_execution_arn}/*"
+}
+
+resource "aws_lambda_permission" "ws_events_gateway" {
+  statement_id  = "AllowApiGatewayInvoke-ws-events"
+  action        = "lambda:InvokeFunction"
+  function_name = module.ws_events_lambda.lambda_function_name
+
+  principal = "apigateway.amazonaws.com"
+
+  source_arn = "${var.ws_api_gateway_execution_arn}/*"
 }
 
 # ---- Security group ----
