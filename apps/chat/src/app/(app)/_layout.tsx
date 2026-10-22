@@ -13,7 +13,8 @@ const TABS: { key: TabKey; label: string; icon: typeof MessageSquare }[] = [
 /**
  * Signed-in shell. AniUI's `TabBar` replaces the default bottom bar, so Expo
  * Router keeps owning navigation (deep links, history, back behaviour) while
- * the visual tab bar stays ours.
+ * the visual tab bar stays ours. The realtime socket lives at the root
+ * layout, gated on auth, so it survives navigation across route groups.
  */
 export default function AppTabsLayout() {
   const colors = useThemeColors();

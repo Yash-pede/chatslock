@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {BatchWriteCommand, QueryCommand} from "@aws-sdk/lib-dynamodb";
 import {
     CONVERSATION_SK,
@@ -9,7 +8,7 @@ import {
     userMember_conversationSchema,
     type UserMemberConversation,
 } from "@repo/types/schema";
-import {AWSManager, buildKey, parseOrThrow, parseConversationKey} from "../utils";
+import {AWSManager, buildKey, buildConversationId, parseOrThrow, parseConversationKey} from "../utils";
 
 export const conversationsDao = {
     createDirectConversation: async (userIds: [string, string]): Promise<void> => {
@@ -18,7 +17,10 @@ export const conversationsDao = {
         const sorted = [...userIds].sort();
         const first = sorted[0]!;
         const second = sorted[1]!;
-        const conversationId = `${first}#${second}`;
+        // Stored as `TYPE#id` (e.g. `DIRECT#u1#u2`), the same composite value the
+        // frontend passes back on every messages call; only the storage keys add
+        // the `CONVERSATION#` prefix.
+        const conversationId = buildConversationId(type, `${first}#${second}`);
 
         await AWSManager.dbClient.send(
             new BatchWriteCommand({
@@ -67,7 +69,11 @@ export const conversationsDao = {
         return (resp.Items ?? []).map((item) => {
             const stored = parseOrThrow(userMember_conversationItem, item);
             const {type, conversationId} = parseConversationKey(stored.SK);
-            return parseOrThrow(userMember_conversationSchema, {...stored, conversationType: type, conversationId});
+            return parseOrThrow(userMember_conversationSchema, {
+                ...stored,
+                conversationType: type,
+                conversationId: buildConversationId(type, conversationId),
+            });
         });
-    }
+    },
 }

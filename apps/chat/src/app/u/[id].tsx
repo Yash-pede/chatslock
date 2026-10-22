@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Redirect, useLocalSearchParams } from "expo-router";
-import { useAuth } from "@/auth/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
 /** Cognito `sub` values are UUIDs; anything else is not a profile id. */
 const USER_ID_PATTERN =

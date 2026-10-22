@@ -12,7 +12,7 @@ import {
   useThemeColors,
 } from "@repo/ui";
 import { extractErrorMessage } from "@repo/utils";
-import { useAuth } from "@/auth/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
 

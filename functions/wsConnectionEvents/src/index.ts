@@ -1,28 +1,53 @@
-import { WsRouter, type WsContext } from "@repo/api/core";
-import { connectController, disconnectController } from "./connection.controller";
+import {WsRouter, type WsContext, type WsReply} from "@repo/api/core";
+import {parseOrThrow} from "@repo/api/utils";
+import {
+    MESSAGES_OP_SCHEMAS,
+    wsFrameSchema,
+    type MessagesWsOp,
+} from "@repo/types/req";
+import {WS_EVENT_TYPE} from "@repo/types/schema";
+import {connectController, disconnectController} from "./connection.controller";
+import {
+    deleteMessageController,
+    editMessageController,
+    listMessagesController,
+    sendMessageController,
+} from "./message.controller";
 
-/**
- * Connection lifecycle + message routes. One Lambda serves every WebSocket
- * route, so add the route key here and point API Gateway at it.
- */
 const app = new WsRouter();
 
-// Lifecycle routes have no authorizer context, so they skip the check.
-const PUBLIC_ROUTES = new Set(["$connect", "$disconnect"]);
+const pickSchema = (routeKey: string, op?: string) => {
+    if (routeKey !== "message" || !op) return wsFrameSchema;
+    return MESSAGES_OP_SCHEMAS[op as MessagesWsOp] ?? wsFrameSchema;
+};
 
-app.use(async (c: WsContext) => {
-    if (!c.userId && !PUBLIC_ROUTES.has(c.routeKey)) {
-        await c.send({type: "error", message: "Unauthenticated connection"}).catch(() => {});
-        return c.reply(401);
+const validateFrame = async (c: WsContext): Promise<WsReply | void> => {
+    const {op} = c.req.json<{op?: string}>();
+
+    try {
+        c.set("valid", parseOrThrow(pickSchema(c.routeKey, op), c.req.json()));
+    } catch (error) {
+        return c.reply(400, {
+            type: WS_EVENT_TYPE.error,
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Invalid frame",
+        });
     }
-    return undefined;
-});
+};
+
+app.use(validateFrame);
 
 app.route("$connect", connectController);
 app.route("$disconnect", disconnectController);
 
+app.group("message")
+    .on("send", sendMessageController)
+    .on("edit", editMessageController)
+    .on("delete", deleteMessageController)
+    .on("list", listMessagesController);
+
 app.route("$default", async (c) =>
-    c.send({type: "error", message: `Unknown action for route ${c.routeKey}`}),
+    c.send({type: WS_EVENT_TYPE.error, message: `Unknown action for route ${c.routeKey}`}),
 );
 
 export const handler = app.handle();

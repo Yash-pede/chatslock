@@ -38,7 +38,7 @@ import { extractErrorMessage } from "@repo/utils";
 import type { AvatarContentType } from "@repo/types/req";
 import { userProfileUrl } from "@/lib/links";
 import { usersApi } from "@/api/users.api";
-import { useAuth } from "@/auth/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { AvatarViewer } from "@/components/profile/avatar-viewer";
 import { UserAvatar } from "@/components/user-avatar";
 

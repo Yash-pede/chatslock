@@ -1,6 +1,6 @@
 import z from "zod";
 import {baseSchema} from "./base";
-import {conversationId, userId} from "../schema";
+import {compositeConversationId, conversationId, userId} from "../schema";
 
 /** Base64url-encoded JSON of DynamoDB `LastEvaluatedKey`; opaque to clients. */
 export const maxStartKeyLength = 2048;
@@ -40,3 +40,16 @@ export const getConversationProfilesSchema = baseSchema.extend({
 
 export type GetConversationProfilesRequest = z.infer<typeof getConversationProfilesSchema>;
 export type GetConversationProfilesInput = z.input<typeof getConversationProfilesSchema>;
+
+/** Max messages returned by `GET /api/conversations/:conversationId/messages`. */
+export const MAX_MESSAGES_LOOKUP = 50;
+
+export const getConversationMessagesSchema = baseSchema.extend({
+    params: z.strictObject({
+        /** Composite `TYPE#id`, exactly what `GET /api/conversations/chat` returns. */
+        conversationId: compositeConversationId,
+    }),
+});
+
+export type GetConversationMessagesRequest = z.infer<typeof getConversationMessagesSchema>;
+export type GetConversationMessagesInput = z.input<typeof getConversationMessagesSchema>;

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { View } from "react-native";
 import { Stack, useRouter, useSegments, type ErrorBoundaryProps } from "expo-router";
@@ -9,22 +10,39 @@ import {
   Spinner,
   Text,
   ThemeProvider,
+  ToastProvider,
   useThemeColors,
 } from "@repo/ui";
 import { AlertCircle, LogOut, RefreshCw } from "lucide-react-native";
-import { AuthProvider, useAuth } from "@/auth/AuthContext";
-import { SettingsProvider } from "@/settings/SettingsContext";
+import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { SettingsProvider } from "@/context/SettingsContext";
+import { WsProvider } from "@/context/WebSocketContext";
 import "../../global.css";
+
+/**
+ * The realtime socket lives at the root so it survives navigation between
+ * route groups, but only mounts once the user is signed in — sign-out tears
+ * it down.
+ */
+function WsGate({ children }: { children: ReactNode }) {
+  const { phase } = useAuth();
+  if (phase !== "ready") return <>{children}</>;
+  return <WsProvider>{children}</WsProvider>;
+}
 
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <SettingsProvider>
-          <StatusBar style="auto" />
-          <RootNavigator />
-        </SettingsProvider>
-      </AuthProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <SettingsProvider>
+            <WsGate>
+              <StatusBar style="auto" />
+              <RootNavigator />
+            </WsGate>
+          </SettingsProvider>
+        </AuthProvider>
+      </ToastProvider>
     </ThemeProvider>
   );
 }

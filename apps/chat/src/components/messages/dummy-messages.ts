@@ -17,7 +17,7 @@ function message(
 ): ChatMessage {
     const {mine, ...rest} = input;
     return {
-        conversationId: "demo#me#peer",
+        conversationId: "DIRECT#me#peer",
         senderId: mine ? ME : PEER,
         isMine: mine,
         ...rest,

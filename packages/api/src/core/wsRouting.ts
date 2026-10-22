@@ -74,6 +74,11 @@ export interface WsContext {
 export type WsHandler = (c: WsContext) => MaybePromise<WsReply | void | unknown>;
 export type WsMiddleware = (c: WsContext) => MaybePromise<WsReply | void>;
 
+/** Builder returned by `app.group(key)`; `on` is chainable. */
+export interface WsGroupBuilder {
+    on: (op: string, ...handlers: WsHandler[]) => WsGroupBuilder;
+}
+
 const NO_CONTENT: WsReply = { statusCode: 200 };
 
 function parseBody(event: WsEvent): unknown {
@@ -149,8 +154,16 @@ function createContext(event: WsEvent, client: () => ApiGatewayManagementApiClie
  */
 export class WsRouter {
     private readonly routes = new Map<string, WsHandler[]>();
+    private readonly groups = new Map<string, Map<string, WsHandler[]>>();
     private readonly middlewares: WsMiddleware[] = [];
     private client?: ApiGatewayManagementApiClient;
+
+    /**
+     * Routes whose invocations carry no authorizer context and no `{action}`
+     * body. Middleware registered via `use()` is skipped for them, so an auth
+     * or validation check can never fail the handshake itself.
+     */
+    private static readonly LIFECYCLE_ROUTES = new Set(["$connect", "$disconnect"]);
 
     /** Register middleware, run in order before the route handlers. */
     use(...middleware: WsMiddleware[]): this {
@@ -166,6 +179,31 @@ export class WsRouter {
         const existing = this.routes.get(routeKey) ?? [];
         this.routes.set(routeKey, [...existing, ...handlers]);
         return this;
+    }
+
+    /**
+     * Groups several operations under one API Gateway route key. Frames carry
+     * `action` (the route key, selected by the gateway) and `op`; `on` wires a
+     * handler chain per `op`:
+     *
+     * ```ts
+     * app.group("message")
+     *   .on("send", sendMessageController)
+     *   .on("edit", editMessageController);
+     * ```
+     */
+    group(routeKey: string): WsGroupBuilder {
+        const ops = this.groups.get(routeKey) ?? new Map<string, WsHandler[]>();
+        this.groups.set(routeKey, ops);
+
+        const builder: WsGroupBuilder = {
+            on: (op, ...handlers) => {
+                const existing = ops.get(op) ?? [];
+                ops.set(op, [...existing, ...handlers]);
+                return builder;
+            },
+        };
+        return builder;
     }
 
     private get management(): ApiGatewayManagementApiClient {
@@ -197,27 +235,52 @@ export class WsRouter {
     handle() {
         return async (event: WsEvent): Promise<WsReply> => {
             if (!event?.requestContext?.routeKey) {
-                return {statusCode: 400, body: {message: "Invalid Request."}};
+                return toGatewayReply({statusCode: 400, body: {message: "Invalid Request."}});
             }
 
             this.configureEndpoint(event);
             const c = createContext(event, () => this.management);
 
             const routeKey = event.requestContext.routeKey;
-            const handlers = this.routes.get(routeKey) ?? this.routes.get("$default");
-
-            if (!handlers || handlers.length === 0) {
-                // `$disconnect` has no client to answer; anything else gets a
-                // 404-style reply instead of a thrown error (which would 502).
-                return routeKey === "$disconnect"
-                    ? NO_CONTENT
-                    : {statusCode: 404, body: {message: `No handler for ${routeKey}`}};
-            }
 
             try {
-                for (const middleware of this.middlewares) {
-                    const early = await middleware(c);
-                    if (early) return early;
+                if (!WsRouter.LIFECYCLE_ROUTES.has(routeKey)) {
+                    for (const middleware of this.middlewares) {
+                        const early = await middleware(c);
+                        if (early) return toGatewayReply(early);
+                    }
+                }
+
+                const groupOps = this.groups.get(routeKey);
+                if (groupOps) {
+                    const op = c.req.json<{op?: string}>().op;
+                    const opHandlers = op ? groupOps.get(op) : undefined;
+
+                    if (!opHandlers) {
+                        return toGatewayReply({
+                            statusCode: 400,
+                            body: {message: op ? `Unknown op "${op}" for ${routeKey}` : `Missing op for ${routeKey}`},
+                        });
+                    }
+
+                    for (const handler of opHandlers) {
+                        const result = await handler(c);
+                        if (result === undefined || result === null) continue;
+                        if (typeof result === "object" && "statusCode" in (result as WsReply)) {
+                            return toGatewayReply(result as WsReply);
+                        }
+                        await c.postToConnection(c.connectionId, result);
+                    }
+
+                    return NO_CONTENT;
+                }
+
+                const handlers = this.routes.get(routeKey) ?? this.routes.get("$default");
+
+                if (!handlers || handlers.length === 0) {
+                    return routeKey === "$disconnect"
+                        ? NO_CONTENT
+                        : toGatewayReply({statusCode: 404, body: {message: `No handler for ${routeKey}`}});
                 }
 
                 for (const handler of handlers) {
@@ -225,9 +288,8 @@ export class WsRouter {
 
                     if (result === undefined || result === null) continue;
 
-                    // A handler may return a raw object instead of `c.reply(...)`.
                     if (typeof result === "object" && "statusCode" in (result as WsReply)) {
-                        return result as WsReply;
+                        return toGatewayReply(result as WsReply);
                     }
 
                     await c.postToConnection(c.connectionId, result);
@@ -236,13 +298,23 @@ export class WsRouter {
                 return NO_CONTENT;
             } catch (error) {
                 console.error(`WS ${routeKey} failed for ${c.connectionId}`, error);
-                return {
+                return toGatewayReply({
                     statusCode: 500,
                     body: {message: "Internal error. Please try again."},
-                };
+                });
             }
         };
     }
+}
+
+/**
+ * API Gateway's WebSocket integration requires the Lambda response `body` to
+ * be a string; returning an object makes the handshake fail with a 502 even
+ * when the handler itself succeeded.
+ */
+function toGatewayReply(reply: WsReply): WsReply {
+    if (reply.body === undefined || typeof reply.body === "string") return reply;
+    return {...reply, body: JSON.stringify(reply.body)};
 }
 
 /** Functional alias for `handler = handleWs(app)`. */

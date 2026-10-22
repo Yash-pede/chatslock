@@ -1,7 +1,7 @@
 import {apiClient} from "@/api/client";
-import type {ConversationUserProfile, UserMemberConversation} from "@repo/types/schema";
+import type {ConversationUserProfile, Message, UserMemberConversation} from "@repo/types/schema";
 
-export type {ConversationUserProfile, UserMemberConversation};
+export type {ConversationUserProfile, Message, UserMemberConversation};
 
 /** `GET /api/conversations/chat` — one page of the caller's conversations. */
 export interface ChatPage {
@@ -11,6 +11,11 @@ export interface ChatPage {
 /** `POST /api/conversations/profiles` — public profiles for up to 25 user ids. */
 export interface ProfilesResponse {
     profiles: ConversationUserProfile[];
+}
+
+/** `GET /api/conversations/:conversationId/messages` — latest history page. */
+export interface MessagesResponse {
+    messages: Message[];
 }
 
 /** Max ids accepted by one profiles request (mirrors the server schema). */
@@ -45,5 +50,12 @@ export const conversationsApi = {
             userIds: userIds.slice(0, MAX_PROFILE_LOOKUP),
         });
         return unwrap<ProfilesResponse>(data).profiles;
+    },
+
+    /** `GET /api/conversations/:conversationId/messages` — latest messages, newest first. */
+    getMessages: async (conversationId: string): Promise<MessagesResponse> => {
+        // The composite id contains `#`, which must stay encoded inside the path segment.
+        const {data} = await apiClient.get(`/api/conversations/${encodeURIComponent(conversationId)}/messages`);
+        return unwrap<MessagesResponse>(data);
     },
 };

@@ -5,7 +5,7 @@ import { Search } from "lucide-react-native";
 import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui";
 import { extractErrorMessage } from "@repo/utils";
 import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api";
-import { useAuth } from "@/auth/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { ComposeButton } from "@/components/chats/compose-button";
 import { ConversationRow } from "@/components/chats/conversation-row";
 import {

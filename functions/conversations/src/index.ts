@@ -2,9 +2,9 @@ import {Hono} from 'hono'
 import {handle} from '@hono/aws-lambda'
 import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
 import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
-import {getChatPageConversationSchema, getConversationProfilesSchema} from "@repo/types/req"
+import {getChatPageConversationSchema, getConversationMessagesSchema, getConversationProfilesSchema} from "@repo/types/req"
 import {validateWithZod} from "@repo/api/req"
-import {chatPageConversationsController, conversationProfilesController} from "./conversatinos.controller";
+import {chatPageConversationsController, conversationMessagesController, conversationProfilesController} from "./conversatinos.controller";
 
 
 type Bindings = {
@@ -21,6 +21,8 @@ app.use(withAuth)
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 
 app.post("/profiles", validateWithZod(getConversationProfilesSchema), conversationProfilesController)
+
+app.get("/:conversationId/messages", validateWithZod(getConversationMessagesSchema), conversationMessagesController)
 
 app.onError(apiErrorHandler)
 

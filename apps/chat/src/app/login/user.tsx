@@ -3,8 +3,8 @@ import { router } from "expo-router";
 import { Pressable, View } from "react-native";
 import { InputOtp, Label, PhoneInput, SaveButton, Text } from "@repo/ui";
 import type { OtpChallenge } from "@repo/utils";
-import { useAuth } from "@/auth/AuthContext";
-import { AuthScreen } from "@/auth/components/auth-screen";
+import { useAuth } from "@/context/AuthContext";
+import { AuthScreen } from "@/components/auth-screen";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 const PHONE_DIGITS = 10;

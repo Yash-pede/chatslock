@@ -142,7 +142,7 @@ module "apigateway-v2-ws" {
       }
     }
     "$disconnect" = {
-      operation_name     = "DisconnectRoute"
+      operation_name = "DisconnectRoute"
       authorization_type = "NONE"
 
       integration = {
@@ -150,8 +150,8 @@ module "apigateway-v2-ws" {
         uri  = var.ws_events_lambda_invoke_arn
       }
     },
-    "sendmessage" = {
-      operation_name     = "SendRoute"
+    "message" = {
+      operation_name     = "MessageRoute"
       authorization_type = "NONE"
 
       integration = {

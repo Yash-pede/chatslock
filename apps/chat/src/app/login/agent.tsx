@@ -13,8 +13,8 @@ import {
 } from "@repo/ui";
 import { AlertCircle } from "lucide-react-native";
 import { extractErrorMessage } from "@repo/utils";
-import { useAuth } from "@/auth/AuthContext";
-import { AuthScreen } from "@/auth/components/auth-screen";
+import { useAuth } from "@/context/AuthContext";
+import { AuthScreen } from "@/components/auth-screen";
 
 /** Mirrors the backend schema so the button stays disabled on obviously bad input. */
 function isUsernameValid(username: string): boolean {

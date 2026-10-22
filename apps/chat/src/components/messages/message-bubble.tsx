@@ -2,7 +2,7 @@ import { memo } from "react";
 import { Image } from "expo-image";
 import { Pressable, View } from "react-native";
 import { FileText, Play } from "lucide-react-native";
-import { ChatBubble, Text, useThemeColors } from "@repo/ui";
+import { ChatBubble, Text, cn, useThemeColors } from "@repo/ui";
 import type { ChatMessage } from "@/components/messages/types";
 
 function clock(ms: number): string {
@@ -33,19 +33,24 @@ function VoiceWaveform({ waveform, tint }: { waveform: number[]; tint: string })
 
 export interface MessageBubbleProps {
   message: ChatMessage;
+  /** Present when a failed message can be retried; makes the bubble tappable. */
+  onRetry?: () => void;
 }
 
 /**
  * Renders one message. Memoized and free of layout-affecting side effects so
  * FlashList can recycle rows without re-measuring.
  */
-export const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, onRetry }: MessageBubbleProps) {
   const colors = useThemeColors();
   const variant = message.isMine ? "sent" : "received";
   const time = clock(message.createdAt);
   const tint = message.isMine ? colors.primaryForeground : colors.secondaryForeground;
   const subtle = message.isMine ? `${colors.primaryForeground}99` : colors.mutedForeground;
+  const failed = message.status === "failed";
+  const failedClass = failed ? "border border-destructive/60 bg-destructive/10" : undefined;
 
+  const renderBubble = () => {
   if (message.isSystem) {
     return (
       <View className="items-center py-2">
@@ -65,7 +70,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
     const imageHeight = Math.round(imageWidth / ratio);
 
     return (
-      <ChatBubble variant={variant} timestamp={time} status={message.status} className="p-1 px-1 pb-1.5">
+      <ChatBubble variant={variant} timestamp={time} status={message.status} className={cn("p-1 px-1 pb-1.5", failedClass)}>
         <Image
           source={{ uri: url }}
           style={{ width: imageWidth, height: imageHeight, borderRadius: 10 }}
@@ -90,7 +95,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
         variant={variant}
         timestamp={time}
         status={message.status}
-        className="w-[78%] max-w-[78%]"
+        className={cn("w-[78%] max-w-[78%]", failedClass)}
       >
         <View className="flex-row items-center gap-3">
           <View
@@ -115,7 +120,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
 
   if (message.kind === "voice" && message.voice) {
     return (
-      <ChatBubble variant={variant} timestamp={time} status={message.status}>
+      <ChatBubble variant={variant} timestamp={time} status={message.status} className={failedClass}>
         <View className="flex-row items-center gap-2.5">
           <Pressable
             accessibilityRole="button"
@@ -134,9 +139,30 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
     );
   }
 
-  return (
-    <ChatBubble variant={variant} timestamp={time} status={message.status}>
-      {message.text ?? ""}
-    </ChatBubble>
-  );
+    return (
+      <ChatBubble variant={variant} timestamp={time} status={message.status} className={failedClass}>
+        {message.text ?? ""}
+      </ChatBubble>
+    );
+  };
+
+  const bubble = renderBubble();
+
+  if (failed && onRetry) {
+    return (
+      <View className="items-end">
+        <Pressable
+          onPress={onRetry}
+          accessibilityRole="button"
+          accessibilityLabel="Message not sent. Tap to retry."
+          className="active:opacity-70"
+        >
+          {bubble}
+        </Pressable>
+        <Text className="me-1 mt-0.5 text-[10px] text-destructive">Not sent · tap to retry</Text>
+      </View>
+    );
+  }
+
+  return bubble;
 });

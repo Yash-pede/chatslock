@@ -16,7 +16,7 @@ import {
   Volume2,
 } from "lucide-react-native";
 import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui";
-import { useSettings, type ThemePreference } from "@/settings/SettingsContext";
+import { useSettings, type ThemePreference } from "@/context/SettingsContext";
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; icon: typeof Sun }[] = [
   { key: "light", label: "Light", icon: Sun },

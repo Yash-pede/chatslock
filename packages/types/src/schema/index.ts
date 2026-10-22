@@ -3,4 +3,7 @@ export * from "./keys";
 export * from "./roles";
 export * from "./auth.schema";
 export * from "./conversation.schema";
+export * from "./message.schema";
+export * from "./message-events.schema";
+export * from "./ws.schema";
 export * from "./user.schema";

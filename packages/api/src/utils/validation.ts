@@ -1,7 +1,7 @@
-import type {ZodType} from "zod";
+import type {ZodType, z} from "zod";
 
 /** Validates an item against a schema, throwing instead of returning a result. */
-export const parseOrThrow = <T>(schema: ZodType<T>, input: unknown): T => {
+export const parseOrThrow = <S extends ZodType>(schema: S, input: unknown): z.output<S> => {
     const result = schema.safeParse(input);
     if (!result.success) throw new Error(result.error.message, {cause: result.error});
     return result.data;

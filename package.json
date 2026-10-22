@@ -13,7 +13,7 @@
     "check-types": "turbo run check-types",
     "layer:build": "bash scripts/build-layer.sh --no-push",
     "layer:push": "bash scripts/build-layer.sh",
-    "deploy": "pnpm build && bash scripts/build-layer.sh",
+    "deploy": "bash scripts/deploy.sh",
     "deploy:site": "bash scripts/deploy-main-site.sh",
     "infra:apply": "pnpm layer:build && cd infrastructure && terraform init && terraform apply",
     "infra:plan": "pnpm layer:build && cd infrastructure && terraform init && terraform plan",

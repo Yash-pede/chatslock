@@ -13,12 +13,12 @@ export interface ChatListItem {
 }
 
 /**
- * Direct conversation ids look like `conversation#direct#<u1>#<u2>` (the ids
- * are sorted) and the client-facing id is `u1#u2`, so the peer is whichever id
- * is not the caller. Keys with fewer than two ids have no peer to resolve.
+ * Conversation ids are composite `TYPE#<u1>#<u2>` (the user ids are sorted), so
+ * the peer is whichever id after the type segment is not the caller. Keys with
+ * fewer than two user ids have no peer to resolve.
  */
 export function getPeerUserId(conversationId: string, currentUserId: string | null): string | null {
-    const ids = conversationId.split("#").filter(Boolean);
+    const ids = conversationId.split("#").filter(Boolean).slice(1);
     if (ids.length < 2) return null;
 
     const others = ids.filter((id) => id !== currentUserId);
