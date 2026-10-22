@@ -176,8 +176,18 @@ export class WsRouter {
 
     private configureEndpoint(event: WsEvent) {
         const {domainName, stage} = event.requestContext;
-        const url = domainName.includes("://")
-            ? domainName
+        if (domainName.includes("://")) {
+            this.client = new ApiGatewayManagementApiClient({endpoint: domainName});
+            return;
+        }
+        // A custom domain (e.g. ws.example.com) maps the stage at the root, so
+        // appending /stage would push it into the request path — which breaks
+        // the @connections callback and IAM authorization. Always call back
+        // through the execute-api endpoint of the API that received the event.
+        const {apiId} = event.requestContext as WsEvent["requestContext"] & {apiId?: string};
+        const region = process.env.AWS_REGION ?? "ap-south-1";
+        const url = apiId
+            ? `https://${apiId}.execute-api.${region}.amazonaws.com/${stage}`
             : `https://${domainName}/${stage}`;
 
         this.client = new ApiGatewayManagementApiClient({endpoint: url});

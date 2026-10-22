@@ -107,9 +107,10 @@ module "apigateway-v2-ws" {
 
   protocol_type                = "WEBSOCKET"
   route_selection_expression   = "$request.body.action"
-  # No API key is provisioned, so the default x-api-key lookup always fails
-  # the handshake with INVALID_API_KEY. Keep the default; use a null one.
-  api_key_selection_expression = "$request.header.x-api-key"
+  # Null => the module keeps API Gateway's default ($request.header.x-api-key).
+  # No usage plans/API keys exist here, so nothing sets api_key_required and the
+  # value is inert; the authorizer's usageIdentifierKey is intentionally unused.
+  api_key_selection_expression = null
 
   # Websocket stage sets logging_level/data trace, which also requires it.
   depends_on = [aws_api_gateway_account.this]
@@ -122,7 +123,9 @@ module "apigateway-v2-ws" {
     "main" = {
       name             = "ws-auth"
       authorizer_type  = "REQUEST"
-      identity_sources = ["route.request.header.Authorization"]
+      # Browsers/wscat cannot send custom headers on the handshake; the token
+      # travels in the query string instead.
+      identity_sources = ["route.request.querystring.token"]
       authorizer_uri   = var.ws_authorizer_lambda_invoke_arn
     }
   }

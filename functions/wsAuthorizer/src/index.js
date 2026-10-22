@@ -46,7 +46,8 @@ export const handler = async (event) => {
     event.queryStringParameters?.token || getHeader(event, "authorization");
 
   if (typeof token !== "string" || !token.trim()) {
-    return { statusCode: 401, body: "Missing token" };
+    console.error("WS auth failed: missing token");
+    return generateDenyPolicy(event.methodArn);
   }
 
   const cleanToken = token.startsWith("Bearer ") ? token.substring(7) : token;
@@ -57,14 +58,31 @@ export const handler = async (event) => {
     return generateAllowPolicy(payload.sub, event.methodArn, payload);
   } catch (error) {
     console.error("WS auth failed", error?.message ?? error);
-    return { statusCode: 401, body: "Unauthorized" };
+    // WebSocket REQUEST authorizers only accept IAM policy responses; a
+    // statusCode object makes API Gateway fail the handshake with a 500.
+    return generateDenyPolicy(event.methodArn);
   }
 };
+
+function generateDenyPolicy(resource) {
+  return {
+    principalId: "anonymous",
+    policyDocument: {
+      Version: "2012-10-17",
+      Statement: [
+        {
+          Action: "execute-api:Invoke",
+          Effect: "Deny",
+          Resource: resource,
+        },
+      ],
+    },
+  };
+}
 
 function generateAllowPolicy(principalId, resource, payload) {
   return {
     principalId,
-    usageIdentifierKey: payload.sub,
     policyDocument: {
       Version: "2012-10-17",
       Statement: [
