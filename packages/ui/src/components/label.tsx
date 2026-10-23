@@ -1,9 +1,9 @@
-import React from "react";
-import { Text } from "react-native";
-import { cn } from "../lib/utils";
+import React from "react"
+import { Text } from "react-native"
+import { cn } from "../lib/utils"
 
 export interface LabelProps extends React.ComponentPropsWithoutRef<typeof Text> {
-  className?: string;
+  className?: string
 }
 
 export function Label({ className, ...props }: LabelProps) {
@@ -12,5 +12,5 @@ export function Label({ className, ...props }: LabelProps) {
       className={cn("text-sm font-medium text-foreground leading-none mb-2", className)}
       {...props}
     />
-  );
+  )
 }

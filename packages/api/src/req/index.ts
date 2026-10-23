@@ -1,2 +1,2 @@
-export * from "./validate";
-export type {ValidateOptions} from "./validate";
+export * from "./validate"
+export type { ValidateOptions } from "./validate"

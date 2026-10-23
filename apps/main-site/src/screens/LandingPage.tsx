@@ -1,4 +1,4 @@
-import { StoreButtons } from "../components/StoreButtons";
+import { StoreButtons } from "../components/StoreButtons"
 
 /**
  * chatslock.com — a private, encrypted chat app. That's it.
@@ -22,8 +22,7 @@ export default function LandingPage() {
         <p className="eyebrow">Private, encrypted messaging</p>
         <h1>Chat that stays locked.</h1>
         <p className="lede">
-          chatslock is a secure messaging app. Every conversation is encrypted,
-          end to end.
+          chatslock is a secure messaging app. Every conversation is encrypted, end to end.
         </p>
         <div id="get">
           <StoreButtons />
@@ -35,5 +34,5 @@ export default function LandingPage() {
         <span>Private messaging.</span>
       </footer>
     </div>
-  );
+  )
 }

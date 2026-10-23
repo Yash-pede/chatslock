@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Share, View } from "react-native";
-import * as Clipboard from "expo-clipboard";
-import * as ImagePicker from "expo-image-picker";
+import { useState } from "react"
+import { Pressable, ScrollView, Share, View } from "react-native"
+import * as Clipboard from "expo-clipboard"
+import * as ImagePicker from "expo-image-picker"
 import {
   AtSign,
   Camera,
@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UserRound,
   X,
-} from "lucide-react-native";
+} from "lucide-react-native"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,43 +33,43 @@ import {
   SettingsRow,
   Text,
   useThemeColors,
-} from "@repo/ui";
-import { extractErrorMessage } from "@repo/utils";
-import type { AvatarContentType } from "@repo/types/req";
-import { userProfileUrl } from "@/lib/links";
-import { usersApi } from "@/api/users.api";
-import { useAuth } from "@/context/AuthContext";
-import { AvatarViewer } from "@/components/profile/avatar-viewer";
-import { UserAvatar } from "@/components/user-avatar";
+} from "@repo/ui"
+import { extractErrorMessage } from "@repo/utils"
+import type { AvatarContentType } from "@repo/types/req"
+import { userProfileUrl } from "@/lib/links"
+import { usersApi } from "@/api/users.api"
+import { useAuth } from "@/context/AuthContext"
+import { AvatarViewer } from "@/components/profile/avatar-viewer"
+import { UserAvatar } from "@/components/user-avatar"
 
-const AVATAR_SIZE = 96;
+const AVATAR_SIZE = 96
 
 const MIME_BY_EXTENSION: Record<string, AvatarContentType> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
   webp: "image/webp",
-};
+}
 
 const DEFAULT_EXTENSION: Record<AvatarContentType, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
-};
+}
 
 /** Picks the MIME type from the asset, falling back to the file extension. */
 function resolveContentType(asset: ImagePicker.ImagePickerAsset): AvatarContentType | null {
   if (asset.mimeType && asset.mimeType in DEFAULT_EXTENSION) {
-    return asset.mimeType as AvatarContentType;
+    return asset.mimeType as AvatarContentType
   }
 
-  const extension = asset.fileName?.split(".").pop()?.toLowerCase();
-  return extension ? MIME_BY_EXTENSION[extension] ?? null : null;
+  const extension = asset.fileName?.split(".").pop()?.toLowerCase()
+  return extension ? (MIME_BY_EXTENSION[extension] ?? null) : null
 }
 
 /** Only two labels are shown in the app: members and support agents. */
 function roleLabel(role: string | undefined): string {
-  return role === "agent" ? "Support agent" : "Member";
+  return role === "agent" ? "Support agent" : "Member"
 }
 
 /**
@@ -78,57 +78,57 @@ function roleLabel(role: string | undefined): string {
  * persist are editable.
  */
 export default function ProfileScreen() {
-  const colors = useThemeColors();
-  const { user, reloadProfile, signOut } = useAuth();
+  const colors = useThemeColors()
+  const { user, reloadProfile, signOut } = useAuth()
 
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [avatarUri, setAvatarUri] = useState<string | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState(false)
+  const [signOutOpen, setSignOutOpen] = useState(false)
 
-  const displayName = user?.fullName ?? user?.username ?? "Your profile";
-  const avatar = avatarUri ?? user?.avatar ?? null;
-  const handle = user?.username ? `@${user.username}` : "Chatslock member";
-  const isAgent = user?.role === "agent";
+  const displayName = user?.fullName ?? user?.username ?? "Your profile"
+  const avatar = avatarUri ?? user?.avatar ?? null
+  const handle = user?.username ? `@${user.username}` : "Chatslock member"
+  const isAgent = user?.role === "agent"
   // Agents get a shareable public profile URL on the marketing site.
-  const publicLink = isAgent && user?.userId ? userProfileUrl(user.userId) : null;
+  const publicLink = isAgent && user?.userId ? userProfileUrl(user.userId) : null
 
   const copyLink = async () => {
-    if (!publicLink) return;
+    if (!publicLink) return
     try {
-      await Clipboard.setStringAsync(publicLink);
+      await Clipboard.setStringAsync(publicLink)
       // The row itself flips to "Copied", which is all the feedback we need.
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 1600);
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 1600)
     } catch (e) {
-      setError(extractErrorMessage(e));
+      setError(extractErrorMessage(e))
     }
-  };
+  }
 
   const shareLink = async () => {
-    if (!publicLink) return;
+    if (!publicLink) return
     try {
       await Share.share({
         title: `${displayName} on Chatslock`,
         message: `Chat with ${displayName} on Chatslock: ${publicLink}`,
         url: publicLink,
-      });
+      })
     } catch (e) {
-      setError(extractErrorMessage(e));
+      setError(extractErrorMessage(e))
     }
-  };
+  }
 
   const pickAvatar = async () => {
-    setError(null);
+    setError(null)
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
-      setError("Photo access is needed to change your avatar.");
-      return;
+      setError("Photo access is needed to change your avatar.")
+      return
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -136,48 +136,46 @@ export default function ProfileScreen() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.85,
-    });
-    if (result.canceled) return;
+    })
+    if (result.canceled) return
 
-    const asset = result.assets[0];
-    const contentType = asset ? resolveContentType(asset) : null;
+    const asset = result.assets[0]
+    const contentType = asset ? resolveContentType(asset) : null
     if (!asset || !contentType) {
-      setError("Only JPEG, PNG or WebP images are supported.");
-      return;
+      setError("Only JPEG, PNG or WebP images are supported.")
+      return
     }
 
-    setUploading(true);
+    setUploading(true)
     try {
       const nextAvatar = await usersApi.uploadAvatar({
         uri: asset.uri,
         contentType,
         fileName: asset.fileName ?? `avatar.${DEFAULT_EXTENSION[contentType]}`,
-      });
-      setAvatarUri(nextAvatar);
-      await reloadProfile();
+      })
+      setAvatarUri(nextAvatar)
+      await reloadProfile()
     } catch (e) {
-      setError(extractErrorMessage(e));
+      setError(extractErrorMessage(e))
     } finally {
-      setUploading(false);
+      setUploading(false)
     }
-  };
+  }
 
   const startEditingName = () => {
-    setNameDraft(user?.fullName ?? "");
-    setError(null);
-    setEditingName(true);
-  };
+    setNameDraft(user?.fullName ?? "")
+    setError(null)
+    setEditingName(true)
+  }
 
   const saveName = async () => {
-    const trimmed = nameDraft.trim();
-    if (trimmed.length < 3) throw new Error("Name must be at least 3 characters.");
+    const trimmed = nameDraft.trim()
+    if (trimmed.length < 3) throw new Error("Name must be at least 3 characters.")
 
-    await usersApi.updateMe({ fullName: trimmed });
-    await reloadProfile();
-    setEditingName(false);
-  };
-
-
+    await usersApi.updateMe({ fullName: trimmed })
+    await reloadProfile()
+    setEditingName(false)
+  }
 
   return (
     <SafeArea edges={["top", "left", "right"]}>
@@ -247,7 +245,11 @@ export default function ProfileScreen() {
             <Text variant="small" className="flex-1 font-normal text-destructive">
               {error}
             </Text>
-            <Pressable onPress={() => setError(null)} hitSlop={8} accessibilityLabel="Dismiss error">
+            <Pressable
+              onPress={() => setError(null)}
+              hitSlop={8}
+              accessibilityLabel="Dismiss error"
+            >
               <X size={16} color={colors.destructive} />
             </Pressable>
           </View>
@@ -278,7 +280,9 @@ export default function ProfileScreen() {
                   onSave={saveName}
                   contract
                   resetAfter={1000}
-                  disabled={nameDraft.trim() === (user?.fullName ?? "") || nameDraft.trim().length < 3}
+                  disabled={
+                    nameDraft.trim() === (user?.fullName ?? "") || nameDraft.trim().length < 3
+                  }
                   className="min-w-28"
                 />
               </View>
@@ -408,8 +412,8 @@ export default function ProfileScreen() {
             <AlertDialogAction
               className="bg-destructive"
               onPress={() => {
-                setSignOutOpen(false);
-                void signOut();
+                setSignOutOpen(false)
+                void signOut()
               }}
             >
               Sign out
@@ -425,5 +429,5 @@ export default function ProfileScreen() {
         onClose={() => setViewerOpen(false)}
       />
     </SafeArea>
-  );
+  )
 }

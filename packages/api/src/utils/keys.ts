@@ -2,8 +2,8 @@
  * Key building/parsing for the single-table layout. The prefixes themselves live
  * in `@repo/types/schema` with the storage schemas; these helpers are server-only.
  */
-import {PREFIXES, CONVERSATION_TYPE} from "@repo/types/schema";
-import type {ConversationType} from "@repo/types/schema";
+import { compositeConversationIdPattern, conversationKeyPattern } from "@repo/types/schema"
+import type { ConversationType } from "@repo/types/schema"
 
 /**
  * Joins a prefix and the parts that follow it: `buildKey(PREFIXES.CONVERSATION, type, conversationId)`
@@ -11,20 +11,20 @@ import type {ConversationType} from "@repo/types/schema";
  * cannot be double-prefixed (`USER#USER#123`) or silently blank (`USER#`).
  */
 export const buildKey = (prefix: string, ...parts: readonly (string | number)[]): string => {
-    const key = `${prefix}${parts.join("#")}`;
+  const key = `${prefix}${parts.join("#")}`
 
-    if (parts.length === 0 || parts.some((part) => part === "")) {
-        throw new Error(`Cannot build key "${key}": id parts must not be empty`);
-    }
-    if (parts.some((part) => String(part).includes("#"))) {
-        throw new Error(`Cannot build key "${key}": id parts must not contain "#"`);
-    }
-    if (parts[0] !== undefined && String(parts[0]).startsWith(prefix.slice(0, -1))) {
-        throw new Error(`Cannot build key "${key}": id is already prefixed`);
-    }
+  if (parts.length === 0 || parts.some((part) => part === "")) {
+    throw new Error(`Cannot build key "${key}": id parts must not be empty`)
+  }
+  if (parts.some((part) => String(part).includes("#"))) {
+    throw new Error(`Cannot build key "${key}": id parts must not contain "#"`)
+  }
+  if (parts[0] !== undefined && String(parts[0]).startsWith(prefix.slice(0, -1))) {
+    throw new Error(`Cannot build key "${key}": id is already prefixed`)
+  }
 
-    return key;
-};
+  return key
+}
 
 /**
  * Strips a key prefix from an id that may or may not carry it, for values coming
@@ -32,24 +32,30 @@ export const buildKey = (prefix: string, ...parts: readonly (string | number)[])
  * expected prefix, so callers decide what to do rather than getting a wrong id.
  */
 export const stripKeyPrefix = <T extends string>(id: T, prefix: string): T | undefined =>
-    id.startsWith(prefix) ? id.slice(prefix.length) as T : undefined;
+  id.startsWith(prefix) ? (id.slice(prefix.length) as T) : undefined
 
 /**
  * Splits `CONVERSATION#<type>#<id>` so DAOs can expose conversation identity
  * without leaking the stored sort key.
  */
-export const parseConversationKey = (key: string): {type: ConversationType; conversationId: string} => {
-    const [, type, ...rest] = key.split("#");
+export const parseConversationKey = (
+  key: string,
+): { type: ConversationType; conversationId: string } => {
+  if (!conversationKeyPattern.test(key)) {
+    throw new Error(`Cannot parse conversation key "${key}"`)
+  }
 
-    if (!type || rest.length === 0) {
-        throw new Error(`Cannot parse conversation key "${key}"`);
-    }
+  const [, type, ...rest] = key.split("#")
 
-    return {
-        type: type as ConversationType,
-        conversationId: rest.join("#"),
-    };
-};
+  if (!type || rest.length === 0) {
+    throw new Error(`Cannot parse conversation key "${key}"`)
+  }
+
+  return {
+    type: type as ConversationType,
+    conversationId: rest.join("#"),
+  }
+}
 
 /**
  * The API-facing conversation id: `TYPE#id` (e.g. `DIRECT#u1#u2`). One value
@@ -57,17 +63,19 @@ export const parseConversationKey = (key: string): {type: ConversationType; conv
  * separately.
  */
 export const buildConversationId = (type: ConversationType, conversationId: string): string =>
-    `${type}#${conversationId}`;
+  `${type}#${conversationId}`
 
 /** Inverse of `buildConversationId`; throws when the id is malformed. */
-export const parseConversationId = (id: string): {type: ConversationType; conversationId: string} => {
-    const separator = id.indexOf("#");
-    const type = separator === -1 ? "" : id.slice(0, separator);
-    const conversationId = id.slice(separator + 1);
+export const parseConversationId = (
+  id: string,
+): { type: ConversationType; conversationId: string } => {
+  if (!compositeConversationIdPattern.test(id)) {
+    throw new Error(`Cannot parse conversation id "${id}"`)
+  }
 
-    if (!CONVERSATION_TYPE.includes(type as ConversationType) || !conversationId) {
-        throw new Error(`Cannot parse conversation id "${id}"`);
-    }
+  const separator = id.indexOf("#")
+  const type = id.slice(0, separator)
+  const conversationId = id.slice(separator + 1)
 
-    return {type: type as ConversationType, conversationId};
-};
+  return { type: type as ConversationType, conversationId }
+}

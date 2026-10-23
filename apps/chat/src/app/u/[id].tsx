@@ -1,10 +1,9 @@
-import { useEffect } from "react";
-import { Redirect, useLocalSearchParams } from "expo-router";
-import { useAuth } from "@/context/AuthContext";
+import { useEffect } from "react"
+import { Redirect, useLocalSearchParams } from "expo-router"
+import { useAuth } from "@/context/AuthContext"
 
 /** Cognito `sub` values are UUIDs; anything else is not a profile id. */
-const USER_ID_PATTERN =
-  /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i;
+const USER_ID_PATTERN = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i
 
 /**
  * Public profile link (`chatslock.com/u/<agentId>`). It only exists to carry the
@@ -15,17 +14,17 @@ const USER_ID_PATTERN =
  * sent to the app for now.
  */
 export default function PublicProfileScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { phase, identity, setPendingAgentId } = useAuth();
+  const { id } = useLocalSearchParams<{ id: string }>()
+  const { phase, identity, setPendingAgentId } = useAuth()
 
-  const isOwnProfile = typeof id === "string" && id === identity?.id;
-  const isLinkableAgent = typeof id === "string" && USER_ID_PATTERN.test(id);
+  const isOwnProfile = typeof id === "string" && id === identity?.id
+  const isLinkableAgent = typeof id === "string" && USER_ID_PATTERN.test(id)
 
   useEffect(() => {
-    if (isLinkableAgent && !isOwnProfile) setPendingAgentId(id);
-  }, [id, isLinkableAgent, isOwnProfile, setPendingAgentId]);
+    if (isLinkableAgent && !isOwnProfile) setPendingAgentId(id)
+  }, [id, isLinkableAgent, isOwnProfile, setPendingAgentId])
 
-  if (phase === "ready") return <Redirect href="/" />;
-  if (phase === "onboarding") return <Redirect href="/onboarding" />;
-  return <Redirect href="/login/user" />;
+  if (phase === "ready") return <Redirect href="/" />
+  if (phase === "onboarding") return <Redirect href="/onboarding" />
+  return <Redirect href="/login/user" />
 }

@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { View } from "react-native";
-import { Sparkles } from "lucide-react-native";
+import { useState } from "react"
+import { View } from "react-native"
+import { Sparkles } from "lucide-react-native"
 import {
   Alert,
   AlertDescription,
@@ -10,11 +10,11 @@ import {
   SafeArea,
   Text,
   useThemeColors,
-} from "@repo/ui";
-import { extractErrorMessage } from "@repo/utils";
-import { useAuth } from "@/context/AuthContext";
+} from "@repo/ui"
+import { extractErrorMessage } from "@repo/utils"
+import { useAuth } from "@/context/AuthContext"
 
-const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
+const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/
 
 /**
  * First-login profile step: the Cognito account exists but has no profile row
@@ -22,49 +22,49 @@ const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/;
  * the agent from a shared profile link (`pendingAgentId`) when there is one.
  */
 export default function OnboardingScreen() {
-  const { completeOnboarding, pendingAgentId, signOut } = useAuth();
-  const colors = useThemeColors();
+  const { completeOnboarding, pendingAgentId, signOut } = useAuth()
+  const colors = useThemeColors()
 
-  const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [fullName, setFullName] = useState("")
+  const [username, setUsername] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   // Field errors stay hidden until the user has typed in that field, so an
   // untouched form never looks like it is already wrong.
-  const [touched, setTouched] = useState({fullName: false, username: false});
+  const [touched, setTouched] = useState({ fullName: false, username: false })
 
-  const trimmedName = fullName.trim();
-  const normalizedUsername = username.trim().toLowerCase();
-  const nameValid = trimmedName.length >= 3 && trimmedName.length <= 50;
-  const usernameValid = USERNAME_PATTERN.test(normalizedUsername);
-  const isValid = nameValid && usernameValid;
+  const trimmedName = fullName.trim()
+  const normalizedUsername = username.trim().toLowerCase()
+  const nameValid = trimmedName.length >= 3 && trimmedName.length <= 50
+  const usernameValid = USERNAME_PATTERN.test(normalizedUsername)
+  const isValid = nameValid && usernameValid
   // A submit is only possible with valid input and no request in flight.
-  const canSubmit = isValid && !saving;
+  const canSubmit = isValid && !saving
 
   const submit = async () => {
     if (!canSubmit) {
       // Ask SaveButton to stay idle and surface the reason instead of submitting.
-      setTouched({fullName: true, username: true});
-      setError("Please fill in your name and a valid username.");
-      throw new Error("Invalid onboarding input");
+      setTouched({ fullName: true, username: true })
+      setError("Please fill in your name and a valid username.")
+      throw new Error("Invalid onboarding input")
     }
 
-    setSaving(true);
-    setError(null);
+    setSaving(true)
+    setError(null)
 
     try {
       await completeOnboarding({
         fullName: trimmedName,
         username: normalizedUsername,
-      });
+      })
       // The provider flips the route once the profile has loaded.
     } catch (e) {
-      setError(extractErrorMessage(e));
-      throw e;
+      setError(extractErrorMessage(e))
+      throw e
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
   return (
     <SafeArea>
@@ -77,8 +77,7 @@ export default function OnboardingScreen() {
             Finish setting up
           </Text>
           <Text variant="muted" className="mt-2 text-center">
-            Your number is verified. We just need a couple of details to
-            complete your profile.
+            Your number is verified. We just need a couple of details to complete your profile.
           </Text>
         </View>
 
@@ -89,11 +88,11 @@ export default function OnboardingScreen() {
               <Input
                 value={fullName}
                 onChangeText={(next) => {
-                  setFullName(next);
-                  setTouched((current) => ({...current, fullName: true}));
-                  setError(null);
+                  setFullName(next)
+                  setTouched((current) => ({ ...current, fullName: true }))
+                  setError(null)
                 }}
-                onBlur={() => setTouched((current) => ({...current, fullName: true}))}
+                onBlur={() => setTouched((current) => ({ ...current, fullName: true }))}
                 placeholder="Your name"
                 autoComplete="name"
                 returnKeyType="next"
@@ -112,11 +111,11 @@ export default function OnboardingScreen() {
               <Input
                 value={username}
                 onChangeText={(next) => {
-                  setUsername(next);
-                  setTouched((current) => ({...current, username: true}));
-                  setError(null);
+                  setUsername(next)
+                  setTouched((current) => ({ ...current, username: true }))
+                  setError(null)
                 }}
-                onBlur={() => setTouched((current) => ({...current, username: true}))}
+                onBlur={() => setTouched((current) => ({ ...current, username: true }))}
                 placeholder="username"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -125,7 +124,9 @@ export default function OnboardingScreen() {
               />
               <Text
                 variant="small"
-                className={touched.username && !usernameValid ? "text-destructive" : "text-muted-foreground"}
+                className={
+                  touched.username && !usernameValid ? "text-destructive" : "text-muted-foreground"
+                }
               >
                 3-20 characters: lowercase letters, numbers and underscores.
               </Text>
@@ -149,10 +150,7 @@ export default function OnboardingScreen() {
         </Button>
 
         {pendingAgentId ? (
-          <Text
-            variant="small"
-            className="mt-3 text-center text-muted-foreground"
-          >
+          <Text variant="small" className="mt-3 text-center text-muted-foreground">
             You will be connected with the person who shared their link.
           </Text>
         ) : null}
@@ -162,5 +160,5 @@ export default function OnboardingScreen() {
         </Button>
       </View>
     </SafeArea>
-  );
+  )
 }

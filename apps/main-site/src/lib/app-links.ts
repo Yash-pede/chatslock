@@ -13,7 +13,7 @@
  * is published. `eas.json` / `app.json` will hold the real ones.
  */
 
-export type Platform = "android" | "ios" | "desktop";
+export type Platform = "android" | "ios" | "desktop"
 
 export const APP_LINKS = {
   /** Canonical production host. The demo falls back to window.location.origin. */
@@ -24,31 +24,31 @@ export const APP_LINKS = {
   linkPath: "u",
   androidPackage: "com.chatslock.app",
   iosAppId: "0000000000",
-} as const;
+} as const
 
 /** Path segments accepted on the https link, e.g. /u/<id>, /a/<id>, /agent/<id>. */
-const LINK_ALIASES = [APP_LINKS.linkPath, "a", "agent"];
+const LINK_ALIASES = [APP_LINKS.linkPath, "a", "agent"]
 
 /** Detects the mobile platform from the user agent. */
 export function detectPlatform(): Platform {
-  const ua = navigator.userAgent || "";
+  const ua = navigator.userAgent || ""
 
-  if (/android/i.test(ua)) return "android";
+  if (/android/i.test(ua)) return "android"
   // iPadOS reports as Macintosh, so also match the touch-point tell.
-  if (/iphone|ipad|ipod/i.test(ua)) return "ios";
-  if (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return "ios";
+  if (/iphone|ipad|ipod/i.test(ua)) return "ios"
+  if (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) return "ios"
 
-  return "desktop";
+  return "desktop"
 }
 
 /** The https share link for a chat, e.g. https://host/u/abc123. */
 export function buildShareUrl(id: string, origin = window.location.origin): string {
-  return `${origin}/${APP_LINKS.linkPath}/${encodeURIComponent(id)}`;
+  return `${origin}/${APP_LINKS.linkPath}/${encodeURIComponent(id)}`
 }
 
 /** The custom-scheme link that hands off to the installed app. */
 export function buildAppDeepLink(id: string): string {
-  return `${APP_LINKS.scheme}://${APP_LINKS.linkPath}/${encodeURIComponent(id)}`;
+  return `${APP_LINKS.scheme}://${APP_LINKS.linkPath}/${encodeURIComponent(id)}`
 }
 
 /**
@@ -57,9 +57,9 @@ export function buildAppDeepLink(id: string): string {
  * store fallback is carried in the URL itself instead of a JS timer.
  */
 export function buildAndroidIntentUrl(id: string): string {
-  const path = `${APP_LINKS.linkPath}/${encodeURIComponent(id)}`;
-  const fallback = encodeURIComponent(buildStoreUrl("android", id));
-  return `intent://${path}#Intent;scheme=${APP_LINKS.scheme};package=${APP_LINKS.androidPackage};S.browser_fallback_url=${fallback};end`;
+  const path = `${APP_LINKS.linkPath}/${encodeURIComponent(id)}`
+  const fallback = encodeURIComponent(buildStoreUrl("android", id))
+  return `intent://${path}#Intent;scheme=${APP_LINKS.scheme};package=${APP_LINKS.androidPackage};S.browser_fallback_url=${fallback};end`
 }
 
 /**
@@ -68,16 +68,16 @@ export function buildAndroidIntentUrl(id: string): string {
  */
 export function buildStoreUrl(platform: Platform, id?: string): string {
   if (platform === "android") {
-    const base = `https://play.google.com/store/apps/details?id=${APP_LINKS.androidPackage}`;
-    return id ? `${base}&referrer=${encodeURIComponent(`chatId=${id}`)}` : base;
+    const base = `https://play.google.com/store/apps/details?id=${APP_LINKS.androidPackage}`
+    return id ? `${base}&referrer=${encodeURIComponent(`chatId=${id}`)}` : base
   }
 
   if (platform === "ios") {
-    return `https://apps.apple.com/app/id${APP_LINKS.iosAppId}`;
+    return `https://apps.apple.com/app/id${APP_LINKS.iosAppId}`
   }
 
   // Desktop: send to the Play listing as a neutral default.
-  return `https://play.google.com/store/apps/details?id=${APP_LINKS.androidPackage}`;
+  return `https://play.google.com/store/apps/details?id=${APP_LINKS.androidPackage}`
 }
 
 /**
@@ -86,13 +86,13 @@ export function buildStoreUrl(platform: Platform, id?: string): string {
  * index.html).
  */
 export function resolveChatId(pathname: string, search: string): string | null {
-  const segments = pathname.split("/").filter(Boolean);
-  const [first, second] = segments;
+  const segments = pathname.split("/").filter(Boolean)
+  const [first, second] = segments
 
   if (first && second && (LINK_ALIASES as readonly string[]).includes(first)) {
-    return decodeURIComponent(second);
+    return decodeURIComponent(second)
   }
 
-  const fromQuery = new URLSearchParams(search).get("c");
-  return fromQuery ? decodeURIComponent(fromQuery) : null;
+  const fromQuery = new URLSearchParams(search).get("c")
+  return fromQuery ? decodeURIComponent(fromQuery) : null
 }

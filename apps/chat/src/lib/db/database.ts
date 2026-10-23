@@ -1,8 +1,8 @@
-import * as SQLite from "expo-sqlite";
+import * as SQLite from "expo-sqlite"
 
-const DB_NAME = "chatslock.db";
+const DB_NAME = "chatslock.db"
 
-let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null
 
 /**
  * Opens the app database once and creates the schema on first run. Everything
@@ -11,7 +11,7 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
  */
 export function getDb(): Promise<SQLite.SQLiteDatabase> {
   dbPromise ??= (async () => {
-    const db = await SQLite.openDatabaseSync(DB_NAME);
+    const db = await SQLite.openDatabaseSync(DB_NAME)
     await db.execAsync(`
       PRAGMA journal_mode = WAL;
       CREATE TABLE IF NOT EXISTS cache (
@@ -21,8 +21,8 @@ export function getDb(): Promise<SQLite.SQLiteDatabase> {
         updatedAt INTEGER NOT NULL,
         PRIMARY KEY (entity, id)
       );
-    `);
-    return db;
-  })();
-  return dbPromise;
+    `)
+    return db
+  })()
+  return dbPromise
 }

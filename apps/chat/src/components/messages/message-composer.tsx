@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react"
 import {
   Animated,
   Easing,
@@ -7,21 +7,21 @@ import {
   useColorScheme,
   type TextInputInstance,
   View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EmojiSheetView } from "expo-native-sheet-emojis";
-import { Paperclip, SendHorizontal, Smile } from "lucide-react-native";
-import { useThemeColors } from "@repo/ui";
+} from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { EmojiSheetView } from "expo-native-sheet-emojis"
+import { Paperclip, SendHorizontal, Smile } from "lucide-react-native"
+import { useThemeColors } from "@repo/ui"
 
-const EMOJI_PANEL_HEIGHT = 320;
+const EMOJI_PANEL_HEIGHT = 320
 
 export interface MessageComposerProps {
   /** Called with the trimmed text; the field clears only when this resolves. */
-  onSend: (text: string) => void | Promise<void>;
-  disabled?: boolean;
+  onSend: (text: string) => void | Promise<void>
+  disabled?: boolean
   /** While true the keyboard is dismissed and the emoji panel takes its place. */
-  emojiOpen?: boolean;
-  onEmojiOpenChange?: (open: boolean) => void;
+  emojiOpen?: boolean
+  onEmojiOpenChange?: (open: boolean) => void
 }
 
 /**
@@ -35,23 +35,23 @@ export function MessageComposer({
   emojiOpen = false,
   onEmojiOpenChange,
 }: MessageComposerProps) {
-  const colors = useThemeColors();
-  const insets = useSafeAreaInsets();
-  const dark = useColorScheme() === "dark";
-  const inputRef = useRef<TextInputInstance>(null);
-  const [value, setValue] = useState("");
-  const canSend = value.trim().length > 0 && !disabled;
+  const colors = useThemeColors()
+  const insets = useSafeAreaInsets()
+  const dark = useColorScheme() === "dark"
+  const inputRef = useRef<TextInputInstance>(null)
+  const [value, setValue] = useState("")
+  const canSend = value.trim().length > 0 && !disabled
 
   // Drives the panel's slide/height so opening and closing are animated
   // rather than snapping.
-  const panelProgress = useState(() => new Animated.Value(emojiOpen ? 1 : 0))[0];
+  const panelProgress = useState(() => new Animated.Value(emojiOpen ? 1 : 0))[0]
 
   const toggleEmoji = () => {
-    const next = !emojiOpen;
+    const next = !emojiOpen
 
     if (next) {
       // Hide the keyboard first; the panel grows into the freed space.
-      inputRef.current?.blur();
+      inputRef.current?.blur()
     }
 
     Animated.timing(panelProgress, {
@@ -59,10 +59,10 @@ export function MessageComposer({
       duration: 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
-    }).start();
+    }).start()
 
-    onEmojiOpenChange?.(next);
-  };
+    onEmojiOpenChange?.(next)
+  }
 
   // Derived once: interpolations only re-read the animated value, they are not
   // state, so computing this during render is safe.
@@ -73,11 +73,11 @@ export function MessageComposer({
         outputRange: [0, EMOJI_PANEL_HEIGHT],
       }),
     [panelProgress],
-  );
+  )
 
   const insertEmoji = (emoji: string) => {
-    setValue((current) => `${current}${emoji}`);
-  };
+    setValue((current) => `${current}${emoji}`)
+  }
 
   return (
     <View
@@ -110,26 +110,21 @@ export function MessageComposer({
             cursorColor={colors.primary}
             keyboardAppearance={dark ? "dark" : "light"}
             onFocus={() => {
-              if (!emojiOpen) return;
+              if (!emojiOpen) return
               // Tapping the field swaps the panel back to the keyboard.
-              panelProgress.setValue(0);
-              onEmojiOpenChange?.(false);
+              panelProgress.setValue(0)
+              onEmojiOpenChange?.(false)
             }}
           />
           <Pressable
             onPress={toggleEmoji}
             accessibilityRole="button"
-            accessibilityLabel={
-              emojiOpen ? "Hide emoji panel" : "Show emoji panel"
-            }
+            accessibilityLabel={emojiOpen ? "Hide emoji panel" : "Show emoji panel"}
             accessibilityState={{ expanded: emojiOpen }}
             hitSlop={8}
             className="ms-1 h-6 w-6 items-center justify-center"
           >
-            <Smile
-              size={18}
-              color={emojiOpen ? colors.primary : colors.mutedForeground}
-            />
+            <Smile size={18} color={emojiOpen ? colors.primary : colors.mutedForeground} />
           </Pressable>
         </View>
 
@@ -168,5 +163,5 @@ export function MessageComposer({
         </View>
       </Animated.View>
     </View>
-  );
+  )
 }

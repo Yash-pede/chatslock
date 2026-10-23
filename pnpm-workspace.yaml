@@ -20,6 +20,7 @@ catalog:
   react-native-safe-area-context: ~5.7.0
 allowBuilds:
   esbuild: true
+  lefthook: true
   unrs-resolver: true
 # Metro (via @expo/metro-config) transforms with @babel/core 7.29.7, while
 # @repo/eslint-config pulls @babel/core 8. The worklets Babel plugin requires

@@ -1,10 +1,10 @@
-import React from "react";
-import { View, Text as RNText } from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { Check, CheckCheck } from "lucide-react-native";
-import { cn } from "../lib/utils";
-import { radius } from "../lib/radius";
-import { useThemeColors } from "./theme-provider";
+import React from "react"
+import { View, Text as RNText } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { Check, CheckCheck } from "lucide-react-native"
+import { cn } from "../lib/utils"
+import { radius } from "../lib/radius"
+import { useThemeColors } from "./theme-provider"
 
 const bubbleVariants = cva("max-w-[80%] px-3.5 py-2", {
   variants: {
@@ -14,7 +14,7 @@ const bubbleVariants = cva("max-w-[80%] px-3.5 py-2", {
     },
   },
   defaultVariants: { variant: "received" },
-});
+})
 
 const textVariants = cva("text-base leading-5", {
   variants: {
@@ -24,18 +24,17 @@ const textVariants = cva("text-base leading-5", {
     },
   },
   defaultVariants: { variant: "received" },
-});
+})
 
-export type ChatBubbleStatus = "sending" | "sent" | "delivered" | "read" | "failed";
+export type ChatBubbleStatus = "sending" | "sent" | "delivered" | "read" | "failed"
 
 export interface ChatBubbleProps
-  extends React.ComponentPropsWithoutRef<typeof View>,
-    VariantProps<typeof bubbleVariants> {
-  className?: string;
-  textClassName?: string;
-  children: React.ReactNode;
-  timestamp?: string;
-  status?: ChatBubbleStatus;
+  extends React.ComponentPropsWithoutRef<typeof View>, VariantProps<typeof bubbleVariants> {
+  className?: string
+  textClassName?: string
+  children: React.ReactNode
+  timestamp?: string
+  status?: ChatBubbleStatus
 }
 
 /** AniUI chat bubble: sent (primary, right) and received (secondary, left). */
@@ -48,9 +47,9 @@ export function ChatBubble({
   status,
   ...props
 }: ChatBubbleProps) {
-  const isSent = variant === "sent";
-  const colors = useThemeColors();
-  const tick = `${colors.primaryForeground}b3`;
+  const isSent = variant === "sent"
+  const colors = useThemeColors()
+  const tick = `${colors.primaryForeground}b3`
 
   return (
     <View className={cn(bubbleVariants({ variant }), radius.surface, className)} {...props}>
@@ -73,18 +72,27 @@ export function ChatBubble({
               {timestamp}
             </RNText>
           ) : null}
-          {status && isSent
-            ? status === "sent" || status === "sending" ? (
-                <Check size={12} color={status === "sending" ? `${colors.primaryForeground}66` : tick} />
-              ) : (
-                <CheckCheck
-                  size={12}
-                  color={status === "read" ? colors.accentForeground : status === "failed" ? colors.destructive : tick}
-                />
-              )
-            : null}
+          {status && isSent ? (
+            status === "sent" || status === "sending" ? (
+              <Check
+                size={12}
+                color={status === "sending" ? `${colors.primaryForeground}66` : tick}
+              />
+            ) : (
+              <CheckCheck
+                size={12}
+                color={
+                  status === "read"
+                    ? colors.accentForeground
+                    : status === "failed"
+                      ? colors.destructive
+                      : tick
+                }
+              />
+            )
+          ) : null}
         </View>
       ) : null}
     </View>
-  );
+  )
 }

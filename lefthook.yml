@@ -1,0 +1,17 @@
+# Fast, staged-only checks. Formatting + linting run in parallel on the files
+# you actually touched; type-checking runs on push (it is too slow for commit).
+pre-commit:
+  parallel: true
+  stage_fixed: true
+  commands:
+    prettier:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,md,yml,yaml,css}"
+      run: pnpm exec prettier --write --ignore-unknown {staged_files}
+    eslint:
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs}"
+      run: bash scripts/lint-staged.sh {staged_files}
+
+pre-push:
+  commands:
+    checks:
+      run: pnpm turbo run lint check-types

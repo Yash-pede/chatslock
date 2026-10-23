@@ -1,6 +1,6 @@
-import {WS_EVENT_TYPE} from "@repo/types/schema";
-import type {WsContext, WsReply} from "@repo/api/core";
-import {connectService, disconnectService} from "./connection.service";
+import { WS_EVENT_TYPE } from "@repo/types/schema"
+import type { WsContext, WsReply } from "@repo/api/core"
+import { connectService, disconnectService } from "./connection.service"
 
 /**
  * `$connect`: store the connection, then greet the client. The authorizer is
@@ -12,12 +12,12 @@ import {connectService, disconnectService} from "./connection.service";
  * has not registered the connection until this handler returns.
  */
 export const connectController = async (c: WsContext): Promise<WsReply> => {
-    if (!c.userId) return c.reply(401);
+  if (!c.userId) return c.reply(401)
 
-    await connectService({userId: c.userId, connectionId: c.connectionId});
+  await connectService({ userId: c.userId, connectionId: c.connectionId })
 
-    return c.reply(200, {type: WS_EVENT_TYPE.connected, connectionId: c.connectionId});
-};
+  return c.reply(200, { type: WS_EVENT_TYPE.connected, connectionId: c.connectionId })
+}
 
 /**
  * `$disconnect`: drop the connection row. The socket is closing regardless of
@@ -25,9 +25,9 @@ export const connectController = async (c: WsContext): Promise<WsReply> => {
  * would only add log noise.
  */
 export const disconnectController = async (c: WsContext): Promise<WsReply> => {
-    if (!c.userId) return c.reply(200);
+  if (!c.userId) return c.reply(200)
 
-    await disconnectService({userId: c.userId, connectionId: c.connectionId});
+  await disconnectService({ userId: c.userId, connectionId: c.connectionId })
 
-    return c.reply(200);
-};
+  return c.reply(200)
+}

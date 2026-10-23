@@ -1,24 +1,24 @@
-import React from "react";
-import { Modal, Pressable, View } from "react-native";
-import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from "react-native-reanimated";
-import { cn } from "../lib/utils";
-import { radius } from "../lib/radius";
-import { Text } from "./text";
+import React from "react"
+import { Modal, Pressable, View } from "react-native"
+import Animated, { FadeIn, FadeOut, ZoomIn, ZoomOut } from "react-native-reanimated"
+import { cn } from "../lib/utils"
+import { radius } from "../lib/radius"
+import { Text } from "./text"
 
 type ViewProps = React.ComponentPropsWithoutRef<typeof View> & {
-  className?: string;
-  children?: React.ReactNode;
-};
-type TextProps = React.ComponentPropsWithoutRef<typeof Text> & { className?: string };
+  className?: string
+  children?: React.ReactNode
+}
+type TextProps = React.ComponentPropsWithoutRef<typeof Text> & { className?: string }
 type PressableProps = React.ComponentPropsWithoutRef<typeof Pressable> & {
-  className?: string;
-  children: React.ReactNode;
-};
+  className?: string
+  children: React.ReactNode
+}
 
 export interface AlertDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  children: React.ReactNode
 }
 
 /** AniUI alert dialog: scrim + zoomed card, dismissed via back button or a Cancel action. */
@@ -47,7 +47,7 @@ export function AlertDialog({ open, onOpenChange, children }: AlertDialogProps) 
         </Animated.View>
       </Animated.View>
     </Modal>
-  );
+  )
 }
 
 export function AlertDialogContent({ className, ...props }: ViewProps) {
@@ -57,23 +57,23 @@ export function AlertDialogContent({ className, ...props }: ViewProps) {
       accessibilityRole="alert"
       {...props}
     />
-  );
+  )
 }
 
 export function AlertDialogHeader({ className, ...props }: ViewProps) {
-  return <View className={cn("pb-4", className)} {...props} />;
+  return <View className={cn("pb-4", className)} {...props} />
 }
 
 export function AlertDialogTitle({ className, ...props }: TextProps) {
-  return <Text className={cn("text-lg font-semibold text-card-foreground", className)} {...props} />;
+  return <Text className={cn("text-lg font-semibold text-card-foreground", className)} {...props} />
 }
 
 export function AlertDialogDescription({ className, ...props }: TextProps) {
-  return <Text className={cn("mt-1 text-sm text-muted-foreground", className)} {...props} />;
+  return <Text className={cn("mt-1 text-sm text-muted-foreground", className)} {...props} />
 }
 
 export function AlertDialogFooter({ className, ...props }: ViewProps) {
-  return <View className={cn("flex-row justify-end gap-3 pt-4", className)} {...props} />;
+  return <View className={cn("flex-row justify-end gap-3 pt-4", className)} {...props} />
 }
 
 export function AlertDialogAction({ className, children, ...props }: PressableProps) {
@@ -94,7 +94,7 @@ export function AlertDialogAction({ className, children, ...props }: PressablePr
         children
       )}
     </Pressable>
-  );
+  )
 }
 
 export function AlertDialogCancel({ className, children, ...props }: PressableProps) {
@@ -115,5 +115,5 @@ export function AlertDialogCancel({ className, children, ...props }: PressablePr
         children
       )}
     </Pressable>
-  );
+  )
 }

@@ -1,19 +1,19 @@
-import { Image } from "expo-image";
-import { Modal, Pressable, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { X } from "lucide-react-native";
-import { Text } from "@repo/ui";
+import { Image } from "expo-image"
+import { Modal, Pressable, View } from "react-native"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
+import { X } from "lucide-react-native"
+import { Text } from "@repo/ui"
 
 export interface AvatarViewerProps {
-  visible: boolean;
-  uri?: string | null;
-  name: string;
-  onClose: () => void;
+  visible: boolean
+  uri?: string | null
+  name: string
+  onClose: () => void
 }
 
 /** Full-screen avatar preview on a scrim; tap the backdrop or the close button to dismiss. */
 export function AvatarViewer({ visible, uri, name, onClose }: AvatarViewerProps) {
-  const insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets()
 
   return (
     <Modal
@@ -62,5 +62,5 @@ export function AvatarViewer({ visible, uri, name, onClose }: AvatarViewerProps)
         </View>
       </View>
     </Modal>
-  );
+  )
 }

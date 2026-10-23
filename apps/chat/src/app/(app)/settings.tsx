@@ -1,5 +1,5 @@
-import { Pressable, ScrollView, Switch, View } from "react-native";
-import { useRouter } from "expo-router";
+import { Pressable, ScrollView, Switch, View } from "react-native"
+import { useRouter } from "expo-router"
 import {
   Bell,
   Bug,
@@ -14,17 +14,17 @@ import {
   Sun,
   UserRound,
   Volume2,
-} from "lucide-react-native";
-import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui";
-import { useSettings, type ThemePreference } from "@/context/SettingsContext";
+} from "lucide-react-native"
+import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui"
+import { useSettings, type ThemePreference } from "@/context/SettingsContext"
 
 const THEME_OPTIONS: { key: ThemePreference; label: string; icon: typeof Sun }[] = [
   { key: "light", label: "Light", icon: Sun },
   { key: "dark", label: "Dark", icon: Moon },
   { key: "system", label: "System", icon: Monitor },
-];
+]
 
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.0.0"
 
 /**
  * Settings modelled on Telegram: grouped cards, an inline theme switcher, and
@@ -33,14 +33,21 @@ const APP_VERSION = "1.0.0";
  * instead of pretending to work.
  */
 export default function SettingsScreen() {
-  const colors = useThemeColors();
-  const router = useRouter();
-  const { settings, setSetting } = useSettings();
+  const colors = useThemeColors()
+  const router = useRouter()
+  const { settings, setSetting } = useSettings()
 
   const toggle =
-    (key: "messageNotifications" | "notificationSound" | "messagePreview" | "readReceipts" | "mediaAutoDownload") =>
+    (
+      key:
+        | "messageNotifications"
+        | "notificationSound"
+        | "messagePreview"
+        | "readReceipts"
+        | "mediaAutoDownload",
+    ) =>
     (value: boolean) =>
-      setSetting(key, value);
+      setSetting(key, value)
 
   return (
     <SafeArea edges={["top", "left", "right"]}>
@@ -57,13 +64,12 @@ export default function SettingsScreen() {
             <View className="flex-row items-center gap-2">
               <Text className="flex-1 text-base font-medium text-foreground">Theme</Text>
               <Text variant="small" className="font-normal text-muted-foreground">
-                {THEME_OPTIONS.find((option) => option.key === settings.theme)?.label ??
-                  "System"}
+                {THEME_OPTIONS.find((option) => option.key === settings.theme)?.label ?? "System"}
               </Text>
             </View>
             <View className="flex-row gap-2 rounded-xl bg-secondary p-1">
               {THEME_OPTIONS.map(({ key, label, icon: Icon }) => {
-                const active = settings.theme === key;
+                const active = settings.theme === key
 
                 return (
                   <Pressable
@@ -88,7 +94,7 @@ export default function SettingsScreen() {
                       {label}
                     </Text>
                   </Pressable>
-                );
+                )
               })}
             </View>
           </View>
@@ -270,5 +276,5 @@ export default function SettingsScreen() {
         </Text>
       </ScrollView>
     </SafeArea>
-  );
+  )
 }

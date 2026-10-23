@@ -1,18 +1,10 @@
-import React, { useState, useCallback, useMemo } from "react";
-import {
-  View,
-  TextInput,
-  Pressable,
-  Text,
-  ScrollView,
-  Modal,
-  useColorScheme,
-} from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
-import { radius } from "../lib/radius";
-import { useThemeColors } from "./theme-provider";
-import { ChevronDown } from "lucide-react-native";
+import React, { useState, useCallback, useMemo } from "react"
+import { View, TextInput, Pressable, Text, ScrollView, Modal, useColorScheme } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
+import { radius } from "../lib/radius"
+import { useThemeColors } from "./theme-provider"
+import { ChevronDown } from "lucide-react-native"
 
 const phoneVariants = cva(`flex-row items-center ${radius.control} border`, {
   variants: {
@@ -27,9 +19,9 @@ const phoneVariants = cva(`flex-row items-center ${radius.control} border`, {
     },
   },
   defaultVariants: { variant: "default", size: "md" },
-});
+})
 
-type Country = { code: string; dial: string; name: string };
+type Country = { code: string; dial: string; name: string }
 
 const countries: Country[] = [
   { code: "US", dial: "+1", name: "United States" },
@@ -42,111 +34,111 @@ const countries: Country[] = [
   { code: "JP", dial: "+81", name: "Japan" },
   { code: "BR", dial: "+55", name: "Brazil" },
   { code: "MX", dial: "+52", name: "Mexico" },
-];
+]
 
 export interface PhoneInputProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof TextInput>, "onChangeText" | "value">,
+  extends
+    Omit<React.ComponentPropsWithoutRef<typeof TextInput>, "onChangeText" | "value">,
     VariantProps<typeof phoneVariants> {
-  className?: string;
-  defaultCountry?: string;
-  value?: string;
-  onChangeText?: (fullPhone: string) => void;
+  className?: string
+  defaultCountry?: string
+  value?: string
+  onChangeText?: (fullPhone: string) => void
 }
 
-export const PhoneInput = React.forwardRef<
-  React.ElementRef<typeof TextInput>,
-  PhoneInputProps
->(function PhoneInput(
-  { variant, size, className, defaultCountry = "IN", value, onChangeText, ...props },
-  ref
-) {
-  const [country, setCountry] = useState(
-    countries.find((c) => c.code === defaultCountry) ?? countries[0]
-  );
-  const [open, setOpen] = useState(false);
-  const dark = useColorScheme() === "dark";
-  const colors = useThemeColors();
-  const caret = colors.foreground;
+export const PhoneInput = React.forwardRef<React.ElementRef<typeof TextInput>, PhoneInputProps>(
+  function PhoneInput(
+    { variant, size, className, defaultCountry = "IN", value, onChangeText, ...props },
+    ref,
+  ) {
+    const [country, setCountry] = useState(
+      countries.find((c) => c.code === defaultCountry) ?? countries[0],
+    )
+    const [open, setOpen] = useState(false)
+    const dark = useColorScheme() === "dark"
+    const colors = useThemeColors()
+    const caret = colors.foreground
 
-  // The TextInput only ever sees the local digits; the dial code is rendered
-  // separately. Controlled and uncontrolled usage both derive the displayed
-  // digits from one source of truth, so a keystroke never resets the prefix.
-  const [internalDigits, setInternalDigits] = useState("");
+    // The TextInput only ever sees the local digits; the dial code is rendered
+    // separately. Controlled and uncontrolled usage both derive the displayed
+    // digits from one source of truth, so a keystroke never resets the prefix.
+    const [internalDigits, setInternalDigits] = useState("")
 
-  const rawNumber = useMemo(() => {
-    if (value == null) return internalDigits;
-    return value.startsWith(country.dial)
-      ? value.slice(country.dial.length)
-      : value.replace(/^\+\d{1,3}/, "");
-  }, [value, country.dial, internalDigits]);
+    const rawNumber = useMemo(() => {
+      if (value == null) return internalDigits
+      return value.startsWith(country.dial)
+        ? value.slice(country.dial.length)
+        : value.replace(/^\+\d{1,3}/, "")
+    }, [value, country.dial, internalDigits])
 
-  const handleChange = useCallback(
-    (text: string) => {
-      const digits = text.replace(/\D/g, "");
-      setInternalDigits(digits);
-      onChangeText?.(`${country.dial}${digits}`);
-    },
-    [country, onChangeText]
-  );
+    const handleChange = useCallback(
+      (text: string) => {
+        const digits = text.replace(/\D/g, "")
+        setInternalDigits(digits)
+        onChangeText?.(`${country.dial}${digits}`)
+      },
+      [country, onChangeText],
+    )
 
-  return (
-    <View className={cn(phoneVariants({ variant, size }), className)}>
-      <Pressable
-        onPress={() => setOpen(true)}
-        accessible={true}
-        accessibilityRole="button"
-        accessibilityLabel={`Country: ${country.name}`}
-        className="flex-row items-center me-2 pe-2 border-e border-border min-h-8"
-      >
-        <Text className="text-foreground text-base">{country.dial}</Text>
-        <ChevronDown size={14} color={colors.mutedForeground} />
-      </Pressable>
-      <TextInput
-        ref={ref}
-        className="flex-1 text-foreground p-0 text-base"
-        placeholderTextColor={colors.mutedForeground}
-        keyboardAppearance={dark ? "dark" : "light"}
-        selectionColor={caret}
-        cursorColor={caret}
-        keyboardType="phone-pad"
-        value={rawNumber}
-        onChangeText={handleChange}
-        placeholder="Phone number"
-        {...props}
-      />
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpen(false)}
-      >
-        <Pressable className="flex-1 bg-black/50 justify-end" onPress={() => setOpen(false)}>
-          <View className="bg-card rounded-t-2xl max-h-80 pb-8">
-            <View className="items-center py-3">
-              <View className="w-10 h-1 rounded-full bg-muted" />
-            </View>
-            <ScrollView>
-              {countries.map((c) => (
-                <Pressable
-                  key={c.code}
-                  className={cn(
-                    "flex-row items-center px-5 py-3",
-                    c.code === country.code && "bg-accent"
-                  )}
-                  onPress={() => {
-                    setCountry(c);
-                    setOpen(false);
-                  }}
-                  accessibilityRole="button"
-                >
-                  <Text className="text-foreground flex-1">{c.name}</Text>
-                  <Text className="text-muted-foreground">{c.dial}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
+    return (
+      <View className={cn(phoneVariants({ variant, size }), className)}>
+        <Pressable
+          onPress={() => setOpen(true)}
+          accessible={true}
+          accessibilityRole="button"
+          accessibilityLabel={`Country: ${country.name}`}
+          className="flex-row items-center me-2 pe-2 border-e border-border min-h-8"
+        >
+          <Text className="text-foreground text-base">{country.dial}</Text>
+          <ChevronDown size={14} color={colors.mutedForeground} />
         </Pressable>
-      </Modal>
-    </View>
-  );
-});
+        <TextInput
+          ref={ref}
+          className="flex-1 text-foreground p-0 text-base"
+          placeholderTextColor={colors.mutedForeground}
+          keyboardAppearance={dark ? "dark" : "light"}
+          selectionColor={caret}
+          cursorColor={caret}
+          keyboardType="phone-pad"
+          value={rawNumber}
+          onChangeText={handleChange}
+          placeholder="Phone number"
+          {...props}
+        />
+        <Modal
+          visible={open}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setOpen(false)}
+        >
+          <Pressable className="flex-1 bg-black/50 justify-end" onPress={() => setOpen(false)}>
+            <View className="bg-card rounded-t-2xl max-h-80 pb-8">
+              <View className="items-center py-3">
+                <View className="w-10 h-1 rounded-full bg-muted" />
+              </View>
+              <ScrollView>
+                {countries.map((c) => (
+                  <Pressable
+                    key={c.code}
+                    className={cn(
+                      "flex-row items-center px-5 py-3",
+                      c.code === country.code && "bg-accent",
+                    )}
+                    onPress={() => {
+                      setCountry(c)
+                      setOpen(false)
+                    }}
+                    accessibilityRole="button"
+                  >
+                    <Text className="text-foreground flex-1">{c.name}</Text>
+                    <Text className="text-muted-foreground">{c.dial}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          </Pressable>
+        </Modal>
+      </View>
+    )
+  },
+)

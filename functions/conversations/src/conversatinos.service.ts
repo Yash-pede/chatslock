@@ -1,16 +1,26 @@
-import {conversationsDao, messagesDao, usersDao} from "@repo/api/dao";
-import {ApiException, parseConversationId} from "@repo/api/utils";
-import type {ConversationUserProfile, Message, UserMemberConversation} from "@repo/types/schema";
-import {MAX_MESSAGES_LOOKUP} from "@repo/types/req";
+import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
+import { ApiException, parseConversationId } from "@repo/api/utils"
+import type {
+  ConversationId,
+  ConversationType,
+  ConversationUserProfile,
+  Message,
+  UserMemberConversation,
+  UserId,
+} from "@repo/types/schema"
+import { MAX_MESSAGES_LOOKUP } from "@repo/types/req"
 
-export const chatPageConversationsService = async ({userId, pageSize}: {
-    userId: string;
-    pageSize: number;
-    startKey?: string;
-}): Promise<{conversations: UserMemberConversation[]}> => {
-    const conversations = await conversationsDao.getConversationsByUserId(userId);
+export const chatPageConversationsService = async ({
+  userId,
+  pageSize,
+}: {
+  userId: string
+  pageSize: number
+  startKey?: string
+}): Promise<{ conversations: UserMemberConversation[] }> => {
+  const conversations = await conversationsDao.getConversationsByUserId(userId)
 
-    return {conversations: conversations.slice(0, pageSize)};
+  return { conversations: conversations.slice(0, pageSize) }
 }
 
 /**
@@ -18,12 +28,14 @@ export const chatPageConversationsService = async ({userId, pageSize}: {
  * `u1#u2`, so the client splits the id and asks for the other participant here
  * instead of receiving full user records in the conversation list.
  */
-export const conversationProfilesService = async ({userIds}: {
-    userIds: string[];
-}): Promise<{profiles: ConversationUserProfile[]}> => {
-    const profiles = await usersDao.getPublicProfilesByIds({userIds});
+export const conversationProfilesService = async ({
+  userIds,
+}: {
+  userIds: string[]
+}): Promise<{ profiles: ConversationUserProfile[] }> => {
+  const profiles = await usersDao.getPublicProfilesByIds({ userIds })
 
-    return {profiles};
+  return { profiles }
 }
 
 /**
@@ -31,25 +43,28 @@ export const conversationProfilesService = async ({userIds}: {
  * `TYPE#id` returned by the chat page; the caller must be a participant, which
  * for DIRECT conversations is a plain string check against `user1#user2`.
  */
-export const conversationMessagesService = async ({userId, conversationId}: {
-    userId: string;
-    conversationId: string;
-}): Promise<{messages: Message[]}> => {
-    let parsed: {type: UserMemberConversation["conversationType"]; conversationId: string};
-    try {
-        parsed = parseConversationId(conversationId);
-    } catch {
-        throw new ApiException(422, {message: `Invalid conversation id "${conversationId}"`});
-    }
+export const conversationMessagesService = async ({
+  userId,
+  conversationId,
+}: {
+  userId: UserId
+  conversationId: ConversationId
+}): Promise<{ messages: Message[] }> => {
+  let parsed: { type: ConversationType; conversationId: string }
+  try {
+    parsed = parseConversationId(conversationId)
+  } catch {
+    throw new ApiException(422, { message: `Invalid conversation id "${conversationId}"` })
+  }
 
-    if (parsed.type === "DIRECT" && !parsed.conversationId.split("#").includes(userId)) {
-        throw new ApiException(403, {message: "You are not a participant of this conversation"});
-    }
+  if (parsed.type === "DIRECT" && !parsed.conversationId.split("#").includes(userId)) {
+    throw new ApiException(403, { message: "You are not a participant of this conversation" })
+  }
 
-    const messages = await messagesDao.getMessagesByConversationId({
-        conversationId: conversationId,
-        limit: MAX_MESSAGES_LOOKUP,
-    });
+  const messages = await messagesDao.getMessagesByConversationId({
+    conversationId: conversationId,
+    limit: MAX_MESSAGES_LOOKUP,
+  })
 
-    return {messages};
+  return { messages }
 }

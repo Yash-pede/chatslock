@@ -1,0 +1,16 @@
+# Build outputs and vendored/generated code are never formatted.
+dist
+.turbo
+node_modules
+layers
+infrastructure
+.expo
+android
+ios
+*.lock
+pnpm-lock.yaml
+uniwind-types.d.ts
+expo-env.d.ts
+apps/chat/.hermes
+apps/chat/.expo
+apps/main-site/.next

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { router } from "expo-router";
-import { Pressable, View } from "react-native";
+import { useMemo, useState } from "react"
+import { router } from "expo-router"
+import { Pressable, View } from "react-native"
 import {
   Alert,
   AlertDescription,
@@ -10,16 +10,16 @@ import {
   SaveButton,
   Text,
   useThemeColors,
-} from "@repo/ui";
-import { AlertCircle } from "lucide-react-native";
-import { extractErrorMessage } from "@repo/utils";
-import { useAuth } from "@/context/AuthContext";
-import { AuthScreen } from "@/components/auth-screen";
+} from "@repo/ui"
+import { AlertCircle } from "lucide-react-native"
+import { extractErrorMessage } from "@repo/utils"
+import { useAuth } from "@/context/AuthContext"
+import { AuthScreen } from "@/components/auth-screen"
 
 /** Mirrors the backend schema so the button stays disabled on obviously bad input. */
 function isUsernameValid(username: string): boolean {
-  const value = username.trim();
-  return value.length >= 3 && value.length <= 20 && /^[a-zA-Z0-9._-]+$/.test(value);
+  const value = username.trim()
+  return value.length >= 3 && value.length <= 20 && /^[a-zA-Z0-9._-]+$/.test(value)
 }
 
 /**
@@ -27,38 +27,38 @@ function isUsernameValid(username: string): boolean {
  * accounts here, so a non-agent should use the phone flow instead.
  */
 export default function AgentLoginScreen() {
-  const { signInAsAgent } = useAuth();
-  const colors = useThemeColors();
+  const { signInAsAgent } = useAuth()
+  const colors = useThemeColors()
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [username, setUsername] = useState("")
+  const [password, setPassword] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
-  const usernameValid = useMemo(() => isUsernameValid(username), [username]);
-  const passwordValid = password.length >= 8;
+  const usernameValid = useMemo(() => isUsernameValid(username), [username])
+  const passwordValid = password.length >= 8
   // Never submit empty/invalid fields, and never twice while a sign-in is in flight.
-  const canSubmit = usernameValid && passwordValid && !submitting;
+  const canSubmit = usernameValid && passwordValid && !submitting
 
   const submit = async () => {
     if (!canSubmit) {
-      throw new Error("Enter a valid username and password.");
+      throw new Error("Enter a valid username and password.")
     }
 
-    setSubmitting(true);
-    setError(null);
+    setSubmitting(true)
+    setError(null)
 
     try {
-      await signInAsAgent({ username: username.trim(), password });
+      await signInAsAgent({ username: username.trim(), password })
       // The provider flips the route once the profile has loaded.
     } catch (e) {
-      setError(extractErrorMessage(e));
+      setError(extractErrorMessage(e))
       // Rethrowing lets SaveButton drop back to idle instead of showing success.
-      throw e;
+      throw e
     } finally {
-      setSubmitting(false);
+      setSubmitting(false)
     }
-  };
+  }
 
   return (
     <AuthScreen
@@ -85,8 +85,8 @@ export default function AgentLoginScreen() {
         <Input
           value={username}
           onChangeText={(next) => {
-            setUsername(next);
-            setError(null);
+            setUsername(next)
+            setError(null)
           }}
           placeholder="agent username"
           autoCapitalize="none"
@@ -108,8 +108,8 @@ export default function AgentLoginScreen() {
         <PasswordInput
           value={password}
           onChangeText={(next) => {
-            setPassword(next);
-            setError(null);
+            setPassword(next)
+            setError(null)
           }}
           placeholder="Enter your password"
           autoCapitalize="none"
@@ -145,5 +145,5 @@ export default function AgentLoginScreen() {
         />
       </View>
     </AuthScreen>
-  );
+  )
 }

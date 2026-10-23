@@ -1,28 +1,43 @@
-import {Hono} from 'hono'
-import {handle} from '@hono/aws-lambda'
-import type {ApiGatewayRequestContextV2, LambdaContext, LambdaEvent} from "@hono/aws-lambda"
-import {apiErrorHandler, withAuth, withResponse} from "@repo/api/utils";
-import {getChatPageConversationSchema, getConversationMessagesSchema, getConversationProfilesSchema} from "@repo/types/req"
-import {validateWithZod} from "@repo/api/req"
-import {chatPageConversationsController, conversationMessagesController, conversationProfilesController} from "./conversatinos.controller";
-
+import { Hono } from "hono"
+import { handle } from "@hono/aws-lambda"
+import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
+import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
+import {
+  getChatPageConversationSchema,
+  getConversationMessagesSchema,
+  getConversationProfilesSchema,
+} from "@repo/types/req"
+import { validateWithZod } from "@repo/api/req"
+import {
+  chatPageConversationsController,
+  conversationMessagesController,
+  conversationProfilesController,
+} from "./conversatinos.controller"
 
 type Bindings = {
-    event: LambdaEvent
-    requestContext: ApiGatewayRequestContextV2
-    context: LambdaContext
+  event: LambdaEvent
+  requestContext: ApiGatewayRequestContextV2
+  context: LambdaContext
 }
 
-const app = new Hono<{ Bindings: Bindings }>({strict: false}).basePath("/api/conversations")
+const app = new Hono<{ Bindings: Bindings }>({ strict: false }).basePath("/api/conversations")
 
 app.use(withResponse)
 app.use(withAuth)
 
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 
-app.post("/profiles", validateWithZod(getConversationProfilesSchema), conversationProfilesController)
+app.post(
+  "/profiles",
+  validateWithZod(getConversationProfilesSchema),
+  conversationProfilesController,
+)
 
-app.get("/:conversationId/messages", validateWithZod(getConversationMessagesSchema), conversationMessagesController)
+app.post(
+  "/messages",
+  validateWithZod(getConversationMessagesSchema),
+  conversationMessagesController,
+)
 
 app.onError(apiErrorHandler)
 

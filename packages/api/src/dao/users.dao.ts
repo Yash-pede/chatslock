@@ -1,174 +1,193 @@
-import {BatchGetCommand, PutCommand, QueryCommand, UpdateCommand, DeleteCommand} from "@aws-sdk/lib-dynamodb";
 import {
-    createUserSchema,
-    PREFIXES,
-    TABLE_NAME,
-    USER_SK,
-    updateUserSchema,
-    userItem,
-    conversationUserProfileSchema,
-    userSchema,
-    USERNAME_GSI,
-    getUserSchema,
-    type CreateUserInput,
-    type UpdateUserInput,
-    type ConversationUserProfile,
-} from "@repo/types/schema";
-import {MAX_PROFILE_LOOKUP} from "@repo/types/req";
-import z from "zod";
-import {AWSManager, buildKey, definedEntries, parseOrThrow} from "../utils";
+  BatchGetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb"
+import {
+  createUserSchema,
+  PREFIXES,
+  TABLE_NAME,
+  USER_SK,
+  updateUserSchema,
+  userItem,
+  conversationUserProfileSchema,
+  userSchema,
+  USERNAME_GSI,
+  getUserSchema,
+  type CreateUserInput,
+  type UpdateUserInput,
+  type ConversationUserProfile,
+  type UserId,
+} from "@repo/types/schema"
+import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
+import z from "zod"
+import { AWSManager, buildKey, definedEntries, parseOrThrow } from "../utils"
 
 /** How long a stored WebSocket connection row is kept (DynamoDB TTL). */
-const CONNECTION_TTL_SECONDS = 2 * 60 * 60;
+const CONNECTION_TTL_SECONDS = 2 * 60 * 60
 
 /** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
-const userKey = (userId: string) => ({PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0]});
+const userKey = (userId: UserId) => ({ PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0] })
 
 export const usersDao = {
-    getUserById: async (input: { userId: string }): Promise<z.infer<typeof getUserSchema> | undefined> => {
-        const result = await AWSManager.dbClient.send(
-            new QueryCommand({
-                TableName: TABLE_NAME,
-                KeyConditionExpression: "#pk = :pk AND #sk = :sk",
-                ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
-                ExpressionAttributeValues: {":pk": buildKey(PREFIXES.USER, input.userId), ":sk": USER_SK[0]}
-            })
-        )
+  getUserById: async (input: {
+    userId: UserId
+  }): Promise<z.infer<typeof getUserSchema> | undefined> => {
+    const result = await AWSManager.dbClient.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "#pk = :pk AND #sk = :sk",
+        ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
+        ExpressionAttributeValues: {
+          ":pk": buildKey(PREFIXES.USER, input.userId),
+          ":sk": USER_SK[0],
+        },
+      }),
+    )
 
-        const item = result.Items?.[0];
-        return item === undefined ? undefined : parseOrThrow(getUserSchema, item);
-    },
-    /**
-     * Fetch the public profile of several users in one call. BatchGet caps at
-     * 100 keys, so callers stay far below that (the chat page asks for <= 25).
-     * Missing ids are simply absent from the result.
-     */
-    getPublicProfilesByIds: async (input: { userIds: string[] }): Promise<ConversationUserProfile[]> => {
-        const ids = [...new Set(input.userIds)].slice(0, MAX_PROFILE_LOOKUP);
-        if (ids.length === 0) return [];
+    const item = result.Items?.[0]
+    return item === undefined ? undefined : parseOrThrow(getUserSchema, item)
+  },
+  /**
+   * Fetch the public profile of several users in one call. BatchGet caps at
+   * 100 keys, so callers stay far below that (the chat page asks for <= 25).
+   * Missing ids are simply absent from the result.
+   */
+  getPublicProfilesByIds: async (input: {
+    userIds: UserId[]
+  }): Promise<ConversationUserProfile[]> => {
+    const ids = [...new Set(input.userIds)].slice(0, MAX_PROFILE_LOOKUP)
+    if (ids.length === 0) return []
 
-        const result = await AWSManager.dbClient.send(
-            new BatchGetCommand({
-                RequestItems: {
-                    [TABLE_NAME]: {
-                        Keys: ids.map((id) => userKey(id)),
-                        ProjectionExpression: "userId, username, fullName, avatar",
-                    },
-                },
-            }),
-        );
+    const result = await AWSManager.dbClient.send(
+      new BatchGetCommand({
+        RequestItems: {
+          [TABLE_NAME]: {
+            Keys: ids.map((id) => userKey(id)),
+            ProjectionExpression: "userId, username, fullName, avatar",
+          },
+        },
+      }),
+    )
 
-        const items = result.Responses?.[TABLE_NAME] ?? [];
-        return items.map((item) => parseOrThrow(conversationUserProfileSchema, item));
-    },
-    getUserByUsername: async (input: { username: string }) => {
+    const items = result.Responses?.[TABLE_NAME] ?? []
+    return items.map((item) => parseOrThrow(conversationUserProfileSchema, item))
+  },
+  getUserByUsername: async (input: { username: string }) => {
+    const result = await AWSManager.dbClient.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        IndexName: USERNAME_GSI,
 
-        const result = await AWSManager.dbClient.send(
-            new QueryCommand({
-                TableName: TABLE_NAME,
-                IndexName: USERNAME_GSI,
+        KeyConditionExpression: "#sk = :sk AND #username = :username",
+        ExpressionAttributeNames: {
+          "#sk": "SK",
+          "#username": "username",
+        },
+        ExpressionAttributeValues: {
+          ":sk": USER_SK[0],
+          ":username": input.username.toLowerCase(),
+        },
+      }),
+    )
 
-                KeyConditionExpression: "#sk = :sk AND #username = :username",
-                ExpressionAttributeNames: {
-                    "#sk": "SK",
-                    "#username": "username",
-                },
-                ExpressionAttributeValues: {
-                    ":sk": USER_SK[0],
-                    ":username": input.username.toLowerCase(),
-                },
-            })
-        );
+    return result.Items?.map((item) => parseOrThrow(userSchema, item))
+  },
+  updateUser: async (input: UpdateUserInput): Promise<void> => {
+    const { userId } = parseOrThrow(updateUserSchema, input)
+    const attributes = definedEntries(input, ["userId"])
 
-        return result.Items?.map((item) => parseOrThrow(userSchema, item));
-    },
-    updateUser: async (input: UpdateUserInput): Promise<void> => {
-        const {userId} = parseOrThrow(updateUserSchema, input);
-        const attributes = definedEntries(input, ["userId"]);
+    const sets = attributes.map(([field]) => `#${field} = :${field}`)
 
-        const sets = attributes.map(([field]) => `#${field} = :${field}`);
+    await AWSManager.dbClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: userKey(userId),
+        UpdateExpression: `SET #updatedAt = :updatedAt${sets.map((set) => `, ${set}`).join("")}`,
+        ConditionExpression: "attribute_exists(PK)",
+        ExpressionAttributeNames: {
+          "#updatedAt": "updatedAt",
+          ...Object.fromEntries(attributes.map(([field]) => [`#${field}`, field])),
+        },
+        ExpressionAttributeValues: {
+          ":updatedAt": Date.now(),
+          ...Object.fromEntries(attributes.map(([field, value]) => [`:${field}`, value])),
+        },
+      }),
+    )
+  },
+  createUser: async (input: CreateUserInput): Promise<void> => {
+    const data = parseOrThrow(createUserSchema, input)
+    const now = Date.now()
 
-        await AWSManager.dbClient.send(
-            new UpdateCommand({
-                TableName: TABLE_NAME,
-                Key: userKey(userId),
-                UpdateExpression: `SET #updatedAt = :updatedAt${sets.map((set) => `, ${set}`).join("")}`,
-                ConditionExpression: "attribute_exists(PK)",
-                ExpressionAttributeNames: {
-                    "#updatedAt": "updatedAt",
-                    ...Object.fromEntries(attributes.map(([field]) => [`#${field}`, field])),
-                },
-                ExpressionAttributeValues: {
-                    ":updatedAt": Date.now(),
-                    ...Object.fromEntries(attributes.map(([field, value]) => [`:${field}`, value])),
-                },
-            }),
-        );
-    },
-    createUser: async (input: CreateUserInput): Promise<void> => {
-        const data = parseOrThrow(createUserSchema, input);
-        const now = Date.now();
+    const item = parseOrThrow(userItem, {
+      ...userKey(data.userId),
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    })
 
-        const item = parseOrThrow(userItem, {
-            ...userKey(data.userId),
-            ...data,
-            createdAt: now,
-            updatedAt: now,
-        });
-
-        await AWSManager.dbClient.send(
-            new PutCommand({
-                TableName: TABLE_NAME,
-                Item: item,
-                ConditionExpression: "attribute_not_exists(PK)",
-            }),
-        );
+    await AWSManager.dbClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: item,
+        ConditionExpression: "attribute_not_exists(PK)",
+      }),
+    )
   },
   /** Records an open WebSocket connection for a user (one row per socket). */
-  createUserConnection: async ({ userId, connectionId }: { userId: string; connectionId: string }) => {
+  createUserConnection: async ({
+    userId,
+    connectionId,
+  }: {
+    userId: UserId
+    connectionId: string
+  }) => {
     await AWSManager.dbClient.send(
-        new PutCommand({
-            TableName: TABLE_NAME,
-            Item: {
-                PK: buildKey(PREFIXES.USER, userId),
-                SK: buildKey(PREFIXES.CONNECTION, connectionId),
-                userId,
-                connectionId,
-                connectedAt: Date.now(),
-                expiresAt: Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS,
-            },
-            ConditionExpression: "attribute_not_exists(PK)",
-        }),
-    );
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          PK: buildKey(PREFIXES.USER, userId),
+          SK: buildKey(PREFIXES.CONNECTION, connectionId),
+          userId,
+          connectionId,
+          connectedAt: Date.now(),
+          expiresAt: Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS,
+        },
+        ConditionExpression: "attribute_not_exists(PK)",
+      }),
+    )
   },
   /** All open connection ids for a user (multiple devices). */
-  getUserConnections: async (input: { userId: string }): Promise<string[]> => {
+  getUserConnections: async (input: { userId: UserId }): Promise<string[]> => {
     const result = await AWSManager.dbClient.send(
-        new QueryCommand({
-            TableName: TABLE_NAME,
-            KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
-            ExpressionAttributeNames: {"#pk": "PK", "#sk": "SK"},
-            ExpressionAttributeValues: {
-                ":pk": buildKey(PREFIXES.USER, input.userId),
-                ":sk": PREFIXES.CONNECTION,
-            },
-            ProjectionExpression: "connectionId",
-        })
-    );
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
+        ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
+        ExpressionAttributeValues: {
+          ":pk": buildKey(PREFIXES.USER, input.userId),
+          ":sk": PREFIXES.CONNECTION,
+        },
+        ProjectionExpression: "connectionId",
+      }),
+    )
 
     return (result.Items ?? [])
-        .map((item) => item.connectionId)
-        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      .map((item) => item.connectionId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
   },
-  deleteUserConnection: (input: { userId: string; connectionId: string }) => {
+  deleteUserConnection: (input: { userId: UserId; connectionId: string }) => {
     return AWSManager.dbClient.send(
       new DeleteCommand({
         TableName: TABLE_NAME,
         Key: {
           PK: buildKey(PREFIXES.USER, input.userId),
           SK: buildKey(PREFIXES.CONNECTION, input.connectionId),
-        }
-      })
+        },
+      }),
     )
-  }
-};
+  },
+}

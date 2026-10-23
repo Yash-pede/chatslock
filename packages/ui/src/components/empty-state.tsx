@@ -1,23 +1,32 @@
-import React from "react";
-import { Pressable, Text, View } from "react-native";
-import { cn } from "../lib/utils";
+import React from "react"
+import { Pressable, Text, View } from "react-native"
+import { cn } from "../lib/utils"
 
 export interface EmptyStateProps extends React.ComponentPropsWithoutRef<typeof View> {
-  className?: string;
+  className?: string
   /** Large visual anchor above the title — an emoji, icon or illustration. */
-  icon?: React.ReactNode;
-  title: string;
-  description?: string;
-  action?: { label: string; onPress: () => void };
+  icon?: React.ReactNode
+  title: string
+  description?: string
+  action?: { label: string; onPress: () => void }
 }
 
-export function EmptyState({ className, icon, title, description, action, ...props }: EmptyStateProps) {
+export function EmptyState({
+  className,
+  icon,
+  title,
+  description,
+  action,
+  ...props
+}: EmptyStateProps) {
   return (
     <View className={cn("items-center justify-center px-8 py-16", className)} {...props}>
       {icon && <View className="mb-4">{icon}</View>}
       <Text className="mb-1 text-center text-lg font-semibold text-foreground">{title}</Text>
       {description && (
-        <Text className="mb-6 max-w-[280px] text-center text-sm text-muted-foreground">{description}</Text>
+        <Text className="mb-6 max-w-[280px] text-center text-sm text-muted-foreground">
+          {description}
+        </Text>
       )}
       {action && (
         <Pressable
@@ -30,5 +39,5 @@ export function EmptyState({ className, icon, title, description, action, ...pro
         </Pressable>
       )}
     </View>
-  );
+  )
 }

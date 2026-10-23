@@ -10,4 +10,4 @@ export const radius = {
   surface: "rounded-xl",
   /** Icon tiles and the brand mark. */
   tile: "rounded-xl",
-} as const;
+} as const

@@ -41,20 +41,20 @@ Understand these product roles before changing chat, account, or authorization b
 
 ## Repository map
 
-| Path | Package | What it is |
-| --- | --- | --- |
-| `apps/chat` | `chat` | Expo / React Native app (Expo Router, iOS + Android + web) |
-| `apps/main-site` | `main-site` | Vite + React marketing site |
-| `packages/api` | `@repo/api` | Server-side shared core: data-access code, Zod schemas, auth/response middleware, and domain types |
-| `packages/utils` | `@repo/utils` | Client-side shared core: axios client, token manager, auth services, JWT helpers |
-| `packages/ui` | `@repo/ui` | Design tokens and shared React Native components |
-| `packages/eslint-config`, `packages/typescript-config` | | Shared lint/TypeScript configurations |
-| `functions/auth` | `auth` | Lambda for authentication endpoints such as OTP, login, refresh, logout, and administrative user operations |
-| `functions/users` | `users` | Lambda for user endpoints such as `GET /api/users/me` and onboarding |
-| `functions/conversations` | `conversations` | Lambda for conversation endpoints |
-| `infrastructure` | | Terraform for Cognito, API Gateway, Lambda, storage, database resources, and the static site |
-| `layers/api` | | Generated Lambda layer archive; do not edit by hand |
-| `scripts` | | Build/deployment scripts |
+| Path                                                   | Package         | What it is                                                                                                  |
+| ------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `apps/chat`                                            | `chat`          | Expo / React Native app (Expo Router, iOS + Android + web)                                                  |
+| `apps/main-site`                                       | `main-site`     | Vite + React marketing site                                                                                 |
+| `packages/api`                                         | `@repo/api`     | Server-side shared core: data-access code, Zod schemas, auth/response middleware, and domain types          |
+| `packages/utils`                                       | `@repo/utils`   | Client-side shared core: axios client, token manager, auth services, JWT helpers                            |
+| `packages/ui`                                          | `@repo/ui`      | Design tokens and shared React Native components                                                            |
+| `packages/eslint-config`, `packages/typescript-config` |                 | Shared lint/TypeScript configurations                                                                       |
+| `functions/auth`                                       | `auth`          | Lambda for authentication endpoints such as OTP, login, refresh, logout, and administrative user operations |
+| `functions/users`                                      | `users`         | Lambda for user endpoints such as `GET /api/users/me` and onboarding                                        |
+| `functions/conversations`                              | `conversations` | Lambda for conversation endpoints                                                                           |
+| `infrastructure`                                       |                 | Terraform for Cognito, API Gateway, Lambda, storage, database resources, and the static site                |
+| `layers/api`                                           |                 | Generated Lambda layer archive; do not edit by hand                                                         |
+| `scripts`                                              |                 | Build/deployment scripts                                                                                    |
 
 Rule of thumb: code shared by an app and a Lambda belongs in an appropriate `@repo/*` package instead of being duplicated. Mobile-only code stays in `apps/chat/src`; Lambda-specific code stays in `functions/<name>/src`.
 

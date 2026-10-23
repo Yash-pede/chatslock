@@ -1,11 +1,12 @@
-import React from "react";
-import { KeyboardAvoidingView, Platform } from "react-native";
-import { cn } from "../lib/utils";
+import React from "react"
+import { KeyboardAvoidingView, Platform } from "react-native"
+import { cn } from "../lib/utils"
 
-export interface KeyboardViewProps
-  extends React.ComponentPropsWithoutRef<typeof KeyboardAvoidingView> {
-  className?: string;
-  offset?: number;
+export interface KeyboardViewProps extends React.ComponentPropsWithoutRef<
+  typeof KeyboardAvoidingView
+> {
+  className?: string
+  offset?: number
 }
 
 export function KeyboardView({ className, offset, behavior, ...props }: KeyboardViewProps) {
@@ -18,5 +19,5 @@ export function KeyboardView({ className, offset, behavior, ...props }: Keyboard
       keyboardVerticalOffset={offset}
       {...props}
     />
-  );
+  )
 }

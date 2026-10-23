@@ -4,8 +4,7 @@
  * `wss://` here because the same env value is also used to build HTTPS
  * callback URLs on the backend.
  */
-const WS_BASE_URL = (process.env.EXPO_PUBLIC_WSAPI_URL?.trim() || "")
-    .replace(/^http/, "ws");
+const WS_BASE_URL = (process.env.EXPO_PUBLIC_WSAPI_URL?.trim() || "").replace(/^http/, "ws")
 
 export const wsConnectUrl = (accessToken: string): string =>
-    `${WS_BASE_URL}?token=${encodeURIComponent(accessToken)}`;
+  `${WS_BASE_URL}?token=${encodeURIComponent(accessToken)}`

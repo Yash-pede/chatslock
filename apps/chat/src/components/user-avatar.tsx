@@ -1,25 +1,25 @@
-import { Image } from "expo-image";
-import { View } from "react-native";
-import { Text } from "@repo/ui";
+import { Image } from "expo-image"
+import { View } from "react-native"
+import { Text } from "@repo/ui"
 
 export interface UserAvatarProps {
-  size?: number;
-  avatar?: string | null;
+  size?: number
+  avatar?: string | null
   /** Used for the initials fallback and the accessibility label. */
-  name: string;
-  className?: string;
+  name: string
+  className?: string
 }
 
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase();
-  return parts.map((part) => part.charAt(0).toUpperCase()).join("");
+  const parts = name.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+  if (parts.length === 0) return "?"
+  if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase()
+  return parts.map((part) => part.charAt(0).toUpperCase()).join("")
 }
 
 /** Circular user avatar with a deterministic initials fallback. */
 export function UserAvatar({ size = 54, avatar, name, className }: UserAvatarProps) {
-  const shape = { width: size, height: size, borderRadius: size / 2 };
+  const shape = { width: size, height: size, borderRadius: size / 2 }
 
   if (avatar) {
     return (
@@ -30,7 +30,7 @@ export function UserAvatar({ size = 54, avatar, name, className }: UserAvatarPro
         transition={120}
         accessibilityLabel={name}
       />
-    );
+    )
   }
 
   return (
@@ -47,5 +47,5 @@ export function UserAvatar({ size = 54, avatar, name, className }: UserAvatarPro
         {initials(name)}
       </Text>
     </View>
-  );
+  )
 }

@@ -1,16 +1,16 @@
-import React from "react";
-import { Pressable, ScrollView, View } from "react-native";
-import { SafeArea, Text, useThemeColors } from "@repo/ui";
-import { ArrowLeft } from "lucide-react-native";
-import { router, type Href } from "expo-router";
+import React from "react"
+import { Pressable, ScrollView, View } from "react-native"
+import { SafeArea, Text, useThemeColors } from "@repo/ui"
+import { ArrowLeft } from "lucide-react-native"
+import { router, type Href } from "expo-router"
 
 interface AuthScreenProps {
-  title: string;
-  subtitle?: string;
+  title: string
+  subtitle?: string
   /** Renders a back arrow above the title. Pass a route to replace, or `true` to go back. */
-  back?: boolean | Href;
-  children: React.ReactNode;
-  footer?: React.ReactNode;
+  back?: boolean | Href
+  children: React.ReactNode
+  footer?: React.ReactNode
 }
 
 /**
@@ -19,12 +19,12 @@ interface AuthScreenProps {
  * screen background so the inputs read as the primary surface.
  */
 export function AuthScreen({ title, subtitle, back, children, footer }: AuthScreenProps) {
-  const colors = useThemeColors();
+  const colors = useThemeColors()
 
   const goBack = () => {
-    if (typeof back !== "boolean" && back != null) router.replace(back);
-    else router.back();
-  };
+    if (typeof back !== "boolean" && back != null) router.replace(back)
+    else router.back()
+  }
 
   return (
     <SafeArea>
@@ -64,5 +64,5 @@ export function AuthScreen({ title, subtitle, back, children, footer }: AuthScre
         {footer ? <View className="mt-10">{footer}</View> : null}
       </ScrollView>
     </SafeArea>
-  );
+  )
 }

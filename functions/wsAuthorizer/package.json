@@ -6,10 +6,14 @@
   "author": "",
   "type": "module",
   "scripts": {
-    "build": "esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" ./src/index.js"
+    "build": "esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" ./src/index.js",
+    "lint": "eslint . --max-warnings 0"
   },
   "devDependencies": {
-    "esbuild": "^0.28.1"
+    "@repo/eslint-config": "workspace:*",
+    "esbuild": "^0.28.1",
+    "eslint": "10.9.1",
+    "globals": "^17.12.0"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.998.0",

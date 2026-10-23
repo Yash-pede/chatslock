@@ -1,8 +1,8 @@
-import React from "react";
-import { View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
+import React from "react"
+import { View } from "react-native"
+import { SafeAreaView } from "react-native-safe-area-context"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
 
 const safeAreaVariants = cva("flex-1", {
   variants: {
@@ -13,13 +13,14 @@ const safeAreaVariants = cva("flex-1", {
     },
   },
   defaultVariants: { variant: "default" },
-});
+})
 
 export interface SafeAreaProps
-  extends React.ComponentPropsWithoutRef<typeof SafeAreaView>,
+  extends
+    React.ComponentPropsWithoutRef<typeof SafeAreaView>,
     VariantProps<typeof safeAreaVariants> {
-  className?: string;
-  children?: React.ReactNode;
+  className?: string
+  children?: React.ReactNode
 }
 
 /**
@@ -34,5 +35,5 @@ export function SafeArea({ variant, className, children, style, ...props }: Safe
         {children}
       </SafeAreaView>
     </View>
-  );
+  )
 }

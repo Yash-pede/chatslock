@@ -1,2 +1,2 @@
-export * from "./schema";
-export * from "./req";
+export * from "./schema"
+export * from "./req"

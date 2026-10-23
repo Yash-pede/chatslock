@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { StoreButtons } from "../components/StoreButtons";
+import { useEffect, useState } from "react"
+import { StoreButtons } from "../components/StoreButtons"
 import {
   buildAndroidIntentUrl,
   buildAppDeepLink,
@@ -7,16 +7,16 @@ import {
   buildStoreUrl,
   detectPlatform,
   type Platform,
-} from "../lib/app-links";
+} from "../lib/app-links"
 
 type AgentRedirectProps = {
-  agentId: string;
-};
+  agentId: string
+}
 
-type Status = "opening" | "store";
+type Status = "opening" | "store"
 
 /** How long we wait for the app to take over before assuming it's not installed. */
-const OPEN_TIMEOUT_MS = 1600;
+const OPEN_TIMEOUT_MS = 1600
 
 /**
  * The page a share link lands on when the OS did NOT hand off to the app
@@ -28,57 +28,53 @@ const OPEN_TIMEOUT_MS = 1600;
  * conversation can be resumed.
  */
 export default function AgentRedirect({ agentId }: AgentRedirectProps) {
-  const [platform] = useState<Platform>(() => detectPlatform());
-  const [status, setStatus] = useState<Status>(
-    platform === "desktop" ? "store" : "opening",
-  );
-  const [copied, setCopied] = useState(false);
+  const [platform] = useState<Platform>(() => detectPlatform())
+  const [status, setStatus] = useState<Status>(platform === "desktop" ? "store" : "opening")
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (platform === "desktop") {
-      return;
+      return
     }
 
-    let appTookOver = false;
+    let appTookOver = false
     const markTakenOver = () => {
-      appTookOver = true;
-    };
+      appTookOver = true
+    }
 
-    document.addEventListener("visibilitychange", markTakenOver);
-    window.addEventListener("pagehide", markTakenOver);
-    window.addEventListener("blur", markTakenOver);
+    document.addEventListener("visibilitychange", markTakenOver)
+    window.addEventListener("pagehide", markTakenOver)
+    window.addEventListener("blur", markTakenOver)
 
     // Android: intent:// opens the app or follows S.browser_fallback_url to the
     // Play listing. iOS/other: custom scheme, store fallback via the timer below.
     window.location.href =
-      platform === "android"
-        ? buildAndroidIntentUrl(agentId)
-        : buildAppDeepLink(agentId);
+      platform === "android" ? buildAndroidIntentUrl(agentId) : buildAppDeepLink(agentId)
 
     const timer = window.setTimeout(() => {
-      const stillVisible = document.visibilityState === "visible";
+      const stillVisible = document.visibilityState === "visible"
       if (!appTookOver && stillVisible) {
-        setStatus("store");
-        window.location.replace(buildStoreUrl(platform, agentId));
+        setStatus("store")
+        window.location.replace(buildStoreUrl(platform, agentId))
       }
-    }, OPEN_TIMEOUT_MS);
+    }, OPEN_TIMEOUT_MS)
 
     return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener("visibilitychange", markTakenOver);
-      window.removeEventListener("pagehide", markTakenOver);
-      window.removeEventListener("blur", markTakenOver);
-    };
-  }, [agentId, platform]);
+      window.clearTimeout(timer)
+      document.removeEventListener("visibilitychange", markTakenOver)
+      window.removeEventListener("pagehide", markTakenOver)
+      window.removeEventListener("blur", markTakenOver)
+    }
+  }, [agentId, platform])
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(buildShareUrl(agentId));
+      await navigator.clipboard.writeText(buildShareUrl(agentId))
     } catch {
       // Best effort — the visible link still works.
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
   }
 
   return (
@@ -106,8 +102,7 @@ export default function AgentRedirect({ agentId }: AgentRedirectProps) {
           <>
             <h1>Get chatslock to chat</h1>
             <p className="redirect__sub">
-              The app isn't on this device yet. Install it and you'll land right
-              back in this chat.
+              The app isn't on this device yet. Install it and you'll land right back in this chat.
             </p>
           </>
         )}
@@ -130,5 +125,5 @@ export default function AgentRedirect({ agentId }: AgentRedirectProps) {
         </a>
       </div>
     </div>
-  );
+  )
 }

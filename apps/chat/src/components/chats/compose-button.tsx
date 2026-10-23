@@ -1,10 +1,10 @@
-import { Pressable } from "react-native";
-import { Pencil } from "lucide-react-native";
-import { useThemeColors } from "@repo/ui";
+import { Pressable } from "react-native"
+import { Pencil } from "lucide-react-native"
+import { useThemeColors } from "@repo/ui"
 
 /** Telegram-style floating compose button pinned to the bottom-right. */
 export function ComposeButton({ onPress }: { onPress?: () => void }) {
-  const colors = useThemeColors();
+  const colors = useThemeColors()
 
   return (
     <Pressable
@@ -15,5 +15,5 @@ export function ComposeButton({ onPress }: { onPress?: () => void }) {
     >
       <Pencil size={22} color={colors.primaryForeground} strokeWidth={2.2} />
     </Pressable>
-  );
+  )
 }

@@ -1,27 +1,27 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
-import { Pressable, RefreshControl, ScrollView, SectionList, View } from "react-native";
-import { Search } from "lucide-react-native";
-import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui";
-import { extractErrorMessage } from "@repo/utils";
-import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api";
-import { useAuth } from "@/context/AuthContext";
-import { ComposeButton } from "@/components/chats/compose-button";
-import { ConversationRow } from "@/components/chats/conversation-row";
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { router } from "expo-router"
+import { Pressable, RefreshControl, ScrollView, SectionList, View } from "react-native"
+import { Search } from "lucide-react-native"
+import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui"
+import { extractErrorMessage } from "@repo/utils"
+import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api"
+import { useAuth } from "@/context/AuthContext"
+import { ComposeButton } from "@/components/chats/compose-button"
+import { ConversationRow } from "@/components/chats/conversation-row"
 import {
   buildChatList,
   collectPeerIds,
   fetchPeerProfiles,
   type ChatListItem,
-} from "@/components/chats/chat-list";
+} from "@/components/chats/chat-list"
 
-type FilterKey = "all" | "unread" | "empty";
+type FilterKey = "all" | "unread" | "empty"
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
   { key: "empty", label: "Get started" },
-];
+]
 
 /**
  * Telegram-like chats screen backed by `GET /api/conversations/chat`. Peer
@@ -30,49 +30,52 @@ const FILTERS: { key: FilterKey; label: string }[] = [
  * last activity.
  */
 export default function ChatsScreen() {
-  const colors = useThemeColors();
-  const { identity } = useAuth();
-  const currentUserId = identity?.id ?? null;
+  const colors = useThemeColors()
+  const { identity } = useAuth()
+  const currentUserId = identity?.id ?? null
 
-  const [items, setItems] = useState<ChatListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterKey>("all");
+  const [items, setItems] = useState<ChatListItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<FilterKey>("all")
 
-  const load = useCallback(async (signal: AbortSignal) => {
-    try {
-      const { conversations } = await conversationsApi.getChatPage({
-        pageSize: MAX_PROFILE_LOOKUP,
-      });
-      const peerIds = collectPeerIds(conversations, currentUserId);
-      const profiles = await fetchPeerProfiles(peerIds);
-      if (signal.aborted) return;
-      setItems(buildChatList(conversations, profiles, currentUserId));
-      setError(null);
-    } catch (e) {
-      if (signal.aborted) return;
-      setError(extractErrorMessage(e));
-    } finally {
-      if (!signal.aborted) {
-        setLoading(false);
-        setRefreshing(false);
+  const load = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        const { conversations } = await conversationsApi.getChatPage({
+          pageSize: MAX_PROFILE_LOOKUP,
+        })
+        const peerIds = collectPeerIds(conversations, currentUserId)
+        const profiles = await fetchPeerProfiles(peerIds)
+        if (signal.aborted) return
+        setItems(buildChatList(conversations, profiles, currentUserId))
+        setError(null)
+      } catch (e) {
+        if (signal.aborted) return
+        setError(extractErrorMessage(e))
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
-    }
-  }, [currentUserId]);
+    },
+    [currentUserId],
+  )
 
   // Fetches from an external system in response to mount (not a state sync),
   // so the immediate call is intentional; state lands in the promise callbacks.
   useEffect(() => {
-    const controller = new AbortController();
-    void Promise.resolve().then(() => load(controller.signal));
-    return () => controller.abort();
-  }, [load]);
+    const controller = new AbortController()
+    void Promise.resolve().then(() => load(controller.signal))
+    return () => controller.abort()
+  }, [load])
 
   const refresh = () => {
-    setRefreshing(true);
-    void load(new AbortController().signal);
-  };
+    setRefreshing(true)
+    void load(new AbortController().signal)
+  }
 
   const openConversation = (item: ChatListItem) => {
     router.push({
@@ -80,10 +83,10 @@ export default function ChatsScreen() {
       params: {
         id: item.conversationId,
         name: item.peer?.fullName ?? item.peer?.username ?? "Chat",
-        ...(item.peer?.avatar ? {avatar: item.peer.avatar} : {}),
+        ...(item.peer?.avatar ? { avatar: item.peer.avatar } : {}),
       },
-    });
-  };
+    })
+  }
 
   const counts = useMemo(
     () => ({
@@ -92,11 +95,11 @@ export default function ChatsScreen() {
       empty: items.filter((item) => !item.lastMessageAt && !item.lastMessagePreview).length,
     }),
     [items],
-  );
+  )
 
   const sections = useMemo(() => {
     if (filter === "unread") {
-      return [{ title: "Unread", data: items.filter((item) => item.unreadCount > 0) }];
+      return [{ title: "Unread", data: items.filter((item) => item.unreadCount > 0) }]
     }
     if (filter === "empty") {
       return [
@@ -104,10 +107,10 @@ export default function ChatsScreen() {
           title: "Get started",
           data: items.filter((item) => !item.lastMessageAt && !item.lastMessagePreview),
         },
-      ];
+      ]
     }
-    return [{ title: "All chats", data: items }];
-  }, [items, filter]);
+    return [{ title: "All chats", data: items }]
+  }, [items, filter])
 
   return (
     <SafeArea edges={["top", "left", "right"]}>
@@ -136,7 +139,7 @@ export default function ChatsScreen() {
           className="grow-0"
         >
           {FILTERS.map(({ key, label }) => {
-            const active = filter === key;
+            const active = filter === key
 
             return (
               <Pressable
@@ -165,7 +168,7 @@ export default function ChatsScreen() {
                   className={`h-[3px] w-8 rounded-full ${active ? "bg-primary" : "bg-transparent"}`}
                 />
               </Pressable>
-            );
+            )
           })}
         </ScrollView>
 
@@ -200,9 +203,7 @@ export default function ChatsScreen() {
                 tintColor={colors.mutedForeground}
               />
             }
-            renderItem={({ item }) => (
-              <ConversationRow item={item} onPress={openConversation} />
-            )}
+            renderItem={({ item }) => <ConversationRow item={item} onPress={openConversation} />}
             ListEmptyComponent={
               <View className="items-center justify-center px-8 py-16">
                 <Text variant="large">
@@ -231,5 +232,5 @@ export default function ChatsScreen() {
         <ComposeButton />
       </View>
     </SafeArea>
-  );
+  )
 }

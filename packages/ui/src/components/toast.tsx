@@ -1,33 +1,33 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
-import { View, Text, Pressable } from "react-native";
-import Animated, { SlideInUp, SlideOutUp } from "react-native-reanimated";
-import { cn } from "../lib/utils";
+import React, { createContext, useCallback, useContext, useState } from "react"
+import { View, Text, Pressable } from "react-native"
+import Animated, { SlideInUp, SlideOutUp } from "react-native-reanimated"
+import { cn } from "../lib/utils"
 
-type ToastVariant = "default" | "destructive" | "success";
-type ToastData = { id: string; title: string; description?: string; variant?: ToastVariant };
+type ToastVariant = "default" | "destructive" | "success"
+type ToastData = { id: string; title: string; description?: string; variant?: ToastVariant }
 
 const ToastContext = createContext<{
-  toast: (data: Omit<ToastData, "id">) => void;
-}>({ toast: () => {} });
+  toast: (data: Omit<ToastData, "id">) => void
+}>({ toast: () => {} })
 
 export function useToast() {
-  return useContext(ToastContext);
+  return useContext(ToastContext)
 }
 
 export interface ToastProviderProps {
-  children: React.ReactNode;
+  children: React.ReactNode
 }
 
 export function ToastProvider({ children }: ToastProviderProps) {
-  const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [toasts, setToasts] = useState<ToastData[]>([])
 
   const toast = useCallback((data: Omit<ToastData, "id">) => {
-    const id = Date.now().toString();
-    setToasts((prev) => [...prev, { ...data, id }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
-  }, []);
+    const id = Date.now().toString()
+    setToasts((prev) => [...prev, { ...data, id }])
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000)
+  }, [])
 
-  const dismiss = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+  const dismiss = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id))
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -38,18 +38,18 @@ export function ToastProvider({ children }: ToastProviderProps) {
         ))}
       </View>
     </ToastContext.Provider>
-  );
+  )
 }
 
 const variantStyles: Record<ToastVariant, string> = {
   default: "bg-card border-border",
   destructive: "bg-destructive border-destructive",
   success: "bg-green-600 border-green-600",
-};
+}
 
 function ToastItem({ data, onDismiss }: { data: ToastData; onDismiss: () => void }) {
-  const variant = data.variant ?? "default";
-  const isDefault = variant === "default";
+  const variant = data.variant ?? "default"
+  const isDefault = variant === "default"
 
   return (
     <Animated.View entering={SlideInUp.duration(300)} exiting={SlideOutUp.duration(200)}>
@@ -63,11 +63,13 @@ function ToastItem({ data, onDismiss }: { data: ToastData; onDismiss: () => void
           {data.title}
         </Text>
         {data.description && (
-          <Text className={cn("text-xs mt-1", isDefault ? "text-muted-foreground" : "text-white/80")}>
+          <Text
+            className={cn("text-xs mt-1", isDefault ? "text-muted-foreground" : "text-white/80")}
+          >
             {data.description}
           </Text>
         )}
       </Pressable>
     </Animated.View>
-  );
+  )
 }

@@ -1,10 +1,10 @@
-import React, { useState } from "react";
-import { View, TextInput, Pressable, Text, useColorScheme } from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
-import { radius } from "../lib/radius";
-import { useThemeColors } from "./theme-provider";
-import { Eye, EyeOff } from "lucide-react-native";
+import React, { useState } from "react"
+import { View, TextInput, Pressable, Text, useColorScheme } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
+import { radius } from "../lib/radius"
+import { useThemeColors } from "./theme-provider"
+import { Eye, EyeOff } from "lucide-react-native"
 
 const passwordVariants = cva(
   `flex-row items-center ${radius.control} border py-2 text-foreground`,
@@ -22,45 +22,38 @@ const passwordVariants = cva(
     },
     defaultVariants: { variant: "default", size: "md" },
   },
-);
+)
 
 export interface PasswordInputProps
-  extends Omit<React.ComponentPropsWithoutRef<typeof TextInput>, "secureTextEntry">,
+  extends
+    Omit<React.ComponentPropsWithoutRef<typeof TextInput>, "secureTextEntry">,
     VariantProps<typeof passwordVariants> {
-  className?: string;
-  showStrength?: boolean;
+  className?: string
+  showStrength?: boolean
 }
 
 function getStrength(value: string): number {
-  let score = 0;
-  if (value.length >= 8) score++;
-  if (/[A-Z]/.test(value)) score++;
-  if (/[0-9]/.test(value)) score++;
-  if (/[^A-Za-z0-9]/.test(value)) score++;
-  return score;
+  let score = 0
+  if (value.length >= 8) score++
+  if (/[A-Z]/.test(value)) score++
+  if (/[0-9]/.test(value)) score++
+  if (/[^A-Za-z0-9]/.test(value)) score++
+  return score
 }
 
-const strengthColors = [
-  "bg-destructive",
-  "bg-orange-500",
-  "bg-yellow-500",
-  "bg-green-500",
-];
-const strengthLabels = ["Weak", "Fair", "Good", "Strong"];
+const strengthColors = ["bg-destructive", "bg-orange-500", "bg-yellow-500", "bg-green-500"]
+const strengthLabels = ["Weak", "Fair", "Good", "Strong"]
 
 export const PasswordInput = React.forwardRef<
   React.ElementRef<typeof TextInput>,
   PasswordInputProps
->(function PasswordInput(
-  { variant, size, className, showStrength, onChangeText, ...props },
-  ref
-) {
-  const [visible, setVisible] = useState(false);
-  const [value, setValue] = useState("");
-  const strength = getStrength(value);
-  const dark = useColorScheme() === "dark";
-  const colors = useThemeColors();
-  const caret = colors.foreground;
+>(function PasswordInput({ variant, size, className, showStrength, onChangeText, ...props }, ref) {
+  const [visible, setVisible] = useState(false)
+  const [value, setValue] = useState("")
+  const strength = getStrength(value)
+  const dark = useColorScheme() === "dark"
+  const colors = useThemeColors()
+  const caret = colors.foreground
 
   return (
     <View className="gap-2">
@@ -74,8 +67,8 @@ export const PasswordInput = React.forwardRef<
           cursorColor={caret}
           secureTextEntry={!visible}
           onChangeText={(text) => {
-            setValue(text);
-            onChangeText?.(text);
+            setValue(text)
+            onChangeText?.(text)
           }}
           accessibilityLabel="Password"
           {...props}
@@ -114,5 +107,5 @@ export const PasswordInput = React.forwardRef<
         </View>
       )}
     </View>
-  );
-});
+  )
+})

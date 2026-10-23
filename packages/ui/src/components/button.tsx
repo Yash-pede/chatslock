@@ -1,9 +1,9 @@
-import React from "react";
-import { Pressable, Text, ActivityIndicator } from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
-import { radius } from "../lib/radius";
-import { useThemeColors } from "./theme-provider";
+import React from "react"
+import { Pressable, Text, ActivityIndicator } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
+import { radius } from "../lib/radius"
+import { useThemeColors } from "./theme-provider"
 
 const buttonVariants = cva(
   `flex-row items-center justify-center ${radius.control} min-h-12 min-w-12`,
@@ -25,8 +25,8 @@ const buttonVariants = cva(
       },
     },
     defaultVariants: { variant: "default", size: "md" },
-  }
-);
+  },
+)
 
 const buttonTextVariants = cva("text-center font-medium", {
   variants: {
@@ -41,40 +41,53 @@ const buttonTextVariants = cva("text-center font-medium", {
     size: { sm: "text-sm", md: "text-base", lg: "text-lg", icon: "text-sm" },
   },
   defaultVariants: { variant: "default", size: "md" },
-});
+})
 
 export interface ButtonProps
-  extends React.ComponentPropsWithoutRef<typeof Pressable>,
-    VariantProps<typeof buttonVariants> {
-  className?: string;
-  textClassName?: string;
-  children?: string;
-  icon?: React.ReactNode;
-  iconAfter?: React.ReactNode;
-  loading?: boolean;
+  extends React.ComponentPropsWithoutRef<typeof Pressable>, VariantProps<typeof buttonVariants> {
+  className?: string
+  textClassName?: string
+  children?: string
+  icon?: React.ReactNode
+  iconAfter?: React.ReactNode
+  loading?: boolean
 }
 
-export function Button({ variant, size, className, textClassName, children, icon, iconAfter, loading, disabled, ...props }: ButtonProps) {
-  const isDisabled = disabled || loading;
-  const colors = useThemeColors();
-  const onFilledBg = variant === "default" || variant === "destructive";
-  const spinnerColor = onFilledBg ? colors.primaryForeground : colors.foreground;
+export function Button({
+  variant,
+  size,
+  className,
+  textClassName,
+  children,
+  icon,
+  iconAfter,
+  loading,
+  disabled,
+  ...props
+}: ButtonProps) {
+  const isDisabled = disabled || loading
+  const colors = useThemeColors()
+  const onFilledBg = variant === "default" || variant === "destructive"
+  const spinnerColor = onFilledBg ? colors.primaryForeground : colors.foreground
 
   return (
     <Pressable
-      className={cn(buttonVariants({ variant, size }), isDisabled && "opacity-50", "active:opacity-80", className)}
+      className={cn(
+        buttonVariants({ variant, size }),
+        isDisabled && "opacity-50",
+        "active:opacity-80",
+        className,
+      )}
       accessibilityRole="button"
       accessible={true}
       disabled={isDisabled}
       {...props}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={spinnerColor} />
-      ) : icon ?? null}
+      {loading ? <ActivityIndicator size="small" color={spinnerColor} /> : (icon ?? null)}
       {children ? (
         <Text className={cn(buttonTextVariants({ variant, size }), textClassName)}>{children}</Text>
       ) : null}
       {!loading && iconAfter ? iconAfter : null}
     </Pressable>
-  );
+  )
 }

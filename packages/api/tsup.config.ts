@@ -1,15 +1,10 @@
-import { defineConfig } from "tsup";
-import dotenv from "dotenv";
+import { defineConfig } from "tsup"
+import dotenv from "dotenv"
 
-dotenv.config();
+dotenv.config()
 
 export default defineConfig({
-  entry: [
-    "src/dao/index.ts",
-    "src/utils/index.ts",
-    "src/req/index.ts",
-    "src/core/index.ts",
-  ],
+  entry: ["src/dao/index.ts", "src/utils/index.ts", "src/req/index.ts", "src/core/index.ts"],
   clean: true,
   splitting: false,
   format: ["esm"],
@@ -19,4 +14,4 @@ export default defineConfig({
     AWS_REGION: process.env.AWS_REGION!,
     SECRET_NAME: process.env.SECRET_NAME!,
   },
-});
+})

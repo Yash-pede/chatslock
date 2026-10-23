@@ -23,10 +23,13 @@
     "build": "tsup && pnpm build:types",
     "build:types": "tsc --emitDeclarationOnly --declaration --declarationMap --outDir dist",
     "dev": "tsup --watch",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0"
   },
   "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "eslint": "10.9.1",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2"
   },

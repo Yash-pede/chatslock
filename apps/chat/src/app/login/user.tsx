@@ -1,119 +1,119 @@
-import { useEffect, useMemo, useState } from "react";
-import { router } from "expo-router";
-import { Pressable, View } from "react-native";
-import { InputOtp, Label, PhoneInput, SaveButton, Text } from "@repo/ui";
-import type { OtpChallenge } from "@repo/utils";
-import { useAuth } from "@/context/AuthContext";
-import { AuthScreen } from "@/components/auth-screen";
+import { useEffect, useMemo, useState } from "react"
+import { router } from "expo-router"
+import { Pressable, View } from "react-native"
+import { InputOtp, Label, PhoneInput, SaveButton, Text } from "@repo/ui"
+import type { OtpChallenge } from "@repo/utils"
+import { useAuth } from "@/context/AuthContext"
+import { AuthScreen } from "@/components/auth-screen"
 
-const RESEND_COOLDOWN_SECONDS = 30;
-const PHONE_DIGITS = 10;
-const OTP_DIGIT_HEIGHT = 58;
-const SEND_TRANSITION_DELAY_MS = 500;
+const RESEND_COOLDOWN_SECONDS = 30
+const PHONE_DIGITS = 10
+const OTP_DIGIT_HEIGHT = 58
+const SEND_TRANSITION_DELAY_MS = 500
 
 function localNumber(fullPhone: string): string {
-  return fullPhone.replace(/^\+91/, "").replace(/\D/g, "");
+  return fullPhone.replace(/^\+91/, "").replace(/\D/g, "")
 }
 
 function isPhoneValid(phone: string): boolean {
-  return new RegExp(`^\\d{${PHONE_DIGITS}}$`).test(localNumber(phone));
+  return new RegExp(`^\\d{${PHONE_DIGITS}}$`).test(localNumber(phone))
 }
 
 function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
+  return error instanceof Error ? error.message : fallback
 }
 
 export default function UserLoginScreen() {
-  const { requestCode, submitCode, error: authError } = useAuth();
+  const { requestCode, submitCode, error: authError } = useAuth()
 
-  const [phone, setPhone] = useState("+91");
-  const [challenge, setChallenge] = useState<OtpChallenge | null>(null);
-  const [otp, setOtp] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [resendIn, setResendIn] = useState(0);
-  const [attemptedSend, setAttemptedSend] = useState(false);
-  const [step, setStep] = useState<"phone" | "otp">("phone");
-  const [requesting, setRequesting] = useState(false);
+  const [phone, setPhone] = useState("+91")
+  const [challenge, setChallenge] = useState<OtpChallenge | null>(null)
+  const [otp, setOtp] = useState("")
+  const [error, setError] = useState<string | null>(null)
+  const [resendIn, setResendIn] = useState(0)
+  const [attemptedSend, setAttemptedSend] = useState(false)
+  const [step, setStep] = useState<"phone" | "otp">("phone")
+  const [requesting, setRequesting] = useState(false)
 
-  const phoneValid = useMemo(() => isPhoneValid(phone), [phone]);
-  const otpValid = otp.length === 6;
-  const phoneHint = `Enter a ${PHONE_DIGITS}-digit phone number.`;
-  const shownError = error ?? authError;
-  const requestDone = challenge !== null;
-  const canSend = phoneValid && !requesting;
-  const canVerify = otpValid && requestDone && !requesting;
+  const phoneValid = useMemo(() => isPhoneValid(phone), [phone])
+  const otpValid = otp.length === 6
+  const phoneHint = `Enter a ${PHONE_DIGITS}-digit phone number.`
+  const shownError = error ?? authError
+  const requestDone = challenge !== null
+  const canSend = phoneValid && !requesting
+  const canVerify = otpValid && requestDone && !requesting
 
   useEffect(() => {
-    if (resendIn <= 0) return;
-    const timer = setTimeout(() => setResendIn((value) => value - 1), 1000);
-    return () => clearTimeout(timer);
-  }, [resendIn]);
+    if (resendIn <= 0) return
+    const timer = setTimeout(() => setResendIn((value) => value - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendIn])
 
   const requestOtp = async () => {
-    setRequesting(true);
+    setRequesting(true)
     try {
-      const next = await requestCode(phone);
-      setChallenge(next);
-      setError(null);
-      setResendIn(RESEND_COOLDOWN_SECONDS);
+      const next = await requestCode(phone)
+      setChallenge(next)
+      setError(null)
+      setResendIn(RESEND_COOLDOWN_SECONDS)
     } catch (e) {
-      setChallenge(null);
-      setOtp("");
-      setStep("phone");
-      setAttemptedSend(false);
-      setError(errorMessage(e, `We couldn't send a code to ${phone}. Try again in a moment.`));
+      setChallenge(null)
+      setOtp("")
+      setStep("phone")
+      setAttemptedSend(false)
+      setError(errorMessage(e, `We couldn't send a code to ${phone}. Try again in a moment.`))
     } finally {
-      setRequesting(false);
+      setRequesting(false)
     }
-  };
+  }
 
   const handleSendCode = async () => {
-    setAttemptedSend(true);
-    setError(null);
+    setAttemptedSend(true)
+    setError(null)
 
     if (!phoneValid) {
-      setError(phoneHint);
-      throw new Error(phoneHint);
+      setError(phoneHint)
+      throw new Error(phoneHint)
     }
 
-    setOtp("");
-    setChallenge(null);
+    setOtp("")
+    setChallenge(null)
 
-    const request = requestOtp();
-    await delay(SEND_TRANSITION_DELAY_MS);
-    setStep("otp");
-    await request;
-  };
+    const request = requestOtp()
+    await delay(SEND_TRANSITION_DELAY_MS)
+    setStep("otp")
+    await request
+  }
 
   const handleResend = async () => {
-    if (resendIn > 0 || requesting) return;
-    setError(null);
-    await requestOtp();
-  };
+    if (resendIn > 0 || requesting) return
+    setError(null)
+    await requestOtp()
+  }
 
   const handleVerify = async () => {
     if (!challenge || !otpValid) {
-      throw new Error("Enter the 6-digit code to continue.");
+      throw new Error("Enter the 6-digit code to continue.")
     }
 
     try {
-      await submitCode({ otp, username: challenge.username, session: challenge.session });
+      await submitCode({ otp, username: challenge.username, session: challenge.session })
     } catch (e) {
-      setError(errorMessage(e, "Could not verify the code."));
-      throw e;
+      setError(errorMessage(e, "Could not verify the code."))
+      throw e
     }
-  };
+  }
 
   const handleChangeNumber = () => {
-    setStep("phone");
-    setChallenge(null);
-    setError(null);
-    setOtp("");
-  };
+    setStep("phone")
+    setChallenge(null)
+    setError(null)
+    setOtp("")
+  }
 
   if (step === "phone") {
     return (
@@ -141,16 +141,16 @@ export default function UserLoginScreen() {
           <PhoneInput
             value={phone}
             onChangeText={(next) => {
-              setPhone(next);
-              setError(null);
+              setPhone(next)
+              setError(null)
             }}
             defaultCountry="IN"
             autoComplete="tel"
             textContentType="telephoneNumber"
             returnKeyType="done"
             onSubmitEditing={() => {
-              if (canSend) void handleSendCode().catch(() => {});
-              else setAttemptedSend(true);
+              if (canSend) void handleSendCode().catch(() => {})
+              else setAttemptedSend(true)
             }}
             accessibilityLabel="Phone number"
           />
@@ -178,7 +178,7 @@ export default function UserLoginScreen() {
           />
         </View>
       </AuthScreen>
-    );
+    )
   }
 
   return (
@@ -217,8 +217,8 @@ export default function UserLoginScreen() {
         <InputOtp
           value={otp}
           onValueChange={(next) => {
-            setOtp(next);
-            setError(null);
+            setOtp(next)
+            setError(null)
           }}
           digitHeight={OTP_DIGIT_HEIGHT}
           autoFocus
@@ -244,5 +244,5 @@ export default function UserLoginScreen() {
         />
       </View>
     </AuthScreen>
-  );
+  )
 }

@@ -1,7 +1,7 @@
-import React from "react";
-import { Text as RNText } from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
+import React from "react"
+import { Text as RNText } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
 
 const textVariants = cva("text-foreground", {
   variants: {
@@ -20,14 +20,13 @@ const textVariants = cva("text-foreground", {
   defaultVariants: {
     variant: "p",
   },
-});
+})
 
 export interface TextProps
-  extends React.ComponentPropsWithoutRef<typeof RNText>,
-    VariantProps<typeof textVariants> {
-  className?: string;
+  extends React.ComponentPropsWithoutRef<typeof RNText>, VariantProps<typeof textVariants> {
+  className?: string
 }
 
 export function Text({ variant, className, ...props }: TextProps) {
-  return <RNText className={cn(textVariants({ variant }), className)} {...props} />;
+  return <RNText className={cn(textVariants({ variant }), className)} {...props} />
 }

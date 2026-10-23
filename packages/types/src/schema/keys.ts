@@ -4,6 +4,6 @@ export const PREFIXES = {
   MEMBER: "MEMBER#",
   CONNECTION: "CONNECTION#",
   MESSAGE: "MESSAGE#",
-} as const;
+} as const
 
-export type PrefixName = keyof typeof PREFIXES;
+export type PrefixName = keyof typeof PREFIXES

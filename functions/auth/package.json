@@ -3,11 +3,14 @@
   "type": "module",
   "scripts": {
     "build": "pnpm run check-types && esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts",
-    "check-types": "tsc --noEmit -p tsconfig.json"
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0"
   },
   "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
     "@types/node": "^26.1.1",
     "esbuild": "^0.28.1",
+    "eslint": "10.9.1",
     "npm-run-all2": "^9.0.2"
   },
   "dependencies": {

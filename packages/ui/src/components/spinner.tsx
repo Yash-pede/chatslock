@@ -1,19 +1,18 @@
-import React from "react";
-import { ActivityIndicator, View } from "react-native";
-import { cn } from "../lib/utils";
-import { useThemeColors } from "./theme-provider";
+import React from "react"
+import { ActivityIndicator, View } from "react-native"
+import { cn } from "../lib/utils"
+import { useThemeColors } from "./theme-provider"
 
-const sizeMap = { sm: "small", md: "small", lg: "large" } as const;
-
+const sizeMap = { sm: "small", md: "small", lg: "large" } as const
 
 export interface SpinnerProps extends React.ComponentPropsWithoutRef<typeof View> {
-  className?: string;
-  size?: "sm" | "md" | "lg";
-  color?: string;
+  className?: string
+  size?: "sm" | "md" | "lg"
+  color?: string
 }
 
 export function Spinner({ size = "md", color, className, ...props }: SpinnerProps) {
-  const colors = useThemeColors();
+  const colors = useThemeColors()
   return (
     <View className={cn("items-center justify-center", className)} {...props}>
       <ActivityIndicator
@@ -22,5 +21,5 @@ export function Spinner({ size = "md", color, className, ...props }: SpinnerProp
         accessibilityRole="progressbar"
       />
     </View>
-  );
+  )
 }

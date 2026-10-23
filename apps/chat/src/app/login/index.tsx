@@ -1,14 +1,14 @@
-import { router } from "expo-router";
-import { ChevronRight, Headset, ShieldCheck, UserRound } from "lucide-react-native";
-import { Pressable, View } from "react-native";
-import { BrandMark, SafeArea, Text, useThemeColors } from "@repo/ui";
+import { router } from "expo-router"
+import { ChevronRight, Headset, ShieldCheck, UserRound } from "lucide-react-native"
+import { Pressable, View } from "react-native"
+import { BrandMark, SafeArea, Text, useThemeColors } from "@repo/ui"
 
 /**
  * Entry point for signed-out users: pick which kind of account is signing in.
  * Users continue with a phone OTP; agents sign in with username + password.
  */
 export default function LoginChoiceScreen() {
-  const colors = useThemeColors();
+  const colors = useThemeColors()
 
   return (
     <SafeArea>
@@ -46,7 +46,7 @@ export default function LoginChoiceScreen() {
         </View>
       </View>
     </SafeArea>
-  );
+  )
 }
 
 function ChoiceRow({
@@ -55,12 +55,12 @@ function ChoiceRow({
   description,
   onPress,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onPress: () => void;
+  icon: React.ReactNode
+  title: string
+  description: string
+  onPress: () => void
 }) {
-  const colors = useThemeColors();
+  const colors = useThemeColors()
 
   return (
     <Pressable
@@ -69,9 +69,7 @@ function ChoiceRow({
       accessibilityLabel={title}
       className="flex-row items-center gap-4 rounded-2xl bg-secondary px-4 py-4 active:opacity-70"
     >
-      <View className="h-11 w-11 items-center justify-center rounded-xl bg-background">
-        {icon}
-      </View>
+      <View className="h-11 w-11 items-center justify-center rounded-xl bg-background">{icon}</View>
       <View className="flex-1 gap-1">
         <Text variant="large">{title}</Text>
         <Text variant="small" className="font-normal leading-5 text-muted-foreground">
@@ -80,5 +78,5 @@ function ChoiceRow({
       </View>
       <ChevronRight size={18} color={colors.mutedForeground} />
     </Pressable>
-  );
+  )
 }

@@ -1,7 +1,7 @@
-import React from "react";
-import { View, Pressable, Text } from "react-native";
-import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "../lib/utils";
+import React from "react"
+import { View, Pressable, Text } from "react-native"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "../lib/utils"
 
 const tabBarVariants = cva("flex-row items-stretch border-t px-2 pt-2", {
   variants: {
@@ -12,13 +12,12 @@ const tabBarVariants = cva("flex-row items-stretch border-t px-2 pt-2", {
     },
   },
   defaultVariants: { variant: "default" },
-});
+})
 
 export interface TabBarProps
-  extends React.ComponentPropsWithoutRef<typeof View>,
-    VariantProps<typeof tabBarVariants> {
-  className?: string;
-  children?: React.ReactNode;
+  extends React.ComponentPropsWithoutRef<typeof View>, VariantProps<typeof tabBarVariants> {
+  className?: string
+  children?: React.ReactNode
 }
 
 /** AniUI bottom tab bar. Safe-area bottom padding belongs to the caller. */
@@ -31,16 +30,16 @@ export function TabBar({ variant, className, children, ...props }: TabBarProps) 
     >
       {children}
     </View>
-  );
+  )
 }
 
 export interface TabBarItemProps extends React.ComponentPropsWithoutRef<typeof Pressable> {
-  className?: string;
-  active?: boolean;
-  icon?: React.ReactNode;
-  label?: string;
-  badge?: number;
-  onPress?: () => void;
+  className?: string
+  active?: boolean
+  icon?: React.ReactNode
+  label?: string
+  badge?: number
+  onPress?: () => void
 }
 
 export function TabBarItem({
@@ -76,10 +75,7 @@ export function TabBarItem({
       ) : null}
       {label ? (
         <Text
-          className={cn(
-            "text-xs",
-            active ? "font-medium text-primary" : "text-muted-foreground"
-          )}
+          className={cn("text-xs", active ? "font-medium text-primary" : "text-muted-foreground")}
         >
           {label}
         </Text>
@@ -92,5 +88,5 @@ export function TabBarItem({
         </View>
       ) : null}
     </Pressable>
-  );
+  )
 }

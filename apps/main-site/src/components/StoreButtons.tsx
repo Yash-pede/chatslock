@@ -1,8 +1,8 @@
-import { buildStoreUrl } from "../lib/app-links";
+import { buildStoreUrl } from "../lib/app-links"
 
 type StoreButtonsProps = {
-  agentId?: string;
-};
+  agentId?: string
+}
 
 /**
  * App Store + Play Store download buttons. Both stores accept the link even
@@ -10,8 +10,8 @@ type StoreButtonsProps = {
  * both and let the user pick.
  */
 export function StoreButtons({ agentId }: StoreButtonsProps) {
-  const play = buildStoreUrl("android", agentId);
-  const appStore = buildStoreUrl("ios", agentId);
+  const play = buildStoreUrl("android", agentId)
+  const appStore = buildStoreUrl("ios", agentId)
 
   return (
     <div className="store-buttons">
@@ -39,5 +39,5 @@ export function StoreButtons({ agentId }: StoreButtonsProps) {
         </span>
       </a>
     </div>
-  );
+  )
 }

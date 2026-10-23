@@ -1,33 +1,78 @@
-import type { ReactNode } from "react";
-import { useEffect } from "react";
-import { View } from "react-native";
-import { Stack, useRouter, useSegments, type ErrorBoundaryProps } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import {
-  BrandMark,
-  Button,
-  SafeArea,
-  Spinner,
-  Text,
-  ThemeProvider,
-  ToastProvider,
-  useThemeColors,
-} from "@repo/ui";
-import { AlertCircle, LogOut, RefreshCw } from "lucide-react-native";
-import { AuthProvider, useAuth } from "@/context/AuthContext";
-import { SettingsProvider } from "@/context/SettingsContext";
-import { WsProvider } from "@/context/WebSocketContext";
-import "../../global.css";
+import { View } from "react-native"
+import { Stack, type ErrorBoundaryProps } from "expo-router"
+import { StatusBar } from "expo-status-bar"
+import { BrandMark, Button, SafeArea, Spinner, Text, ThemeProvider, ToastProvider } from "@repo/ui"
+import { AuthProvider, useAuth } from "@/context/AuthContext"
+import { SettingsProvider } from "@/context/SettingsContext"
+import { WsGate } from "@/context/WebSocketContext"
+import { UnverifiedGate } from "@/components/unverified-gate"
+import "../../global.css"
+
+/** Splash while tokens are restored and `/me` is checked. */
+function LoadingGate() {
+  return (
+    <SafeArea>
+      <View className="flex-1 items-center justify-center gap-4">
+        <BrandMark />
+        <Spinner size="sm" />
+      </View>
+    </SafeArea>
+  )
+}
 
 /**
- * The realtime socket lives at the root so it survives navigation between
- * route groups, but only mounts once the user is signed in — sign-out tears
- * it down.
+ * Auth guards live on the stack itself: each phase either protects or exposes
+ * its screens, and API Gateway-style `redirectTo` handles the navigation in
+ * one place (no redirect effect to race against).
  */
-function WsGate({ children }: { children: ReactNode }) {
-  const { phase } = useAuth();
-  if (phase !== "ready") return <>{children}</>;
-  return <WsProvider>{children}</WsProvider>;
+/**
+ * Splash/verified gates render instead of the navigator; the navigator itself
+ * is phase-protected (see `ProtectedNavigator`).
+ */
+function RootNavigator() {
+  const { phase, error, reloadProfile, signOut } = useAuth()
+
+  if (phase === "loading") return <LoadingGate />
+
+  if (phase === "unverified") {
+    return (
+      <UnverifiedGate
+        error={error}
+        onRetry={() => void reloadProfile()}
+        onSignOut={() => void signOut()}
+      />
+    )
+  }
+
+  return <ProtectedNavigator />
+}
+
+/**
+ * Per-phase screen protection, applied by wrapping the navigator differently
+ * per phase so `Stack.Protected` guards stay in sync with auth without any
+ * redirect effect:
+ * - unauthenticated/onboarding: auth screens open, app screens redirect away
+ * - ready: app screens open, auth screens redirect away
+ */
+function ProtectedNavigator() {
+  const { phase } = useAuth()
+  const authAllowed = phase === "unauthenticated" || phase === "onboarding"
+  const appAllowed = phase === "ready"
+
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={authAllowed}>
+        <Stack.Screen name="login" />
+      </Stack.Protected>
+      <Stack.Protected guard={phase === "onboarding"}>
+        <Stack.Screen name="onboarding" />
+      </Stack.Protected>
+      <Stack.Protected guard={appAllowed}>
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="conversation/[id]" />
+      </Stack.Protected>
+    </Stack>
+  )
 }
 
 export default function RootLayout() {
@@ -44,13 +89,10 @@ export default function RootLayout() {
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>
-  );
+  )
 }
 
-/**
- * Renders route errors instead of crashing the whole tree, so a deep link or
- * redirect failure shows its message and stays retryable.
- */
+/** Renders route errors instead of crashing the whole tree. */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <SafeArea>
@@ -62,116 +104,5 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
         <Button onPress={() => void retry()}>Try again</Button>
       </View>
     </SafeArea>
-  );
-}
-
-/**
- * Sends the user to the right place whenever the auth phase changes. During the
- * silent-restore phase a branded splash is shown instead of an empty stack.
- */
-function RootNavigator() {
-  const { phase, error, reloadProfile, signOut } = useAuth();
-  const segments = useSegments();
-  const router = useRouter();
-  const colors = useThemeColors();
-
-  useEffect(() => {
-    if (phase === "loading") return;
-
-    const inAuthGroup = segments[0] === "login";
-
-    if (phase === "unauthenticated") {
-      // Only force the chooser when the user is outside the login group so a
-      // pushed `/login/user` or `/login/agent` page is not replaced back to `/login`.
-      if (!inAuthGroup) router.replace("/login");
-      return;
-    }
-
-    if (phase === "onboarding") {
-      if (segments[0] !== "onboarding") router.replace("/onboarding");
-      return;
-    }
-
-    if (inAuthGroup || segments[0] === "onboarding") {
-      router.replace("/");
-    }
-  }, [phase, segments, router]);
-
-  if (phase === "loading") {
-    return (
-      <SafeArea>
-        <View className="flex-1 items-center justify-center gap-4">
-          <BrandMark />
-          <Spinner size="sm" />
-        </View>
-      </SafeArea>
-    );
-  }
-
-  // The session exists but `/users/me` did not confirm it. Rendering the gate
-  // here (instead of a route) avoids mounting/unmounting screens in the stack,
-  // which is what a redirect-based retry screen kept feeding back into.
-  if (phase === "unverified") {
-    return (
-      <SafeArea>
-        <View className="flex-1 justify-center gap-5 px-6">
-          <View>
-            <BrandMark className="mb-6 self-center" />
-            <Text variant="h2" className="text-center">
-              {"We couldn't load your account"}
-            </Text>
-            <Text variant="muted" className="mt-2 text-center leading-5">
-              Your session is still saved. Check your connection and try again.
-            </Text>
-          </View>
-
-          <View className="flex-row items-center gap-2 rounded-xl border border-destructive/50 bg-destructive/10 py-3 ps-4 pe-4">
-            <AlertCircle size={16} color={colors.destructive} />
-            <Text variant="small" className="flex-1 font-normal text-destructive">
-              {error ?? "Could not reach the server."}
-            </Text>
-          </View>
-
-          <View className="items-center">
-            <Button
-              className="min-w-40"
-              icon={<RefreshCw size={16} color={colors.primaryForeground} />}
-              onPress={() => void reloadProfile()}
-            >
-              Try again
-            </Button>
-          </View>
-
-          <View className="items-center">
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<LogOut size={14} color={colors.mutedForeground} />}
-              onPress={() => void signOut()}
-            >
-              Sign out
-            </Button>
-          </View>
-        </View>
-      </SafeArea>
-    );
-  }
-
-  const isAuthPhase = phase === "unauthenticated" || phase === "onboarding";
-
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={isAuthPhase} redirectTo="/login">
-        {/* `login` is a directory: `index` is the method chooser and is the
-            anchor of this group, so it is always reachable as `/login`. */}
-        <Stack.Screen name="login" />
-        <Stack.Screen name="onboarding" />
-      </Stack.Protected>
-      <Stack.Protected guard={phase === "ready"} redirectTo="/login">
-        <Stack.Screen name="(app)" />
-        {/* Pushed above the tabs so the conversation list stays mounted behind it. */}
-        <Stack.Screen name="conversation/[id]" />
-      </Stack.Protected>
-    </Stack>
-  );
+  )
 }
