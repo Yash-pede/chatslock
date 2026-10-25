@@ -62,7 +62,7 @@ export default function AgentLoginScreen() {
 
   return (
     <AuthScreen
-      back="/login"
+      back
       title="Agent sign-in"
       subtitle="Use your agent account credentials."
       footer={

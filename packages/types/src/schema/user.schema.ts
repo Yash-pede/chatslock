@@ -77,7 +77,6 @@ export const updateUserSchema = userSchema
     createdAt: true,
     updatedAt: true,
     username: true,
-    phone: true,
   })
   .partial()
   .extend({ userId })

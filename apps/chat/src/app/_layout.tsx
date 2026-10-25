@@ -2,13 +2,15 @@ import { View } from "react-native"
 import { Stack, type ErrorBoundaryProps } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { BrandMark, Button, SafeArea, Spinner, Text, ThemeProvider, ToastProvider } from "@repo/ui"
-import { AuthProvider, useAuth } from "@/context/AuthContext"
+import { AuthProvider } from "@/context/AuthContext"
+import { ProfileProvider, useProfile } from "@/context/profile/ProfileContext"
 import { SettingsProvider } from "@/context/SettingsContext"
 import { WsGate } from "@/context/WebSocketContext"
 import { UnverifiedGate } from "@/components/unverified-gate"
+import type { Flow } from "@/context/profile/profile"
 import "../../global.css"
 
-/** Splash while tokens are restored and `/me` is checked. */
+/** Splash while the session is restored and the profile is loaded. */
 function LoadingGate() {
   return (
     <SafeArea>
@@ -21,53 +23,42 @@ function LoadingGate() {
 }
 
 /**
- * Auth guards live on the stack itself: each phase either protects or exposes
- * its screens, and API Gateway-style `redirectTo` handles the navigation in
- * one place (no redirect effect to race against).
- */
-/**
  * Splash/verified gates render instead of the navigator; the navigator itself
- * is phase-protected (see `ProtectedNavigator`).
+ * is guarded by the flow (see `ProtectedNavigator`). The flow is the single
+ * routing input: it is derived from the session plus `GET /me`.
  */
 function RootNavigator() {
-  const { phase, error, reloadProfile, signOut } = useAuth()
+  const { flow, error, reload, reset } = useProfile()
 
-  if (phase === "loading") return <LoadingGate />
+  if (flow === "loading") return <LoadingGate />
 
-  if (phase === "unverified") {
-    return (
-      <UnverifiedGate
-        error={error}
-        onRetry={() => void reloadProfile()}
-        onSignOut={() => void signOut()}
-      />
-    )
+  if (flow === "unverified") {
+    return <UnverifiedGate error={error} onRetry={() => void reload()} onSignOut={() => void reset()} />
   }
 
-  return <ProtectedNavigator />
+  return <ProtectedNavigator flow={flow} />
 }
 
 /**
- * Per-phase screen protection, applied by wrapping the navigator differently
- * per phase so `Stack.Protected` guards stay in sync with auth without any
- * redirect effect:
- * - unauthenticated/onboarding: auth screens open, app screens redirect away
- * - ready: app screens open, auth screens redirect away
+ * Screens are protected per flow so `Stack.Protected` handles navigation in
+ * one place (no redirect effect to race against):
+ * - signedOut: only the sign-in screens exist. A verified user therefore can
+ *   never see `/login` again: as soon as the session exists the guard flips.
+ * - onboarding: only the profile-completion screen exists.
+ * - ready: only the app exists.
+ * Public links (`u/[id]`) stay mounted so a shared link keeps working.
  */
-function ProtectedNavigator() {
-  const { phase } = useAuth()
-  const authAllowed = phase === "unauthenticated" || phase === "onboarding"
-  const appAllowed = phase === "ready"
-
+function ProtectedNavigator({ flow }: { flow: Flow }) {
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={authAllowed}>
+      <Stack.Screen name="u/[id]" />
+      <Stack.Protected guard={flow === "signedOut"}>
         <Stack.Screen name="login" />
       </Stack.Protected>
-      <Stack.Protected guard={phase === "onboarding"}>
+      <Stack.Protected guard={flow === "onboarding"}>
         <Stack.Screen name="onboarding" />
       </Stack.Protected>
-      <Stack.Protected guard={appAllowed}>
+      <Stack.Protected guard={flow === "ready"}>
         <Stack.Screen name="(app)" />
         <Stack.Screen name="conversation/[id]" />
       </Stack.Protected>
@@ -80,12 +71,14 @@ export default function RootLayout() {
     <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
-          <SettingsProvider>
-            <WsGate>
-              <StatusBar style="auto" />
-              <RootNavigator />
-            </WsGate>
-          </SettingsProvider>
+          <ProfileProvider>
+            <SettingsProvider>
+              <WsGate>
+                <StatusBar style="auto" />
+                <RootNavigator />
+              </WsGate>
+            </SettingsProvider>
+          </ProfileProvider>
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

@@ -22,7 +22,7 @@ export const APP_LINKS = {
   scheme: "chatslock",
   /** Primary https path segment, i.e. /u/<id>. */
   linkPath: "u",
-  androidPackage: "com.chatslock.app",
+  androidPackage: "com.yash.chatzy",
   iosAppId: "0000000000",
 } as const
 

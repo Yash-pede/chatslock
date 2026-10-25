@@ -11,7 +11,7 @@ import { AppState } from "react-native"
 import { tokenManager } from "@repo/utils"
 import { useToast } from "@repo/ui"
 import { wsConnectUrl } from "@/lib/ws"
-import { useAuth } from "@/context/AuthContext"
+import { useProfile } from "@/context/profile/ProfileContext"
 
 /**
  * Realtime connection for signed-in screens. The access token travels in the
@@ -184,7 +184,7 @@ export function useWs(): WsContextValue {
  * it (and closes the socket) with the provider.
  */
 export function WsGate({ children }: { children: React.ReactNode }) {
-  const { phase } = useAuth()
-  if (phase !== "ready") return <>{children}</>
+  const { flow } = useProfile()
+  if (flow !== "ready") return <>{children}</>
   return <WsProvider>{children}</WsProvider>
 }

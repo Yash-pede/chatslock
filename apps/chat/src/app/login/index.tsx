@@ -1,14 +1,19 @@
 import { router } from "expo-router"
-import { ChevronRight, Headset, ShieldCheck, UserRound } from "lucide-react-native"
+import { AlertCircle, ChevronRight, Headset, ShieldCheck, UserRound } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { BrandMark, SafeArea, Text, useThemeColors } from "@repo/ui"
+import { useAuth } from "@/context/AuthContext"
 
 /**
  * Entry point for signed-out users: pick which kind of account is signing in.
  * Users continue with a phone OTP; agents sign in with username + password.
+ * It is also where the user lands when a stored session was thrown away, so it
+ * explains why they are here.
  */
 export default function LoginChoiceScreen() {
   const colors = useThemeColors()
+  const { auth } = useAuth()
+  const error = auth.status === "signedOut" ? auth.error : null
 
   return (
     <SafeArea>
@@ -22,6 +27,15 @@ export default function LoginChoiceScreen() {
             Private conversations between people and the team that supports them.
           </Text>
         </View>
+
+        {error ? (
+          <View className="mb-4 flex-row items-start gap-2 rounded-xl border border-destructive/50 bg-destructive/10 px-4 py-3">
+            <AlertCircle size={16} color={colors.destructive} />
+            <Text variant="small" className="flex-1 font-normal text-destructive">
+              {error}
+            </Text>
+          </View>
+        ) : null}
 
         <View className="gap-3">
           <ChoiceRow

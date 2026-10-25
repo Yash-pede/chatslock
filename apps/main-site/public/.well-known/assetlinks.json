@@ -3,7 +3,7 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.chatslock.app",
+      "package_name": "com.yash.chatzy",
       "sha256_cert_fingerprints": [
         "6B:A0:1A:4C:DE:74:D7:95:9E:BB:20:9C:88:16:09:B0:EB:09:34:49:10:3D:81:15:79:14:2E:A6:94:47:4D:A7"
       ]

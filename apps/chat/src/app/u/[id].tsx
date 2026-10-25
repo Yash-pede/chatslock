@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { Redirect, useLocalSearchParams } from "expo-router"
-import { useAuth } from "@/context/AuthContext"
+import { useIdentity } from "@/context/AuthContext"
+import { useProfile } from "@/context/profile/ProfileContext"
 
 /** Cognito `sub` values are UUIDs; anything else is not a profile id. */
 const USER_ID_PATTERN = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i
@@ -15,7 +16,8 @@ const USER_ID_PATTERN = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-
  */
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { phase, identity, setPendingAgentId } = useAuth()
+  const identity = useIdentity()
+  const { flow, setPendingAgentId } = useProfile()
 
   const isOwnProfile = typeof id === "string" && id === identity?.id
   const isLinkableAgent = typeof id === "string" && USER_ID_PATTERN.test(id)
@@ -24,7 +26,9 @@ export default function PublicProfileScreen() {
     if (isLinkableAgent && !isOwnProfile) setPendingAgentId(id)
   }, [id, isLinkableAgent, isOwnProfile, setPendingAgentId])
 
-  if (phase === "ready") return <Redirect href="/" />
-  if (phase === "onboarding") return <Redirect href="/onboarding" />
+  // A link can arrive signed out, mid-onboarding or inside the app; the flow
+  // already encodes which of those applies.
+  if (flow === "ready") return <Redirect href="/" />
+  if (flow === "onboarding") return <Redirect href="/onboarding" />
   return <Redirect href="/login/user" />
 }

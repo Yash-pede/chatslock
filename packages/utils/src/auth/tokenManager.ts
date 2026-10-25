@@ -17,6 +17,18 @@ interface TokenState {
 }
 
 class TokenManager {
+  private changeListeners = new Set<() => void>()
+
+  private notifyChange(): void {
+    this.changeListeners.forEach((listener) => {
+      try {
+        listener()
+      } catch {
+        // A listener must never break token handling.
+      }
+    })
+  }
+
   private state: TokenState = {
     accessToken: null,
     idToken: null,
@@ -35,11 +47,13 @@ class TokenManager {
       this.state.idToken = tokens.idToken
       this.state.user = claimsToUser(decodeJwt<IdTokenClaims>(tokens.idToken))
     }
+    this.notifyChange()
   }
 
   setAccessToken(token: string, expiresIn: number): void {
     this.state.accessToken = token
     this.state.accessTokenExpiry = Date.now() + expiresIn * 1000
+    this.notifyChange()
   }
 
   /** Current access token, or `null` when missing/expired. */
@@ -57,6 +71,18 @@ class TokenManager {
 
   getIdToken(): string | null {
     return this.state.idToken
+  }
+
+  /**
+   * Synchronous listener for token changes. Lets the HTTP client attach the
+   * Authorization header in the same tick as a request, so a call made right
+   * after sign-in never goes out unauthenticated.
+   */
+  onChange(listener: () => void): () => void {
+    this.changeListeners.add(listener)
+    return () => {
+      this.changeListeners.delete(listener)
+    }
   }
 
   /** User profile decoded from the ID token. */
@@ -77,6 +103,7 @@ class TokenManager {
     this.state.idToken = null
     this.state.accessTokenExpiry = null
     this.state.user = null
+    this.notifyChange()
   }
 
   getTimeUntilExpiry(): number {
@@ -97,6 +124,7 @@ class TokenManager {
   async clearAllTokens(): Promise<void> {
     this.clearAccessToken()
     await secureStorage.clearAllTokens()
+    this.notifyChange()
   }
 }
 

@@ -2,13 +2,13 @@ import React from "react"
 import { Pressable, ScrollView, View } from "react-native"
 import { SafeArea, Text, useThemeColors } from "@repo/ui"
 import { ArrowLeft } from "lucide-react-native"
-import { router, type Href } from "expo-router"
+import { router } from "expo-router"
 
 interface AuthScreenProps {
   title: string
   subtitle?: string
-  /** Renders a back arrow above the title. Pass a route to replace, or `true` to go back. */
-  back?: boolean | Href
+  /** Renders a back arrow above the title. It always returns to the method screen. */
+  back?: boolean
   children: React.ReactNode
   footer?: React.ReactNode
 }
@@ -21,10 +21,9 @@ interface AuthScreenProps {
 export function AuthScreen({ title, subtitle, back, children, footer }: AuthScreenProps) {
   const colors = useThemeColors()
 
-  const goBack = () => {
-    if (typeof back !== "boolean" && back != null) router.replace(back)
-    else router.back()
-  }
+  // Sign-in screens swap each other with `replace`, so there is no previous
+  // screen to pop to; dismissing goes to the method screen instead.
+  const goBack = () => router.dismissTo("/login")
 
   return (
     <SafeArea>

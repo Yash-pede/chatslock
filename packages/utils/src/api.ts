@@ -11,16 +11,37 @@ import { authEvents } from "./auth/authEvents"
  */
 export const apiClient: AxiosInstance = axios.create({
   timeout: 30000,
-  headers: { "Content-Type": "application/json" },
 })
+
+/**
+ * Latest token known to the client, kept in sync with `tokenManager`. Reading
+ * it in the request interceptor avoids the async secure-store lookup that used
+ * to send the very first request after sign-in out without a token.
+ */
+let currentAccessToken: string | null = null
+
+const syncAccessToken = () => {
+  currentAccessToken = tokenManager.getAccessToken()
+}
+
+// `tokenManager` is synchronous; this only mirrors its state.
+syncAccessToken()
+tokenManager.onChange(syncAccessToken)
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     config.baseURL = getApiBaseUrl()
+    // Refresh before the request goes out rather than eating a 401 first.
+    if (tokenManager.isAccessTokenExpired()) syncAccessToken()
 
-    const accessToken = tokenManager.getAccessToken()
+    const accessToken = currentAccessToken
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`
+    }
+    // Only send a JSON content type when there is a body: a bodyless GET with
+    // `Content-Type: application/json` is needlessly rejected by strict proxies.
+    if (config.data !== undefined && config.headers["Content-Type"] === undefined) {
+      config.headers["Content-Type"] = "application/json"
     }
     return config
   },

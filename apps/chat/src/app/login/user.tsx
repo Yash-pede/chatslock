@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { router } from "expo-router"
 import { Pressable, View } from "react-native"
 import { InputOtp, Label, PhoneInput, SaveButton, Text } from "@repo/ui"
@@ -28,7 +28,8 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export default function UserLoginScreen() {
-  const { requestCode, submitCode, error: authError } = useAuth()
+  const { requestCode, verifyCode, auth } = useAuth()
+  const authError = auth.status === "signedOut" ? auth.error : null
 
   const [phone, setPhone] = useState("+91")
   const [challenge, setChallenge] = useState<OtpChallenge | null>(null)
@@ -38,14 +39,24 @@ export default function UserLoginScreen() {
   const [attemptedSend, setAttemptedSend] = useState(false)
   const [step, setStep] = useState<"phone" | "otp">("phone")
   const [requesting, setRequesting] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  /** Bumped on every failed verify so the code input remounts at digit one. */
+  const [attempt, setAttempt] = useState(0)
+  /**
+   * Identifies the latest OTP request. Resend can overlap with the request
+   * started from the phone step, and a slow earlier response must never
+   * overwrite the challenge (and session) the user is actually looking at.
+   */
+  const requestId = useRef(0)
 
   const phoneValid = useMemo(() => isPhoneValid(phone), [phone])
   const otpValid = otp.length === 6
   const phoneHint = `Enter a ${PHONE_DIGITS}-digit phone number.`
   const shownError = error ?? authError
   const requestDone = challenge !== null
-  const canSend = phoneValid && !requesting
-  const canVerify = otpValid && requestDone && !requesting
+  const busy = requesting || verifying
+  const canSend = phoneValid && !busy
+  const canVerify = otpValid && requestDone && !busy
 
   useEffect(() => {
     if (resendIn <= 0) return
@@ -53,21 +64,33 @@ export default function UserLoginScreen() {
     return () => clearTimeout(timer)
   }, [resendIn])
 
-  const requestOtp = async () => {
+  const requestOtp = async (): Promise<OtpChallenge> => {
+    const current = ++requestId.current
     setRequesting(true)
     try {
       const next = await requestCode(phone)
+      if (current !== requestId.current) return next
+
+      // A new challenge replaces the previous one: its session is gone and
+      // any code typed for the old challenge must not be replayed against it.
       setChallenge(next)
+      setOtp("")
+      setStep("otp")
       setError(null)
       setResendIn(RESEND_COOLDOWN_SECONDS)
+      setAttempt((value) => value + 1)
+      return next
     } catch (e) {
-      setChallenge(null)
-      setOtp("")
-      setStep("phone")
-      setAttemptedSend(false)
-      setError(errorMessage(e, `We couldn't send a code to ${phone}. Try again in a moment.`))
+      if (current === requestId.current) {
+        setChallenge(null)
+        setOtp("")
+        setStep("phone")
+        setAttemptedSend(false)
+        setError(errorMessage(e, `We couldn't send a code to ${phone}. Try again in a moment.`))
+      }
+      throw e
     } finally {
-      setRequesting(false)
+      if (current === requestId.current) setRequesting(false)
     }
   }
 
@@ -95,16 +118,48 @@ export default function UserLoginScreen() {
     await requestOtp()
   }
 
+  /**
+   * Only the code exchange happens here. Once it succeeds the session exists,
+   * so auth flips to signed-in and the root navigator replaces this screen
+   * (onboarding or the app) — this screen never waits for `GET /me`.
+   */
   const handleVerify = async () => {
     if (!challenge || !otpValid) {
       throw new Error("Enter the 6-digit code to continue.")
     }
+    if (verifying) return
+
+    setVerifying(true)
+    setError(null)
 
     try {
-      await submitCode({ otp, username: challenge.username, session: challenge.session })
+      const result = await verifyCode({
+        otp,
+        username: challenge.username,
+        session: challenge.session,
+      })
+
+      if ("answerCorrect" in result) {
+        // Wrong but still retryable: Cognito moved on to a new session, so the
+        // next attempt must use it or it will replay the failed one forever.
+        setChallenge({
+          ...challenge,
+          ...(result.session ? { session: result.session } : {}),
+        })
+        setError(result.message)
+        setOtp("")
+        setAttempt((value) => value + 1)
+        return
+      }
     } catch (e) {
+      // Throttled/expired/dead challenge: keep it (Resend still works) so the
+      // user is not dropped back to the phone step.
       setError(errorMessage(e, "Could not verify the code."))
+      setOtp("")
+      setAttempt((value) => value + 1)
       throw e
+    } finally {
+      setVerifying(false)
     }
   }
 
@@ -183,7 +238,7 @@ export default function UserLoginScreen() {
 
   return (
     <AuthScreen
-      back="/login/user"
+      back
       title="Enter your code"
       subtitle={`We sent a 6-digit code to ${phone}.`}
       footer={
@@ -205,6 +260,11 @@ export default function UserLoginScreen() {
               </Text>
             </Pressable>
           </View>
+          {challenge ? null : (
+            <Text variant="small" className="text-center text-muted-foreground">
+              Request a new code to continue.
+            </Text>
+          )}
           <Pressable onPress={handleChangeNumber} accessibilityRole="button" hitSlop={8}>
             <Text variant="small" className="text-primary">
               Change number
@@ -215,6 +275,7 @@ export default function UserLoginScreen() {
     >
       <View className="items-center">
         <InputOtp
+          key={attempt}
           value={otp}
           onValueChange={(next) => {
             setOtp(next)
@@ -223,12 +284,13 @@ export default function UserLoginScreen() {
           digitHeight={OTP_DIGIT_HEIGHT}
           autoFocus
           className="w-full items-center justify-center"
+          accessibilityLabel="Verification code"
         />
       </View>
 
-      {error ? (
+      {shownError ? (
         <Text variant="small" className="text-center text-destructive">
-          {error}
+          {shownError}
         </Text>
       ) : null}
 

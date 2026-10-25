@@ -10,12 +10,14 @@ export const onboardUser = async ({
   cognitoUsername,
   fullName,
   username,
+  phone,
   agentId,
 }: {
   userId: string
   cognitoUsername: string
   fullName: string
   username: string
+  phone: string
   agentId?: string
 }) => {
   try {
@@ -26,7 +28,7 @@ export const onboardUser = async ({
       fullName,
       username,
       role: "user",
-      phone: cognitoUsername.split("_")[1], // extracting phone number
+      phone,
       ...(agentId !== undefined ? { agentId } : {}),
     })
 

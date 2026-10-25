@@ -19,10 +19,12 @@ import {
 } from "@aws-sdk/client-cognito-identity-provider"
 import { awsManagerInstance } from "@repo/api/utils"
 import { HTTPException } from "hono/http-exception"
+import { cognitoErrorName } from "./auth.service"
 
 export const otpController = async (c: Context) => {
   const { body }: InitiateOtpRequest = c.get("valid")
 
+  console.log("[auth] OTP requested", { phone: body.phone, role: body.role })
   const resp = await sendOtp(body.phone)
   return c.json({
     session: resp.Session,
@@ -34,6 +36,18 @@ export const otpController = async (c: Context) => {
 export const verifyOtpController = async (c: Context) => {
   const { body }: VerifyOtpRequest = c.get("valid")
   const resp = await verifyOtp(body.otp, body.username, body.session)
+
+  if ("answerCorrect" in resp) {
+    console.warn("[auth] OTP answer rejected, challenge still open", {
+      username: body.username,
+    })
+    return c.json({
+      answerCorrect: false,
+      session: resp.session,
+      message: "That code is incorrect. Check it and try again.",
+    })
+  }
+
   return c.json({
     refreshToken: resp.AuthenticationResult?.RefreshToken,
     accessToken: resp.AuthenticationResult?.AccessToken,
@@ -102,12 +116,30 @@ export const loginController = async (c: Context) => {
   } catch (error) {
     if (error instanceof HTTPException) throw error
 
+    const code = cognitoErrorName(error)
+
+    // Throttling and unconfirmed accounts are actionable and distinct from a
+    // wrong password, so they must not be hidden behind the generic message.
+    if (code === "TooManyRequestsException" || code === "LimitExceededException") {
+      throw new HTTPException(429, {
+        message: "Too many sign-in attempts. Wait a moment and try again.",
+      })
+    }
+    if (code === "UserNotConfirmedException") {
+      throw new HTTPException(403, { message: "This account is not confirmed yet." })
+    }
+    if (code === "PasswordResetRequiredException") {
+      throw new HTTPException(403, { message: "Ask an admin to reset your password." })
+    }
+
     if (error instanceof CognitoIdentityProviderServiceException) {
       // Wrong password, or a password that the pool policy rejects.
       throw new HTTPException(401, { message: INVALID_PASSWORD_MESSAGE })
     }
 
-    throw error
+    // Never let an unexpected failure reach the client as a Cognito trace.
+    console.error("Agent sign-in failed", error)
+    throw new HTTPException(500, { message: "Unable to sign in right now. Try again in a moment." })
   }
 }
 

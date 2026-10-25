@@ -4,299 +4,132 @@ import React, {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react"
 import {
   authEvents,
-  extractErrorMessage,
-  loginAsAgent,
   logout as revokeSession,
-  requestOtp,
   silentAuthService,
-  tokenManager,
   tokenRefreshService,
-  verifyOtp as verifyOtpCode,
   type AuthUser,
   type OtpChallenge,
+  type OtpVerifyResult,
 } from "@repo/utils"
-import { isMissingProfile, usersApi, type OnboardingInput, type Profile } from "@/api/users.api"
-import "@/lib/api"
+import {
+  authApi,
+  phoneFor,
+  rememberPhone,
+  signedIn,
+  storedIdentity,
+  type AuthState,
+} from "./auth/state"
 
-/** Re-exported so screens keep importing the profile type from the auth module. */
-export type { Profile }
-
-/** Steps a signed-in user can be in before they reach the main app. */
-export type AuthPhase =
-  | "loading"
-  | "unauthenticated"
-  | "onboarding"
-  /**
-   * The session exists but `GET /api/users/me` did not confirm it. The user is
-   * NOT treated as signed in: they see a retry screen first.
-   */
-  | "unverified"
-  | "ready"
-
-/** What `GET /api/users/me` gave us for the current session. */
-type ProfileState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; data: Profile }
-  | { status: "missing" }
-  | { status: "error"; message: string }
+export type { AuthState }
 
 interface AuthContextValue {
-  phase: AuthPhase
-  /** Full profile from `GET /api/users/me`; `null` until it has been fetched. */
-  user: Profile | null
-  /** Identity decoded from the ID token — useful before the profile loads. */
-  identity: AuthUser | null
-  isProfileLoading: boolean
-  /** Non-fatal profile refresh error (a failed refresh never signs you out). */
-  error: string | null
-
+  /** Pure session state: restoring, signed out, or signed in with an identity. */
+  auth: AuthState
   requestCode: (phone: string) => Promise<OtpChallenge>
-  submitCode: (params: { otp: string; username: string; session: string }) => Promise<void>
-  signInAsAgent: (params: { username: string; password: string }) => Promise<void>
-  /** Creates the profile row for a signed-in session that has none yet. */
-  completeOnboarding: (params: OnboardingInput) => Promise<void>
   /**
-   * Agent from a shared profile link (`chatslock.com/u/<agentId>`), carried from
-   * the signed-out screens through onboarding so the profile is linked to them.
+   * Resolves with the tokens (session adopted), or with a retry result when the
+   * code was wrong but can be retried against the returned session.
    */
-  pendingAgentId: string | null
-  setPendingAgentId: (agentId: string | null) => void
-  reloadProfile: () => Promise<void>
+  verifyCode: (params: { otp: string; username: string; session: string }) => Promise<OtpVerifyResult>
+  /** Phone number the session belongs to (needed by onboarding). */
+  phone: string | null
+  signInAsAgent: (params: { username: string; password: string }) => Promise<void>
   signOut: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-/** Detach the session locally when the server would not confirm the profile. */
-async function discardSession(): Promise<void> {
-  tokenRefreshService.stopAutoRefresh()
-  await tokenManager.clearAllTokens()
-}
-
 /**
- * Loads the profile for an existing session. Returns the profile state so the
- * caller (startup restore or a fresh login) decides how fatal a failure is.
+ * Owns the device session and nothing else. No `/me` call happens here: whether
+ * the account needs onboarding is a profile concern (see `ProfileProvider`).
  */
-async function fetchProfileState(): Promise<ProfileState> {
-  try {
-    return { status: "ready", data: await usersApi.getMe() }
-  } catch (e) {
-    if (isMissingProfile(e)) return { status: "missing" }
-    return { status: "error", message: extractErrorMessage(e) }
-  }
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [phase, setPhase] = useState<AuthPhase>("loading")
-  /** Ref mirror of `phase` so callbacks stay stable without re-creating on phase. */
-  const phaseRef = useRef<AuthPhase>("loading")
-  const [profile, setProfile] = useState<ProfileState>({ status: "idle" })
-  const [identity, setIdentity] = useState<AuthUser | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [pendingAgentId, setPendingAgentId] = useState<string | null>(null)
+  const [auth, setAuth] = useState<AuthState>({ status: "restoring" })
 
-  /**
-   * Startup path: tokens were already on the device. A failed `/me` is
-   * recoverable, so the session is kept and the user gets a retry screen
-   * instead of the app (or being silently signed out).
-   */
-  const restoreSession = useCallback(async () => {
-    if (!tokenManager.getUser()) return
-
-    setIdentity(tokenManager.getUser())
-    const next = await fetchProfileState()
-    setProfile(next)
-
-    if (next.status === "ready") {
-      tokenRefreshService.startAutoRefresh()
-      setPhase("ready")
-      setError(null)
-    } else if (next.status === "missing") {
-      tokenRefreshService.startAutoRefresh()
-      setPhase("onboarding")
-      setError(null)
-    } else {
-      // Do not open the app on an unconfirmed session — let the user retry.
-      setPhase("unverified")
-      setError(next.status === "error" ? next.message : null)
-    }
+  const signOutLocally = useCallback((error: string | null) => {
+    tokenRefreshService.stopAutoRefresh()
+    setAuth({ status: "signedOut", error })
   }, [])
 
   useEffect(() => {
     let cancelled = false
 
     void (async () => {
-      const state = await silentAuthService.attemptSilentAuth()
+      const silent = await silentAuthService.attemptSilentAuth()
       if (cancelled) return
 
-      if (!state.isAuthenticated) {
-        setIdentity(null)
-        setProfile({ status: "idle" })
-        setError(state.error)
-        setPhase("unauthenticated")
-        return
+      const identity = silent.isAuthenticated ? storedIdentity() : null
+      if (identity) {
+        setAuth(signedIn(identity))
+      } else {
+        setAuth({ status: "signedOut", error: silent.error })
       }
-
-      await restoreSession()
     })()
 
     return () => {
       cancelled = true
     }
-  }, [restoreSession])
+  }, [])
 
   useEffect(() => {
-    return authEvents.onLogout(() => {
-      tokenRefreshService.stopAutoRefresh()
-      setIdentity(null)
-      setProfile({ status: "idle" })
-      setError(null)
-      setPhase("unauthenticated")
-    })
-  }, [])
+    // The API layer clears its tokens when a refresh is rejected; mirror it.
+    return authEvents.onLogout(() => signOutLocally(null))
+  }, [signOutLocally])
 
-  /**
-   * Runs immediately after a successful credential exchange. The profile is
-   * part of the session: if it cannot be loaded (other than "not created yet"),
-   * the tokens are discarded and the login is reported as failed.
-   */
-  const completeLogin = useCallback(async () => {
-    setProfile({ status: "loading" })
-
-    const next = await fetchProfileState()
-
-    if (next.status === "error") {
-      await discardSession()
-      setIdentity(null)
-      setProfile({ status: "idle" })
-      setPhase("unauthenticated")
-      setError(next.message)
-      throw new Error(next.message)
+  /** Shared tail of both sign-in flows: tokens now exist, so the session does. */
+  const adoptSession = useCallback(() => {
+    const identity = storedIdentity()
+    if (!identity) {
+      throw new Error("Sign-in did not produce a session. Please try again.")
     }
-
-    tokenRefreshService.startAutoRefresh()
-    setIdentity(tokenManager.getUser())
-    setProfile(next)
-    setError(null)
-    setPhase(next.status === "ready" ? "ready" : "onboarding")
+    setAuth(signedIn(identity))
   }, [])
 
-  const requestCode = useCallback((phone: string) => requestOtp(phone), [])
+  const requestCode = useCallback(async (phone: string) => {
+    const challenge = await authApi.requestCode(phone)
+    // Kept for onboarding: the profile row is created from this number.
+    rememberPhone(phone)
+    return challenge
+  }, [])
 
-  const submitCode = useCallback(
+  const verifyCode = useCallback(
     async (params: { otp: string; username: string; session: string }) => {
-      setError(null)
-      await verifyOtpCode(params)
-      await completeLogin()
+      const result = await authApi.verifyCode(params)
+      if ("answerCorrect" in result) return result
+      adoptSession()
+      return result
     },
-    [completeLogin],
+    [adoptSession],
   )
 
   const signInAsAgent = useCallback(
-    async ({ username, password }: { username: string; password: string }) => {
-      setError(null)
-      await loginAsAgent({ username, password })
-      await completeLogin()
+    async (params: { username: string; password: string }) => {
+      await authApi.signInAsAgent(params)
+      adoptSession()
     },
-    [completeLogin],
-  )
-
-  /** Re-reads `/me` without discarding the session. */
-  const reloadProfile = useCallback(async () => {
-    setError(null)
-    setProfile((current) => (current.status === "ready" ? current : { status: "loading" }))
-    // Retrying from the unverified screen goes back to the loading splash.
-    if (phaseRef.current === "unverified") setPhase("loading")
-
-    const next = await fetchProfileState()
-    setProfile(next)
-
-    if (next.status === "ready") {
-      tokenRefreshService.startAutoRefresh()
-      setPhase("ready")
-      setError(null)
-    } else if (next.status === "missing") {
-      setPhase("onboarding")
-      setError(null)
-    } else if (next.status === "error") {
-      setPhase("unverified")
-      setError(next.message)
-    }
-  }, [])
-
-  /**
-   * Creates the missing profile through `POST /api/users/onboarding`, attaching
-   * the agent from a shared link when there is one, then re-reads `/me` so the
-   * phase only flips to `ready` once the profile actually exists.
-   */
-  const completeOnboarding = useCallback(
-    async ({ fullName, username }: OnboardingInput) => {
-      setError(null)
-      const agentId = pendingAgentId ?? undefined
-
-      await usersApi.onboard({
-        fullName,
-        username,
-        ...(agentId ? { agentId } : {}),
-      })
-
-      setPendingAgentId(null)
-      await reloadProfile()
-    },
-    [pendingAgentId, reloadProfile],
+    [adoptSession],
   )
 
   const signOut = useCallback(async () => {
+    rememberPhone(null)
     await revokeSession()
-    tokenRefreshService.stopAutoRefresh()
-    setIdentity(null)
-    setProfile({ status: "idle" })
-    setError(null)
-    setPendingAgentId(null)
-    setPhase("unauthenticated")
-  }, [])
+    signOutLocally(null)
+  }, [signOutLocally])
+
+  const phone = auth.status === "signedIn" ? phoneFor(auth.identity) : null
 
   const value = useMemo<AuthContextValue>(
-    () => ({
-      phase,
-      user: profile.status === "ready" ? profile.data : null,
-      identity,
-      isProfileLoading: profile.status === "loading",
-      error,
-      requestCode,
-      submitCode,
-      signInAsAgent,
-      completeOnboarding,
-      pendingAgentId,
-      setPendingAgentId,
-      reloadProfile,
-      signOut,
-    }),
-    [
-      phase,
-      profile,
-      identity,
-      error,
-      requestCode,
-      submitCode,
-      signInAsAgent,
-      completeOnboarding,
-      pendingAgentId,
-      reloadProfile,
-      signOut,
-    ],
+    () => ({ auth, phone, requestCode, verifyCode, signInAsAgent, signOut }),
+    [auth, phone, requestCode, verifyCode, signInAsAgent, signOut],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-/** Auth actions and state. Use `useUser()` for the profile alone. */
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext)
   if (!context) {
@@ -305,13 +138,8 @@ export function useAuth(): AuthContextValue {
   return context
 }
 
-/** The signed-in user's profile from `GET /api/users/me`, safe to call anywhere. */
-export function useUser(): {
-  user: Profile | null
-  isLoading: boolean
-  error: string | null
-  reload: () => Promise<void>
-} {
-  const { user, isProfileLoading, error, reloadProfile } = useAuth()
-  return { user, isLoading: isProfileLoading, error, reload: reloadProfile }
+/** The signed-in identity, or `null`. Convenience for screens that only need it. */
+export function useIdentity(): AuthUser | null {
+  const { auth } = useAuth()
+  return auth.status === "signedIn" ? auth.identity : null
 }

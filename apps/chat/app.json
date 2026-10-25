@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "chatslock",
-    "slug": "chatslock",
+    "slug": "chatzy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,10 +10,13 @@
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.chatslock.app",
-      "associatedDomains": ["applinks:chatslock.com", "applinks:www.chatslock.com"]
+      "associatedDomains": [
+        "applinks:chatslock.com",
+        "applinks:www.chatslock.com"
+      ]
     },
     "android": {
-      "package": "com.chatslock.app",
+      "package": "com.yash.chatzy",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,7 +40,10 @@
               "pathPrefix": "/u"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -69,6 +75,17 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "cb7eff0e-b0bb-40b5-8ac6-113481155f90"
+      }
+    },
+    "owner": "yash-pede"
   }
 }

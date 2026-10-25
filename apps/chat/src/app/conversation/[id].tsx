@@ -14,7 +14,7 @@ import {
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { EmptyState, Spinner, Text, TypingIndicator, useThemeColors } from "@repo/ui"
-import { useAuth } from "@/context/AuthContext"
+import { useProfile } from "@/context/profile/ProfileContext"
 import { MessageBubble } from "@/components/messages/message-bubble"
 import { MessageComposer } from "@/components/messages/message-composer"
 import type { ChatMessage } from "@/components/messages/types"
@@ -45,7 +45,7 @@ export default function ConversationScreen() {
   const colors = useThemeColors()
   const insets = useSafeAreaInsets()
   const params = useLocalSearchParams<{ id: string; name?: string; avatar?: string }>()
-  const { user } = useAuth()
+  const { user } = useProfile()
 
   const name = params.name ?? "Conversation"
   const avatar = params.avatar

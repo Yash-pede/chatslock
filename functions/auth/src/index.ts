@@ -10,9 +10,13 @@ import {
 } from "./auth.controller"
 import { initiateOtpSchema, loginSchema, refreshOtpSchema, verifyOtpSchema } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
-import { HTTPException } from "hono/http-exception"
+import { apiErrorHandler, withResponse } from "@repo/api/utils"
 
 const app = new Hono({ strict: false }).basePath("/api/auth")
+
+// Same `{ ok, data }` envelope as the other services, and the shared error
+// handler so every failure lands in CloudWatch with method/path/status.
+app.use(withResponse)
 
 app.post("/otp/request", validateWithZod(initiateOtpSchema), otpController)
 app.post("/otp/verify", validateWithZod(verifyOtpSchema), verifyOtpController)
@@ -33,18 +37,6 @@ app.post("/logout", logOutUserController)
 // Disable In Prod
 app.post("/4dm!n-cr3ate-us3r", adminCreateUserController)
 
-app.onError((err, c) => {
-  const status = err instanceof HTTPException ? err.status : 500
-  if (!(err instanceof HTTPException)) {
-    console.error(err)
-  }
-  return c.json(
-    {
-      success: false,
-      message: err.message || "Something went wrong.",
-    },
-    status,
-  )
-})
+app.onError(apiErrorHandler)
 
 export const handler = handle(app)

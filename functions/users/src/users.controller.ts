@@ -21,6 +21,7 @@ export const onboardingController = async (c: Context) => {
     cognitoUsername: c.get("cognitoUsername"),
     username: body.username,
     fullName: body.fullName,
+    phone: body.phone,
     agentId: body.agentId,
   })
 

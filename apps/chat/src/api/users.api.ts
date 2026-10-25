@@ -23,8 +23,10 @@ function unwrap<T>(body: unknown): T {
   return body as T
 }
 
-/** Body of `POST /api/users/onboarding`, typed from the server-side schema. */
 export type OnboardingInput = UserOnboardingRequest["body"]
+
+/** What the onboarding screen collects; `phone` comes from the session. */
+export type OnboardingForm = Omit<OnboardingInput, "phone">
 
 /**
  * User endpoints. Screens call these instead of `apiClient` directly so URL

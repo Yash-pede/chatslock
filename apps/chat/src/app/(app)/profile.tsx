@@ -39,6 +39,7 @@ import type { AvatarContentType } from "@repo/types/req"
 import { userProfileUrl } from "@/lib/links"
 import { usersApi } from "@/api/users.api"
 import { useAuth } from "@/context/AuthContext"
+import { useProfile } from "@/context/profile/ProfileContext"
 import { AvatarViewer } from "@/components/profile/avatar-viewer"
 import { UserAvatar } from "@/components/user-avatar"
 
@@ -79,7 +80,8 @@ function roleLabel(role: string | undefined): string {
  */
 export default function ProfileScreen() {
   const colors = useThemeColors()
-  const { user, reloadProfile, signOut } = useAuth()
+  const { user, reload } = useProfile()
+  const { signOut } = useAuth()
 
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState("")
@@ -154,7 +156,7 @@ export default function ProfileScreen() {
         fileName: asset.fileName ?? `avatar.${DEFAULT_EXTENSION[contentType]}`,
       })
       setAvatarUri(nextAvatar)
-      await reloadProfile()
+      await reload()
     } catch (e) {
       setError(extractErrorMessage(e))
     } finally {
@@ -173,7 +175,7 @@ export default function ProfileScreen() {
     if (trimmed.length < 3) throw new Error("Name must be at least 3 characters.")
 
     await usersApi.updateMe({ fullName: trimmed })
-    await reloadProfile()
+    await reload()
     setEditingName(false)
   }
 

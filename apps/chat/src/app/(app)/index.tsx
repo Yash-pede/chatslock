@@ -5,7 +5,7 @@ import { Search } from "lucide-react-native"
 import { Button, SafeArea, Spinner, Text, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
 import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api"
-import { useAuth } from "@/context/AuthContext"
+import { useIdentity } from "@/context/AuthContext"
 import { ComposeButton } from "@/components/chats/compose-button"
 import { ConversationRow } from "@/components/chats/conversation-row"
 import {
@@ -31,7 +31,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
  */
 export default function ChatsScreen() {
   const colors = useThemeColors()
-  const { identity } = useAuth()
+  const identity = useIdentity()
   const currentUserId = identity?.id ?? null
 
   const [items, setItems] = useState<ChatListItem[]>([])

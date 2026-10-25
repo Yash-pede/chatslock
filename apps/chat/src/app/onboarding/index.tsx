@@ -12,17 +12,21 @@ import {
   useThemeColors,
 } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
-import { useAuth } from "@/context/AuthContext"
+import { useProfile } from "@/context/profile/ProfileContext"
 
 const USERNAME_PATTERN = /^[a-z0-9_]{3,20}$/
 
 /**
- * First-login profile step: the Cognito account exists but has no profile row
- * yet. Submitting calls `POST /api/users/onboarding`, which links the user to
- * the agent from a shared profile link (`pendingAgentId`) when there is one.
+ * First-login profile step for a phone account: the Cognito user exists (the
+ * OTP was verified) but `GET /api/users/me` answered 404 / "User not found",
+ * so there is no profile row yet.
+ *
+ * Submitting calls `POST /api/users/onboarding`, which creates that row (and
+ * links the user to the agent from a shared profile link, when there is one).
+ * The route flips to the app only after `/me` confirms the row exists.
  */
 export default function OnboardingScreen() {
-  const { completeOnboarding, pendingAgentId, signOut } = useAuth()
+  const { completeOnboarding, pendingAgentId, reset } = useProfile()
   const colors = useThemeColors()
 
   const [fullName, setFullName] = useState("")
@@ -57,7 +61,7 @@ export default function OnboardingScreen() {
         fullName: trimmedName,
         username: normalizedUsername,
       })
-      // The provider flips the route once the profile has loaded.
+      // The provider flips the route to the app once `/me` confirms the row.
     } catch (e) {
       setError(extractErrorMessage(e))
       throw e
@@ -155,7 +159,7 @@ export default function OnboardingScreen() {
           </Text>
         ) : null}
 
-        <Button variant="ghost" onPress={() => void signOut()} className="mt-2">
+        <Button variant="ghost" onPress={() => void reset()} className="mt-2">
           Sign out
         </Button>
       </View>

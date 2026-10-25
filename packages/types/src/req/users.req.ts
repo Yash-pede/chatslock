@@ -1,6 +1,6 @@
 import z from "zod"
 import { baseSchema } from "./base"
-import { avatar, fullName, role, userId, username } from "../schema"
+import { avatar, fullName, phone, role, userId, username } from "../schema"
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max)
 
@@ -15,6 +15,7 @@ export const userOnboardingSchema = baseSchema.extend({
   body: z.strictObject({
     username: username.toLowerCase(),
     fullName,
+    phone,
     agentId: z.optional(userId),
   }),
 })
