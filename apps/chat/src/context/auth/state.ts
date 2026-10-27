@@ -52,7 +52,10 @@ export function signedIn(identity: AuthUser): AuthState {
 /** Cognito credential exchanges. Throws with a user-facing message. */
 export const authApi = {
   requestCode: (phone: string): Promise<OtpChallenge> => requestOtp(phone),
-  verifyCode: (params: { otp: string; username: string; session: string }): Promise<OtpVerifyResult> =>
-    verifyOtpCode(params),
+  verifyCode: (params: {
+    otp: string
+    username: string
+    session: string
+  }): Promise<OtpVerifyResult> => verifyOtpCode(params),
   signInAsAgent: (params: { username: string; password: string }) => loginAsAgent(params),
 }

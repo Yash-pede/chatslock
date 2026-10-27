@@ -105,8 +105,8 @@ module "apigateway-v2-ws" {
   name        = "prod-ws"
   description = "Ws Api for messages, pressence, and other updates."
 
-  protocol_type                = "WEBSOCKET"
-  route_selection_expression   = "$request.body.action"
+  protocol_type              = "WEBSOCKET"
+  route_selection_expression = "$request.body.action"
   # Null => the module keeps API Gateway's default ($request.header.x-api-key).
   # No usage plans/API keys exist here, so nothing sets api_key_required and the
   # value is inert; the authorizer's usageIdentifierKey is intentionally unused.
@@ -121,8 +121,8 @@ module "apigateway-v2-ws" {
 
   authorizers = {
     "main" = {
-      name             = "ws-auth"
-      authorizer_type  = "REQUEST"
+      name            = "ws-auth"
+      authorizer_type = "REQUEST"
       # Browsers/wscat cannot send custom headers on the handshake; the token
       # travels in the query string instead.
       identity_sources = ["route.request.querystring.token"]
@@ -142,7 +142,7 @@ module "apigateway-v2-ws" {
       }
     }
     "$disconnect" = {
-      operation_name = "DisconnectRoute"
+      operation_name     = "DisconnectRoute"
       authorization_type = "NONE"
 
       integration = {
@@ -159,6 +159,16 @@ module "apigateway-v2-ws" {
         uri  = var.ws_events_lambda_invoke_arn
       }
     },
+    "system" = {
+      operation_name     = "SystemRoute"
+      authorization_type = "NONE"
+      integration = {
+        type = "MOCK"
+        request_templates = {
+          "application/json" = "{\"statusCode\": 200}"
+        }
+      }
+    }
   }
 
 

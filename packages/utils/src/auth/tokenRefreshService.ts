@@ -8,6 +8,7 @@ import { authEvents } from "./authEvents"
  */
 class TokenRefreshService {
   private refreshTimer: ReturnType<typeof setTimeout> | null = null
+  private inFlight: Promise<void> | null = null
   private readonly REFRESH_THRESHOLD = 60 // seconds before expiry
 
   startAutoRefresh(): void {
@@ -26,12 +27,37 @@ class TokenRefreshService {
 
     const timeUntilExpiry = tokenManager.getTimeUntilExpiry()
     if (timeUntilExpiry <= 0) {
-      void this.performRefresh()
+      void this.refreshNow()
       return
     }
 
     const delay = Math.max((timeUntilExpiry - this.REFRESH_THRESHOLD) * 1000, 0)
-    this.refreshTimer = setTimeout(() => void this.performRefresh(), delay)
+    this.refreshTimer = setTimeout(() => void this.refreshNow(), delay)
+  }
+
+  /**
+   * Access token for consumers that need one *now* (e.g. a WebSocket handshake,
+   * which cannot wait on an axios 401 replay). Returns null while a refresh is
+   * in flight; concurrent callers share it instead of hammering Cognito.
+   */
+  ensureAccessToken(): string | null {
+    const token = tokenManager.getAccessToken()
+    if (token) return token
+    // `getRefreshToken` reads secure storage (async), so `performRefresh`
+    // re-checks the session itself; here it only avoids starting a refresh that
+    // cannot succeed. Callers retry until a token appears.
+    if (!this.inFlight) void this.refreshNow()
+    return null
+  }
+
+  /** Forces a refresh (e.g. the socket handshake was rejected with a stale token). */
+  refreshNow(): Promise<void> {
+    this.inFlight ??= this.performRefresh()
+      .catch(() => undefined)
+      .finally(() => {
+        this.inFlight = null
+      })
+    return this.inFlight
   }
 
   private async performRefresh(): Promise<void> {

@@ -1,10 +1,10 @@
 import type { WsContext, WsReply } from "@repo/api/core"
 import type {
-  DeleteMessageFrameRequest,
-  EditMessageFrameRequest,
-  ListMessagesFrameRequest,
-  ReadMessagesFrameRequest,
-  SendMessageFrameRequest,
+  DeleteMessageData,
+  EditMessageData,
+  ListMessageData,
+  ReadMessageData,
+  SendMessageData,
 } from "@repo/types/req"
 import { ApiException, parseOrThrow } from "@repo/api/utils"
 import {
@@ -25,18 +25,18 @@ import {
 } from "./message.service"
 
 export const readMessageController = async (c: WsContext): Promise<WsReply | void> => {
-  const { data } = c.get<ReadMessagesFrameRequest>("valid") ?? { data: undefined }
+  const data = c.get<ReadMessageData>("valid")
   if (!c.userId || !data) return c.reply(401)
 
   try {
     await readMessageService({ userId: c.userId, conversationId: data.conversationId })
   } catch (error) {
-    return wsErrorResponse(c, error)
+    return wsErrorResponse(c, error, data)
   }
 }
 
 export const sendMessageController = async (c: WsContext): Promise<WsReply | void> => {
-  const { data } = c.get<SendMessageFrameRequest>("valid") ?? { data: undefined }
+  const data = c.get<SendMessageData>("valid")
   if (!c.userId || !data) return c.reply(401)
 
   try {
@@ -46,17 +46,22 @@ export const sendMessageController = async (c: WsContext): Promise<WsReply | voi
       postToConnection: c.postToConnection,
     })
 
-    return c.reply(
-      200,
-      parseOrThrow(messageSentAckSchema, { type: WS_MESSAGE_ACK_TYPE.sent, message }),
-    )
+    // Validate before replying: a bad shape here would throw AFTER the row was
+    // written and turn into a 500 the client never sees (the socket was fine,
+    // but the sender sees no ack and re-sends).
+    const ack = parseOrThrow(messageSentAckSchema, {
+      type: WS_MESSAGE_ACK_TYPE.sent,
+      message,
+      ...clientIdOf(data),
+    })
+    return toReply(await c.push(ack))
   } catch (error) {
-    return wsErrorResponse(c, error)
+    return wsErrorResponse(c, error, data)
   }
 }
 
 export const editMessageController = async (c: WsContext): Promise<WsReply | void> => {
-  const { data } = c.get<EditMessageFrameRequest>("valid") ?? { data: undefined }
+  const data = c.get<EditMessageData>("valid")
   if (!c.userId || !data) return c.reply(401)
 
   try {
@@ -66,17 +71,22 @@ export const editMessageController = async (c: WsContext): Promise<WsReply | voi
       postToConnection: c.postToConnection,
     })
 
-    return c.reply(
-      200,
-      parseOrThrow(messageEditedAckSchema, { type: WS_MESSAGE_ACK_TYPE.edited, message }),
+    return toReply(
+      await c.push(
+        parseOrThrow(messageEditedAckSchema, {
+          type: WS_MESSAGE_ACK_TYPE.edited,
+          message,
+          ...clientIdOf(data),
+        }),
+      ),
     )
   } catch (error) {
-    return wsErrorResponse(c, error)
+    return wsErrorResponse(c, error, data)
   }
 }
 
 export const deleteMessageController = async (c: WsContext): Promise<WsReply | void> => {
-  const { data } = c.get<DeleteMessageFrameRequest>("valid") ?? { data: undefined }
+  const data = c.get<DeleteMessageData>("valid")
   if (!c.userId || !data) return c.reply(401)
 
   try {
@@ -86,48 +96,78 @@ export const deleteMessageController = async (c: WsContext): Promise<WsReply | v
       postToConnection: c.postToConnection,
     })
 
-    return c.reply(
-      200,
-      parseOrThrow(messageDeletedAckSchema, { type: WS_MESSAGE_ACK_TYPE.deleted, ...result }),
+    return toReply(
+      await c.push(
+        parseOrThrow(messageDeletedAckSchema, {
+          type: WS_MESSAGE_ACK_TYPE.deleted,
+          ...result,
+          ...clientIdOf(data),
+        }),
+      ),
     )
   } catch (error) {
-    return wsErrorResponse(c, error)
+    return wsErrorResponse(c, error, data)
   }
 }
 
 export const listMessagesController = async (c: WsContext): Promise<WsReply | void> => {
-  const { data } = c.get<ListMessagesFrameRequest>("valid") ?? { data: undefined }
+  const data = c.get<ListMessageData>("valid")
   if (!c.userId || !data) return c.reply(401)
 
   try {
     const result = await listMessagesService({ userId: c.userId, list: data })
-    return c.reply(
-      200,
-      parseOrThrow(messageListAckSchema, { type: WS_MESSAGE_ACK_TYPE.list, ...result }),
+    return toReply(
+      await c.push(
+        parseOrThrow(messageListAckSchema, {
+          type: WS_MESSAGE_ACK_TYPE.list,
+          ...result,
+          ...clientIdOf(data),
+        }),
+      ),
     )
   } catch (error) {
-    return wsErrorResponse(c, error)
+    return wsErrorResponse(c, error, data)
   }
 }
 
-const wsErrorResponse = (c: WsContext, error: unknown): WsReply => {
+/** The frame was already pushed; the invocation itself just succeeded. */
+const toReply = (_frame: unknown): WsReply => ({ statusCode: 200 })
+
+/** Echoes the frame's `clientId` on the ack under the same name. */
+const clientIdOf = (data?: { clientId?: string } | undefined) =>
+  data?.clientId ? { clientId: data.clientId } : {}
+
+/**
+ * Errors are delivered the same way as acks: pushed to the connection. A
+ * `reply` body never reaches the client on a non-`$default` route, so an error
+ * returned that way looks exactly like "no response".
+ */
+const wsErrorResponse = async (
+  c: WsContext,
+  error: unknown,
+  data?: { clientId?: string } | undefined,
+): Promise<WsReply> => {
   if (error instanceof ApiException) {
-    return c.reply(
-      error.status,
-      parseOrThrow(wsErrorAckSchema, {
-        type: WS_EVENT_TYPE.error,
-        code: error.code,
-        message: error.message,
-      }),
+    return toReply(
+      await c.push(
+        parseOrThrow(wsErrorAckSchema, {
+          type: WS_EVENT_TYPE.error,
+          code: error.code,
+          message: error.message,
+          ...clientIdOf(data),
+        }),
+      ),
     )
   }
 
   console.error("WS message action failed", error)
-  return c.reply(
-    500,
-    parseOrThrow(wsErrorAckSchema, {
-      type: WS_EVENT_TYPE.error,
-      message: "Internal error. Please try again.",
-    }),
+  return toReply(
+    await c.push(
+      parseOrThrow(wsErrorAckSchema, {
+        type: WS_EVENT_TYPE.error,
+        message: "Internal error. Please try again.",
+        ...clientIdOf(data),
+      }),
+    ),
   )
 }

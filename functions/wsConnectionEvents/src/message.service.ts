@@ -1,4 +1,5 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
+import { GoneException } from "@aws-sdk/client-apigatewaymanagementapi"
 import { ApiException, parseConversationId, parseOrThrow } from "@repo/api/utils"
 import {
   messageCreatedEventSchema,
@@ -8,10 +9,15 @@ import {
   type ConversationId,
   type ConversationType,
   type Message,
-  type MessageAttachment,
   type MessageId,
   type UserId,
 } from "@repo/types/schema"
+import type {
+  DeleteMessageData,
+  EditMessageData,
+  ListMessageData,
+  SendMessageData,
+} from "@repo/types/req"
 
 type PostToConnection = (connectionId: string, body: unknown) => Promise<void>
 
@@ -45,7 +51,37 @@ const assertConversationAccess = async ({
   }
 }
 
-/** Open sockets of the peer(s) taken from the conversation id; per-socket failures are logged, not fatal. */
+/**
+ * Sends to one socket, pruning it when API Gateway reports 410 Gone (the
+ * client disconnected without `$disconnect` reaching us). Other failures are
+ * logged so one bad socket cannot fail the sender's request.
+ */
+const deliver = async ({
+  userId,
+  connectionId,
+  payload,
+  postToConnection,
+}: {
+  userId: UserId
+  connectionId: string
+  payload: unknown
+  postToConnection: PostToConnection
+}): Promise<void> => {
+  try {
+    await postToConnection(connectionId, payload)
+  } catch (error) {
+    if (error instanceof GoneException || (error as { name?: string })?.name === "GoneException") {
+      await usersDao.deleteUserConnection({ userId, connectionId })
+      return
+    }
+    console.error(`fan-out to ${connectionId} failed`, error)
+  }
+}
+
+/**
+ * Pushes an event to every open socket of the other participant(s), read from
+ * the conversation id. The sender is excluded: their confirmation is the ack.
+ */
 const fanOut = async ({
   userId,
   conversationId,
@@ -61,12 +97,19 @@ const fanOut = async ({
     .conversationId.split("#")
     .filter((id) => id !== userId)
 
-  const connectionIds = (
-    await Promise.all(peerIds.map(async (peer) => usersDao.getUserConnections({ userId: peer })))
-  ).flat()
+  const peers = await Promise.all(
+    peerIds.map(async (peer) => ({
+      userId: peer,
+      connectionIds: await usersDao.getUserConnections({ userId: peer }),
+    })),
+  )
 
-  await Promise.allSettled(
-    connectionIds.map(async (connectionId) => postToConnection(connectionId, payload)),
+  await Promise.all(
+    peers.flatMap(({ userId: peer, connectionIds }) =>
+      connectionIds.map((connectionId) =>
+        deliver({ userId: peer, connectionId, payload, postToConnection }),
+      ),
+    ),
   )
 }
 
@@ -83,18 +126,22 @@ export const sendMessageService = async ({
   postToConnection,
 }: {
   senderId: UserId
-  message: {
-    conversationId: ConversationId
-    type: "TEXT" | "IMAGE" | "DOC" | "AUDIO"
-    body?: string
-    attachment?: MessageAttachment
-  }
+  message: SendMessageData
   postToConnection: PostToConnection
 }): Promise<Message> => {
   try {
     await assertConversationAccess({ userId: senderId, conversationId: message.conversationId })
 
-    const created = await messagesDao.createMessage({ ...message, senderId })
+    const { conversationId, type, body, attachment } = message
+    // `TEXT` always has a body (schema-checked); only non-text types may carry
+    // an attachment, so these never both appear on the DAO input.
+    const created = await messagesDao.createMessage({
+      conversationId,
+      type,
+      ...(body ? { body } : {}),
+      ...(attachment ? { attachment } : {}),
+      senderId,
+    })
 
     await fanOut({
       userId: senderId,
@@ -106,8 +153,24 @@ export const sendMessageService = async ({
       postToConnection,
     })
 
+    console.log("[ws] message.send stored", {
+      senderId,
+      conversationId,
+      messageId: created.messageId,
+      type: created.type,
+    })
+
     return created
   } catch (error) {
+    // The full cause is logged: a validation error from the DAO otherwise
+    // reaches the client as an opaque "Internal error".
+    console.error("[ws] message.send failed", {
+      senderId,
+      conversationId: message.conversationId,
+      type: message.type,
+      error: error instanceof Error ? error.message : String(error),
+      cause: error instanceof Error ? (error.cause as Error | undefined)?.message : undefined,
+    })
     throw asApiError(error, `message.send failed for ${senderId}`)
   }
 }
@@ -118,7 +181,7 @@ export const editMessageService = async ({
   postToConnection,
 }: {
   editorId: UserId
-  edit: { conversationId: ConversationId; messageId: MessageId; body: string }
+  edit: EditMessageData
   postToConnection: PostToConnection
 }): Promise<Message> => {
   try {
@@ -130,7 +193,11 @@ export const editMessageService = async ({
       throw new ApiException(403, { message: "You can only edit your own messages" })
     }
 
-    await messagesDao.editMessage(edit)
+    await messagesDao.editMessage({
+      conversationId: edit.conversationId,
+      messageId: edit.messageId,
+      body: edit.body,
+    })
 
     const updated = await messagesDao.getMessageById(edit)
     if (!updated) throw new ApiException(404, { message: "Message not found" })
@@ -157,7 +224,7 @@ export const deleteMessageService = async ({
   postToConnection,
 }: {
   deleterId: UserId
-  target: { conversationId: ConversationId; messageId: MessageId }
+  target: DeleteMessageData
   postToConnection: PostToConnection
 }): Promise<{ messageId: MessageId; conversationId: ConversationId; deletedAt: number }> => {
   try {
@@ -169,7 +236,10 @@ export const deleteMessageService = async ({
       throw new ApiException(403, { message: "You can only delete your own messages" })
     }
 
-    await messagesDao.deleteMessage(target)
+    await messagesDao.deleteMessage({
+      conversationId: target.conversationId,
+      messageId: target.messageId,
+    })
     const deletedAt = Date.now()
 
     await fanOut({
@@ -177,13 +247,14 @@ export const deleteMessageService = async ({
       conversationId: target.conversationId,
       payload: parseOrThrow(messageDeletedEventSchema, {
         type: WS_MESSAGE_EVENT_TYPE.deleted,
-        ...target,
+        conversationId: target.conversationId,
+        messageId: target.messageId,
         deletedAt,
       }),
       postToConnection,
     })
 
-    return { ...target, deletedAt }
+    return { conversationId: target.conversationId, messageId: target.messageId, deletedAt }
   } catch (error) {
     throw asApiError(error, `message.delete failed for ${deleterId}`)
   }
@@ -194,12 +265,16 @@ export const listMessagesService = async ({
   list,
 }: {
   userId: UserId
-  list: { conversationId: ConversationId; cursor?: MessageId; limit: number }
+  list: ListMessageData
 }): Promise<{ messages: Message[]; nextCursor?: string }> => {
   try {
     await assertConversationAccess({ userId, conversationId: list.conversationId })
 
-    const messages = await messagesDao.getMessagesByConversationId(list)
+    const messages = await messagesDao.getMessagesByConversationId({
+      conversationId: list.conversationId,
+      ...(list.cursor ? { cursor: list.cursor } : {}),
+      limit: list.limit,
+    })
 
     const oldest = messages.at(-1)
     return {

@@ -97,3 +97,24 @@ export function buildChatList(
 export function activityTime(item: ChatListItem): number {
   return item.lastMessageAt ?? 0
 }
+
+/** The chats screen filter. */
+export type ChatFilter = "all" | "unread" | "empty"
+
+/** True when a conversation has never received a message. */
+export const isEmptyChat = (item: ChatListItem) => !item.lastMessageAt && !item.lastMessagePreview
+
+/** Counts shown on the filter tabs. */
+export const countChats = (items: ChatListItem[]): Record<ChatFilter, number> => ({
+  all: items.length,
+  unread: items.filter((item) => item.unreadCount > 0).length,
+  empty: items.filter(isEmptyChat).length,
+})
+
+/** The single section the active filter shows. */
+export function sectionsFor(items: ChatListItem[], filter: ChatFilter) {
+  if (filter === "unread")
+    return [{ title: "Unread", data: items.filter((i) => i.unreadCount > 0) }]
+  if (filter === "empty") return [{ title: "Get started", data: items.filter(isEmptyChat) }]
+  return [{ title: "All chats", data: items }]
+}

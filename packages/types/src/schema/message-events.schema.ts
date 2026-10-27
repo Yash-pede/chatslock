@@ -3,6 +3,13 @@ import { compositeConversationId } from "./conversation.schema"
 import { messageSchema, ulid } from "./message.schema"
 import { WS_EVENT_TYPE, WS_MESSAGE_ACK_TYPE, WS_MESSAGE_EVENT_TYPE } from "./ws.schema"
 
+/**
+ * Client-generated id, sent in `data.clientId` and echoed unchanged on the ack
+ * (also `clientId`) so a reply can be matched to the frame that caused it.
+ * One name end to end: never `requestId`.
+ */
+export const clientIdSchema = z.string().min(1).max(64)
+
 const zodTimestamp = z.number().int().nonnegative()
 
 const messageDeletedBody = z.strictObject({
@@ -14,7 +21,7 @@ const messageDeletedBody = z.strictObject({
 /**
  * Server → client payloads. Fan-out events go to every connection in the
  * conversation; acks are the route reply body delivered only to the caller
- * that performed the action.
+ * that performed the action, echoing the frame's `clientId` when given.
  */
 export const messageCreatedEventSchema = z.strictObject({
   type: z.literal(WS_MESSAGE_EVENT_TYPE.created),
@@ -41,16 +48,19 @@ export const messageEventSchema = z.discriminatedUnion("type", [
 export const messageSentAckSchema = z.strictObject({
   type: z.literal(WS_MESSAGE_ACK_TYPE.sent),
   message: messageSchema,
+  clientId: clientIdSchema.optional(),
 })
 
 export const messageEditedAckSchema = z.strictObject({
   type: z.literal(WS_MESSAGE_ACK_TYPE.edited),
   message: messageSchema,
+  clientId: clientIdSchema.optional(),
 })
 
 export const messageDeletedAckSchema = z.strictObject({
   type: z.literal(WS_MESSAGE_ACK_TYPE.deleted),
   ...messageDeletedBody.shape,
+  clientId: clientIdSchema.optional(),
 })
 
 export const messageListAckSchema = z.strictObject({
@@ -58,12 +68,14 @@ export const messageListAckSchema = z.strictObject({
   messages: z.array(messageSchema),
   /** ULID of the oldest message on the page; present only when more pages exist. */
   nextCursor: ulid.optional(),
+  clientId: clientIdSchema.optional(),
 })
 
 export const wsErrorAckSchema = z.strictObject({
   type: z.literal(WS_EVENT_TYPE.error),
   code: z.string().optional(),
   message: z.string(),
+  clientId: clientIdSchema.optional(),
 })
 
 export const messageAckSchema = z.discriminatedUnion("type", [

@@ -10,17 +10,13 @@ import React, {
 import { discardSession, tokenRefreshService } from "@repo/utils"
 import { usersApi, type OnboardingForm, type Profile } from "@/api/users.api"
 import { useAuth } from "@/context/AuthContext"
-import {
-  loadProfile,
-  logProfile,
-  userFlowFor,
-  type Flow,
-  type ProfileState,
-} from "./profile"
+import { loadProfile, logProfile, userFlowFor, type Flow, type ProfileState } from "./profile"
 
 interface ProfileContextValue {
   /** Which screen group the app should show. Derived from the claims + `/me`. */
   flow: Flow
+  /** A session exists (tokens + identity), regardless of the profile state. */
+  signedIn: boolean
   /** The profile once it has loaded, otherwise `null`. */
   user: Profile | null
   isLoading: boolean
@@ -148,6 +144,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<ProfileContextValue>(
     () => ({
       flow,
+      signedIn,
       user: profile.status === "ready" ? profile.profile : null,
       isLoading: flow === "loading",
       error: profile.status === "error" ? profile.message : null,
@@ -157,7 +154,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setPendingAgentId,
       reset,
     }),
-    [flow, profile, reload, completeOnboarding, pendingAgentId, reset],
+    [flow, signedIn, profile, reload, completeOnboarding, pendingAgentId, reset],
   )
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>

@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { Message, MessageAck } from "@repo/types/schema"
-import { conversationsApi } from "@/api/conversations.api"
+import type { Message } from "@repo/types/schema"
+import { conversationsApi, responseStatus } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
-import {
-  appendCachedMessage,
-  cacheMessages,
-  cacheRemove,
-  getCachedConversation,
-  getCachedMessages,
-  patchCachedConversation,
-} from "@/lib/db/cache"
-import { toChatMessage } from "@/components/messages/mappers"
+import { mergeMessages, toChatMessage } from "@/components/messages/mappers"
 import type { ChatMessage } from "@/components/messages/types"
 
 export type MessagesStatus = "loading" | "ready" | "error"
@@ -26,26 +18,26 @@ export interface UseConversationMessagesResult {
 }
 
 const PAGE_SIZE = 25
-const LIST_ACK_TIMEOUT_MS = 10_000
 
-/** Deterministic sort so cache, pages and events land in one stable order. */
-function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
-  const byId = new Map<string, ChatMessage>()
-  for (const item of [...existing, ...incoming]) byId.set(item.id, item)
-  return [...byId.values()].sort((a, b) => a.createdAt - b.createdAt)
+/** Unique per request; the server echoes it so replies stay correlated. */
+const newClientId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+
+export interface UseConversationMessagesOptions {
+  /** Unread count from the chat list row; drives how much backlog to page in. */
+  unreadCount?: number
 }
 
 /**
- * Owns one conversation's messages: SQLite cache first for an instant paint,
- * the newest `PAGE_SIZE` from the WS `message.list` ack on top, cursor-based
- * paging (auto-continued until the unread backlog is fetched, then manual for
- * history), live WS events, and optimistic sends with retry.
+ * Owns one conversation's messages: the latest history page from the REST
+ * endpoint, cursor-based paging for older history over the WS, live WS events,
+ * and optimistic sends with retry.
  */
 export function useConversationMessages(
   conversationId: string,
   currentUserId: string | null,
+  { unreadCount = 0 }: UseConversationMessagesOptions = {},
 ): UseConversationMessagesResult {
-  const { api, onAck, onMessageCreated, onMessageUpdated, onMessageDeleted } = useMessagesApi()
+  const { api, onMessageCreated, onMessageUpdated, onMessageDeleted } = useMessagesApi()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [status, setStatus] = useState<MessagesStatus>("loading")
@@ -55,10 +47,17 @@ export function useConversationMessages(
   const cursorRef = useRef<string | undefined>(undefined)
   const unreadRemainingRef = useRef(0)
   const readSentRef = useRef(false)
-  const seqRef = useRef(0)
-  const pendingListRef = useRef<
-    ((ack: Extract<MessageAck, { type: "message.list" }>) => void) | null
-  >(null)
+
+  // Reset to the loading state during render when the conversation changes, so
+  // the load effect below never has to setState synchronously in its body.
+  const [loadedConversationId, setLoadedConversationId] = useState(conversationId)
+  if (loadedConversationId !== conversationId) {
+    setLoadedConversationId(conversationId)
+    setMessages([])
+    setStatus("loading")
+    setHasOlder(false)
+    setLoadingOlder(false)
+  }
 
   const setMessageStatus = useCallback((id: string, next: ChatMessage["status"]) => {
     setMessages((current) =>
@@ -66,14 +65,18 @@ export function useConversationMessages(
     )
   }, [])
 
-  /** Replaces a pending optimistic row (same text) or upserts by id. */
+  /**
+   * Replaces the optimistic row whose `clientId` the server echoed, otherwise
+   * upserts by message id. `clientId` makes this exact even when the same text
+   * is sent twice.
+   */
   const upsertServerMessage = useCallback(
-    (message: Message) => {
+    (message: Message, clientId?: string) => {
       if (message.conversationId !== conversationId) return
       const mapped = { ...toChatMessage(message, currentUserId), status: "sent" as const }
       setMessages((current) => {
-        const pendingIndex = current.findIndex(
-          (item) => item.isMine && item.status === "sending" && item.text === mapped.text,
+        const pendingIndex = current.findIndex((item) =>
+          clientId ? item.pendingId === clientId : item.id === mapped.id,
         )
         if (pendingIndex !== -1) {
           const next = [...current]
@@ -92,30 +95,18 @@ export function useConversationMessages(
     [conversationId, currentUserId],
   )
 
-  /** Waits for the WS `message.list` ack to the op this call sends. */
+  /** One page via the correlated `list` request; rejects on error/timeout. */
   const fetchPage = useCallback(
     (cursor: string | undefined, limit: number) =>
-      new Promise<{ messages: Message[]; nextCursor?: string }>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          pendingListRef.current = null
-          reject(new Error("message.list timed out"))
-        }, LIST_ACK_TIMEOUT_MS)
-        pendingListRef.current = (ack) => {
-          clearTimeout(timer)
-          pendingListRef.current = null
-          resolve({ messages: ack.messages, nextCursor: ack.nextCursor })
-        }
-        const accepted = api.list({ conversationId, ...(cursor ? { cursor } : {}), limit })
-        if (!accepted) {
-          clearTimeout(timer)
-          pendingListRef.current = null
-          reject(new Error("socket not open"))
-        }
+      api.list({
+        conversationId,
+        ...(cursor ? { cursor } : {}),
+        limit,
       }),
     [api, conversationId],
   )
 
-  /** Merges a fetched page into state + SQLite; returns how many were new. */
+  /** Merges a fetched page into state; counts how many came from the peer. */
   const applyPage = useCallback(
     (page: { messages: Message[] }) => {
       let received = 0
@@ -127,29 +118,17 @@ export function useConversationMessages(
         return mergeMessages(current, mapped)
       })
       unreadRemainingRef.current = Math.max(0, unreadRemainingRef.current - received)
-      void cacheMessages(conversationId, page.messages)
     },
-    [conversationId, currentUserId],
+    [currentUserId],
   )
 
   const markRead = useCallback(() => {
     if (readSentRef.current) return
     readSentRef.current = true
     unreadRemainingRef.current = 0
-    api.read({ conversationId })
-    void patchCachedConversation(conversationId, { unreadCount: 0 })
+    // Fire-and-forget: failing to mark read must not affect the screen.
+    void api.read({ conversationId }).catch(() => undefined)
   }, [api, conversationId])
-
-  /** Keeps loading pages until the unread backlog is fully fetched. */
-  const fillUnread = useCallback(async () => {
-    while (unreadRemainingRef.current > 0 && cursorRef.current) {
-      const page = await fetchPage(cursorRef.current, PAGE_SIZE)
-      cursorRef.current = page.nextCursor
-      setHasOlder(Boolean(page.nextCursor))
-      applyPage(page)
-    }
-    markRead()
-  }, [applyPage, fetchPage, markRead])
 
   const loadOlder = useCallback(() => {
     if (loadingOlder || !hasOlder || !cursorRef.current) return
@@ -166,46 +145,45 @@ export function useConversationMessages(
       .finally(() => setLoadingOlder(false))
   }, [applyPage, fetchPage, hasOlder, loadingOlder])
 
+  /**
+   * The REST history endpoint is the primary load: it answers immediately, while
+   * a WS `list` request only settles once the socket is open (it rejects
+   * straight away while connecting, or waits for the ack once open).
+   */
   useEffect(() => {
     if (!conversationId) return
 
     let cancelled = false
     cursorRef.current = undefined
     readSentRef.current = false
-    unreadRemainingRef.current = 0
+    unreadRemainingRef.current = unreadCount
 
     void (async () => {
-      const [cached, row] = await Promise.all([
-        getCachedMessages(conversationId),
-        getCachedConversation(conversationId),
-      ])
-      if (cancelled) return
-
-      unreadRemainingRef.current = row?.unreadCount ?? 0
-
-      if (cached.length > 0) {
-        setMessages(cached.map((message) => toChatMessage(message, currentUserId)))
-      }
-      setStatus("loading")
-
       try {
-        const page = await fetchPage(undefined, PAGE_SIZE)
+        const rest = await conversationsApi.getMessages(conversationId)
         if (cancelled) return
-        cursorRef.current = page.nextCursor
-        setHasOlder(Boolean(page.nextCursor))
-        applyPage(page)
+        applyPage({ messages: rest.messages })
         setStatus("ready")
-        await fillUnread()
-      } catch {
-        // WS unavailable — fall back to the REST history endpoint once.
+        markRead()
+      } catch (error) {
+        if (cancelled) return
+        // 5xx/network: the socket may still reach the server, so try it once
+        // before surfacing an error. 4xx is authoritative (e.g. not a member).
+        const status = responseStatus(error)
+        if (status !== undefined && status < 500) {
+          setStatus("error")
+          return
+        }
         try {
-          const rest = await conversationsApi.getMessages(conversationId)
+          const page = await fetchPage(undefined, PAGE_SIZE)
           if (cancelled) return
-          applyPage({ messages: rest.messages })
+          cursorRef.current = page.nextCursor
+          setHasOlder(Boolean(page.nextCursor))
+          applyPage(page)
           setStatus("ready")
           markRead()
         } catch {
-          if (!cancelled) setStatus(cached.length > 0 ? "ready" : "error")
+          if (!cancelled) setStatus("error")
         }
       }
     })()
@@ -213,67 +191,34 @@ export function useConversationMessages(
     return () => {
       cancelled = true
     }
-    // fetchPage/fillUnread/applyPage are stable per conversationId/api identity
+    // applyPage/markRead are stable per conversationId/api identity
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUserId])
 
-  // Realtime: acks for own actions, fan-out for the peer's.
+  // Unsolicited events: the peer's new/edited/deleted messages.
   useEffect(() => {
-    const offAck = onAck("message.sent", (ack) => {
-      if (ack.type !== "message.sent") return
-      upsertServerMessage(ack.message)
-      void appendCachedMessage(conversationId, ack.message)
-    })
-
-    const offError = onAck("error", (ack) => {
-      if (ack.type !== "error" || ack.code !== "INTERNAL_ERROR") return
-      setMessages((current) => {
-        const index = current.findLastIndex((item) => item.isMine && item.status === "sending")
-        if (index === -1) return current
-        const next = [...current]
-        next[index] = { ...next[index]!, status: "failed" }
-        return next
-      })
-    })
-
-    const offCreated = onMessageCreated((message) => {
-      upsertServerMessage(message)
-      void appendCachedMessage(conversationId, message)
-    })
-
-    const offUpdated = onMessageUpdated((message) => {
-      upsertServerMessage(message)
-      void cacheMessages(conversationId, [message])
-    })
+    const offCreated = onMessageCreated(upsertServerMessage)
+    const offUpdated = onMessageUpdated(upsertServerMessage)
 
     const offDeleted = onMessageDeleted((event) => {
       if (event.conversationId !== conversationId) return
       setMessages((current) => current.filter((item) => item.id !== event.messageId))
-      void cacheRemove("message", `${event.conversationId}:${event.messageId}`)
     })
 
     return () => {
-      offAck()
-      offError()
       offCreated()
       offUpdated()
       offDeleted()
     }
-  }, [
-    conversationId,
-    onAck,
-    onMessageCreated,
-    onMessageUpdated,
-    onMessageDeleted,
-    upsertServerMessage,
-  ])
+  }, [conversationId, onMessageCreated, onMessageUpdated, onMessageDeleted, upsertServerMessage])
 
   const send = useCallback(
     (text: string) => {
       if (!text || !currentUserId) return
-      const optimisticId = `optimistic-${Date.now()}-${seqRef.current++}`
+
+      const clientId = newClientId()
       const optimistic: ChatMessage = {
-        id: optimisticId,
+        id: `optimistic-${clientId}`,
         conversationId,
         senderId: currentUserId,
         isMine: true,
@@ -281,22 +226,37 @@ export function useConversationMessages(
         text,
         createdAt: Date.now(),
         status: "sending",
+        pendingId: clientId,
       }
       setMessages((current) => [...current, optimistic])
 
-      const accepted = api.send({ conversationId, type: "TEXT", body: text })
-      if (!accepted) setMessageStatus(optimisticId, "failed")
+      // The server echoes this row's `clientId` on the ack, so the reply can
+      // never be confused with another send.
+      api
+        .send({ conversationId, type: "TEXT", body: text, clientId })
+        .then((message) => upsertServerMessage(message, clientId))
+        .catch(() => setMessageStatus(optimistic.id, "failed"))
     },
-    [api, conversationId, currentUserId, setMessageStatus],
+    [api, conversationId, currentUserId, setMessageStatus, upsertServerMessage],
   )
 
   const retry = useCallback(
     (message: ChatMessage) => {
-      setMessageStatus(message.id, "sending")
-      const accepted = api.send({ conversationId, type: "TEXT", body: message.text ?? "" })
-      if (!accepted) setMessageStatus(message.id, "failed")
+      const clientId = newClientId()
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === message.id
+            ? { ...item, id: `optimistic-${clientId}`, pendingId: clientId, status: "sending" }
+            : item,
+        ),
+      )
+
+      api
+        .send({ conversationId, type: "TEXT", body: message.text ?? "", clientId })
+        .then((created) => upsertServerMessage(created, clientId))
+        .catch(() => setMessageStatus(`optimistic-${clientId}`, "failed"))
     },
-    [api, conversationId, setMessageStatus],
+    [api, conversationId, setMessageStatus, upsertServerMessage],
   )
 
   return useMemo(

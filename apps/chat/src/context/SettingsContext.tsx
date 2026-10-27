@@ -25,16 +25,15 @@ const DEFAULTS: AppSettings = {
   mediaAutoDownload: true,
 }
 
+type SettingsKey = keyof AppSettings
+
 interface SettingsContextValue {
   settings: AppSettings
-  /** False until the stored values have been read, so the UI never flashes defaults. */
-  isHydrated: boolean
-  setSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
+  setSetting: <K extends SettingsKey>(key: K, value: AppSettings[K]) => void
 }
 
 const SettingsContext = createContext<SettingsContextValue>({
   settings: DEFAULTS,
-  isHydrated: false,
   setSetting: () => {},
 })
 
@@ -61,21 +60,16 @@ function parseStored(raw: string | null): AppSettings {
 export function SettingsProvider({ children }: Pick<ThemeProviderProps, "children">) {
   const { setTheme } = useTheme()
   const [settings, setSettings] = useState<AppSettings>(DEFAULTS)
-  const [isHydrated, setIsHydrated] = useState(false)
 
   useEffect(() => {
     let cancelled = false
 
-    void SecureStore.getItemAsync(STORAGE_KEY)
-      .then((raw) => {
-        if (cancelled) return
-        const stored = parseStored(raw)
-        setSettings(stored)
-        setTheme(stored.theme)
-      })
-      .finally(() => {
-        if (!cancelled) setIsHydrated(true)
-      })
+    void SecureStore.getItemAsync(STORAGE_KEY).then((raw) => {
+      if (cancelled) return
+      const stored = parseStored(raw)
+      setSettings(stored)
+      setTheme(stored.theme)
+    })
 
     return () => {
       cancelled = true
@@ -94,10 +88,7 @@ export function SettingsProvider({ children }: Pick<ThemeProviderProps, "childre
     [setTheme],
   )
 
-  const value = useMemo(
-    () => ({ settings, isHydrated, setSetting }),
-    [settings, isHydrated, setSetting],
-  )
+  const value = useMemo(() => ({ settings, setSetting }), [settings, setSetting])
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>
 }

@@ -18,17 +18,33 @@ const pickSchema = (routeKey: string, op?: string) => {
   return MESSAGES_OP_SCHEMAS[op as MessagesWsOp] ?? wsFrameSchema
 }
 
+/**
+ * Validates the frame and stores the **parsed data** under `valid`, which is
+ * what controllers read (`c.get<SendMessageData>("valid")`). Storing the whole
+ * envelope here is what made every `conversationId` undefined downstream.
+ */
 const validateFrame = async (c: WsContext): Promise<WsReply | void> => {
-  const { op } = c.req.json<{ op?: string }>()
+  const frame = c.req.json<{ action?: string; op?: string }>()
+  const { op } = frame
 
   try {
-    c.set("valid", parseOrThrow(pickSchema(c.routeKey, op), c.req.json()))
+    const parsed = parseOrThrow(pickSchema(c.routeKey, op), frame) as { data?: unknown }
+    c.set("valid", parsed.data)
   } catch (error) {
-    return c.reply(400, {
-      type: WS_EVENT_TYPE.error,
-      code: "BAD_REQUEST",
-      message: error instanceof Error ? error.message : "Invalid frame",
+    const message = error instanceof Error ? error.message : "Invalid frame"
+    // Without this the 400 only exists in the access log, where every error
+    // field is "-": a rejected frame would look like a healthy invocation.
+    console.warn("[ws] frame rejected", {
+      connectionId: c.connectionId,
+      routeKey: c.routeKey,
+      action: frame.action,
+      op,
+      message,
     })
+    // Pushed, not replied: a reply body never reaches the client on a
+    // non-`$default` route, so a rejected frame looked like silence.
+    await c.push({ type: WS_EVENT_TYPE.error, code: "BAD_REQUEST", message })
+    return
   }
 }
 
@@ -45,8 +61,21 @@ app
   .on("list", listMessagesController)
   .on("read", readMessageController)
 
-app.route("$default", async (c) =>
-  c.send({ type: WS_EVENT_TYPE.error, message: `Unknown action for route ${c.routeKey}` }),
-)
+/**
+ * Heartbeat (`{"action":"system"}`) is answered by API Gateway's MOCK
+ * integration, not here: the Lambda has no route for it, and a mocked reply
+ * cannot 5xx or cost an invocation.
+ */
+
+app.route("$default", async (c) => {
+  // Anything else (unknown action, or a body without `action`). Answering an
+  // error frame keeps the client's round trip observable; log the cause.
+  const action = c.req.json<{ action?: string }>().action
+  console.warn("[ws] unroutable frame", { connectionId: c.connectionId, action })
+  return c.send({
+    type: WS_EVENT_TYPE.error,
+    message: `Unknown action${action ? ` "${action}"` : ""}`,
+  })
+})
 
 export const handler = app.handle()

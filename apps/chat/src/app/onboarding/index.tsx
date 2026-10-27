@@ -32,28 +32,21 @@ export default function OnboardingScreen() {
   const [fullName, setFullName] = useState("")
   const [username, setUsername] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  // Field errors stay hidden until the user has typed in that field, so an
-  // untouched form never looks like it is already wrong.
   const [touched, setTouched] = useState({ fullName: false, username: false })
 
   const trimmedName = fullName.trim()
   const normalizedUsername = username.trim().toLowerCase()
   const nameValid = trimmedName.length >= 3 && trimmedName.length <= 50
   const usernameValid = USERNAME_PATTERN.test(normalizedUsername)
-  const isValid = nameValid && usernameValid
-  // A submit is only possible with valid input and no request in flight.
-  const canSubmit = isValid && !saving
+  const canSubmit = nameValid && usernameValid
 
   const submit = async () => {
     if (!canSubmit) {
-      // Ask SaveButton to stay idle and surface the reason instead of submitting.
       setTouched({ fullName: true, username: true })
       setError("Please fill in your name and a valid username.")
       throw new Error("Invalid onboarding input")
     }
 
-    setSaving(true)
     setError(null)
 
     try {
@@ -61,12 +54,9 @@ export default function OnboardingScreen() {
         fullName: trimmedName,
         username: normalizedUsername,
       })
-      // The provider flips the route to the app once `/me` confirms the row.
     } catch (e) {
       setError(extractErrorMessage(e))
       throw e
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -147,7 +137,6 @@ export default function OnboardingScreen() {
         <Button
           onPress={() => void submit().catch(() => {})}
           disabled={!canSubmit}
-          loading={saving}
           className="mt-6"
         >
           Continue

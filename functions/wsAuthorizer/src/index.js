@@ -40,7 +40,11 @@ export const handler = async (event) => {
   const token = event.queryStringParameters?.token || getHeader(event, "authorization")
 
   if (typeof token !== "string" || !token.trim()) {
-    console.error("WS auth failed: missing token")
+    console.error("WS auth failed: missing token", {
+      routeKey: event.requestContext?.routeKey,
+      hasQueryParams: Boolean(event.queryStringParameters),
+      queryKeys: Object.keys(event.queryStringParameters ?? {}),
+    })
     return generateDenyPolicy(event.methodArn)
   }
 
@@ -51,7 +55,14 @@ export const handler = async (event) => {
 
     return generateAllowPolicy(payload.sub, event.methodArn, payload)
   } catch (error) {
-    console.error("WS auth failed", error?.message ?? error)
+    // Log why the token was refused (`jwt expired`, `invalid signature`,
+    // audience/token_use mismatch, or JWKS fetch failure from the VPC).
+    console.error("WS auth failed", {
+      message: error?.message ?? String(error),
+      name: error?.name,
+      userPoolId: secrets.cognito_user_pool_id,
+      tokenLength: cleanToken.length,
+    })
     // WebSocket REQUEST authorizers only accept IAM policy responses; a
     // statusCode object makes API Gateway fail the handshake with a 500.
     return generateDenyPolicy(event.methodArn)

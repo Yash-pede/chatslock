@@ -31,6 +31,12 @@ export interface ChatMessage {
   /** Epoch milliseconds. */
   createdAt: number
   status?: "sending" | "sent" | "delivered" | "read" | "failed"
+  /**
+   * `clientId` of the request that created this optimistic row. The server
+   * echoes it on the ack, so the real message can be matched exactly instead of
+   * guessing by text.
+   */
+  pendingId?: string
   /** System notices (date chips, "X joined") render centered without a bubble. */
   isSystem?: boolean
 }

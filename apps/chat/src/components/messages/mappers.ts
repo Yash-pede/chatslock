@@ -68,3 +68,24 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
       return { ...base, kind: "text", text: message.body ?? "" }
   }
 }
+
+/**
+ * Merges new messages into the list, de-duplicating by id and ordering by ULID
+ * (the key the server pages by). Optimistic rows have no ULID yet, so they sort
+ * last until the server echoes them back.
+ */
+export function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+  const byId = new Map<string, ChatMessage>()
+  for (const item of [...existing, ...incoming]) byId.set(item.id, item)
+  return [...byId.values()].sort((a, b) => compareIds(a.id, b.id))
+}
+
+function compareIds(a: string, b: string): number {
+  const aOptimistic = a.startsWith("optimistic-")
+  const bOptimistic = b.startsWith("optimistic-")
+  if (aOptimistic || bOptimistic) {
+    if (aOptimistic && bOptimistic) return Number(a.split("-")[1]) - Number(b.split("-")[1])
+    return aOptimistic ? 1 : -1
+  }
+  return a < b ? -1 : a > b ? 1 : 0
+}

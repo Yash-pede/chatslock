@@ -8,17 +8,14 @@ import React, {
   useState,
 } from "react"
 import { AppState } from "react-native"
-import { tokenManager } from "@repo/utils"
+import { tokenRefreshService } from "@repo/utils"
 import { useToast } from "@repo/ui"
 import { wsConnectUrl } from "@/lib/ws"
+import { wsTraffic } from "@/lib/ws-debug"
+import { WsClient, type SocketLike, type WsFrame, type WsStatus } from "@/lib/ws-client"
 import { useProfile } from "@/context/profile/ProfileContext"
 
-/**
- * Realtime connection for signed-in screens. The access token travels in the
- * query string (the `$connect` authorizer reads `?token=`); drops reconnect
- * with backoff, and persistent failures surface as one "no network" toast.
- */
-export type WsStatus = "connecting" | "connected" | "reconnecting"
+export type { WsStatus }
 
 export interface WsSendInput {
   action: string
@@ -28,38 +25,58 @@ export interface WsSendInput {
 
 interface WsContextValue {
   status: WsStatus
+  /** The socket is open and will accept a frame right now. */
+  isOpen: () => boolean
   /** Sends `{action, op, data}`; false when the socket is not open. */
   send: (input: WsSendInput) => boolean
-  /** Subscribes to server events of a given `type`; returns an unsubscribe. */
-  on: (type: string, handler: (payload: unknown) => void) => () => void
+  /** Subscribes to frames of a given `type`; returns an unsubscribe. */
+  on: (type: string, handler: (payload: WsFrame) => void) => () => void
+  /** Sends `{action, op}` and resolves/rejects from the first matching frame. */
+  request: <T>(input: WsSendInput, options: { types: string[]; timeoutMs: number }) => Promise<T>
 }
 
 const WsContext = createContext<WsContextValue | null>(null)
 
-const RECONNECT_BASE_MS = 1000
-const RECONNECT_MAX_MS = 30_000
 const TOAST_THROTTLE_MS = 8_000
 
-export function WsProvider({ children }: { children: React.ReactNode }) {
+/** `[ws] status …` / `[ws] closed …` always; the rest only in development. */
+const log = {
+  always(event: string, detail?: Record<string, unknown>) {
+    console.log(`[ws] ${event}`, detail ?? "")
+  },
+  dev(event: string, detail?: Record<string, unknown>) {
+    if (__DEV__) console.log(`[ws] ${event}`, detail ?? "")
+  },
+  warn(event: string, detail?: Record<string, unknown>) {
+    console.warn(`[ws] ${event}`, detail ?? "")
+  },
+}
+
+/**
+ * Frames are dispatched from the socket, but subscribers belong to screens:
+ * the table lives at module scope so a provider re-render (or a route change)
+ * can never silently detach them.
+ */
+const frameListeners = new Map<string, Set<(frame: WsFrame) => void>>()
+
+const newRequestId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+
+export function WsProvider({
+  active = true,
+  children,
+}: {
+  /** False stops the socket (no session). The provider element stays mounted. */
+  active?: boolean
+  children: React.ReactNode
+}) {
   const { toast } = useToast()
   const [status, setStatus] = useState<WsStatus>("connecting")
-  const statusRef = useRef<WsStatus>("connecting")
-  const socketRef = useRef<WebSocket | null>(null)
-  const listenersRef = useRef(new Map<string, Set<(payload: unknown) => void>>())
-  const attemptsRef = useRef(0)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const aliveRef = useRef(true)
-  const notifiedRef = useRef(false)
+  const clientRef = useRef<WsClient | null>(null)
   const lastToastRef = useRef(0)
-  const connectRef = useRef<() => void>(() => {})
 
-  const setWsStatus = useCallback((next: WsStatus) => {
-    statusRef.current = next
-    setStatus(next)
-  }, [])
-
-  const dispatch = useCallback((type: string, payload: unknown) => {
-    listenersRef.current.get(type)?.forEach((handler) => handler(payload))
+  const dispatch = useCallback((frame: WsFrame) => {
+    if (!frame.type) return
+    frameListeners.get(frame.type)?.forEach((handler) => handler(frame))
   }, [])
 
   const toastOffline = useCallback(
@@ -73,98 +90,119 @@ export function WsProvider({ children }: { children: React.ReactNode }) {
   )
 
   useEffect(() => {
-    aliveRef.current = true
+    if (!active) return
 
-    const connect = () => {
-      const token = tokenManager.getAccessToken()
-      if (!aliveRef.current || !token || socketRef.current) return
-
-      setWsStatus(attemptsRef.current === 0 ? "connecting" : "reconnecting")
-
-      const socket = new WebSocket(wsConnectUrl(token))
-      socketRef.current = socket
-
-      socket.onopen = () => {
-        attemptsRef.current = 0
-        notifiedRef.current = false
-        setWsStatus("connected")
-      }
-
-      socket.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data as string) as { type?: string }
-          if (parsed && typeof parsed.type === "string") dispatch(parsed.type, parsed)
-        } catch {
-          // ignore non-JSON frames
+    const client = new WsClient({
+      open: () => {
+        // `ensureAccessToken` returns the valid token or starts a refresh; the
+        // socket is retried by `WsClient`'s own backoff until one exists.
+        const token = tokenRefreshService.ensureAccessToken()
+        if (!token) {
+          log.dev("no access token yet")
+          return null
         }
-      }
+        return new WebSocket(wsConnectUrl(token)) as unknown as SocketLike
+      },
+      onStatusChange: (next) => {
+        log.always("status", { status: next })
+        wsTraffic.event("status", { status: next })
+        setStatus(next)
+      },
+      onFrame: (frame) => {
+        log.dev("frame", { type: frame.type })
+        dispatch(frame)
+      },
+      onRejected: (frame) => {
+        log.warn("handshake refused", { message: frame.message })
+        void tokenRefreshService.refreshNow()
+      },
+      onDropped: () => toastOffline("You are offline. Messages will reconnect automatically."),
+      onClosed: ({ code, reason, wasOpen, retryInMs }) => {
+        if (wasOpen) log.always("closed", { code, reason: reason || undefined, retryInMs })
+        else log.warn("closed before opening", { code, reason: reason || undefined, retryInMs })
+      },
+    })
 
-      socket.onclose = () => {
-        socketRef.current = null
-        if (!aliveRef.current) return
+    clientRef.current = client
+    client.connect()
 
-        attemptsRef.current += 1
-        const dropped = statusRef.current === "connected"
-        setWsStatus("reconnecting")
-
-        // quiet during cold start; a dropped live connection or a stubborn
-        // outage notifies once, not on every retry
-        if (!notifiedRef.current && (dropped || attemptsRef.current >= 3)) {
-          notifiedRef.current = true
-          toastOffline("You are offline. Messages will reconnect automatically.")
-        }
-
-        const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attemptsRef.current - 1), RECONNECT_MAX_MS)
-        timerRef.current = setTimeout(() => connectRef.current(), delay)
-      }
-
-      socket.onerror = () => socket.close()
-    }
-
-    connectRef.current = connect
-    connect()
-
-    // returning to the foreground retries immediately, skipping the backoff
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active" || socketRef.current?.readyState === WebSocket.OPEN) return
-      if (timerRef.current) clearTimeout(timerRef.current)
-      attemptsRef.current = 0
-      connectRef.current()
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (next === "active") client.reconnectNow()
     })
 
     return () => {
-      aliveRef.current = false
-      if (timerRef.current) clearTimeout(timerRef.current)
       subscription.remove()
-      socketRef.current?.close()
-      socketRef.current = null
+      client.dispose()
+      if (clientRef.current === client) clientRef.current = null
     }
-  }, [dispatch, setWsStatus, toastOffline])
+  }, [active, dispatch, toastOffline])
 
-  const send = useCallback(
-    ({ action, op, data }: WsSendInput) => {
-      const socket = socketRef.current
-      if (!socket || socket.readyState !== WebSocket.OPEN) {
-        toastOffline("Your message could not be sent. Retrying when back online.")
-        return false
-      }
-      socket.send(JSON.stringify({ action, op, data }))
-      return true
-    },
-    [toastOffline],
-  )
+  const send = useCallback(({ action, op, data }: WsSendInput) => {
+    const sent = clientRef.current?.send({ action, op, data }) ?? false
+    if (!sent) log.dev("send skipped, socket not open", { op })
+    return sent
+  }, [])
 
-  const on = useCallback((type: string, handler: (payload: unknown) => void) => {
-    const listeners = listenersRef.current.get(type) ?? new Set()
-    listeners.add(handler)
-    listenersRef.current.set(type, listeners)
+  /**
+   * True when the socket is open. Callers use it to skip a request instead of
+   * waiting out `timeoutMs` on a socket that cannot answer (a closed socket
+   * rejects immediately, but a `reconnecting` one would just time out).
+   */
+  const isOpen = useCallback(() => clientRef.current?.isOpen ?? false, [])
+
+  const on = useCallback((type: string, handler: (payload: WsFrame) => void) => {
+    const handlers = frameListeners.get(type) ?? new Set()
+    handlers.add(handler)
+    frameListeners.set(type, handlers)
     return () => {
-      listeners.delete(handler)
-      if (listeners.size === 0) listenersRef.current.delete(type)
+      handlers.delete(handler)
+      if (handlers.size === 0) frameListeners.delete(type)
     }
   }, [])
 
-  const value = useMemo<WsContextValue>(() => ({ status, send, on }), [status, send, on])
+  const request = useCallback(
+    <T,>(input: WsSendInput, { types, timeoutMs }: { types: string[]; timeoutMs: number }) =>
+      new Promise<T>((resolve, reject) => {
+        // The caller's own `clientId` (e.g. an optimistic send) wins: it is what
+        // the screen uses to match the ack.
+        const requested = (input.data as { clientId?: string } | undefined)?.clientId
+        const clientId = requested ?? newRequestId()
+        const offs: (() => void)[] = []
+
+        const settle = (run: () => void) => {
+          offs.forEach((off) => off())
+          clearTimeout(timer)
+          run()
+        }
+
+        const timer = setTimeout(
+          () => settle(() => reject(new Error(`${input.op} timed out`))),
+          timeoutMs,
+        )
+
+        for (const type of types) {
+          offs.push(
+            on(type, (frame) => {
+              if (frame.clientId !== clientId) return
+              settle(() => {
+                if (frame.type === "error") reject(new Error(String(frame.message ?? "Failed")))
+                else resolve(frame as T)
+              })
+            }),
+          )
+        }
+
+        if (!send({ ...input, data: { ...(input.data as object), clientId } })) {
+          settle(() => reject(new Error("socket not open")))
+        }
+      }),
+    [on, send],
+  )
+
+  const value = useMemo<WsContextValue>(
+    () => ({ status, isOpen, send, on, request }),
+    [status, isOpen, send, on, request],
+  )
 
   return <WsContext.Provider value={value}>{children}</WsContext.Provider>
 }
@@ -179,12 +217,11 @@ export function useWs(): WsContextValue {
 }
 
 /**
- * Mounts the socket only while the user is signed in. Lives at the root so
- * the connection survives navigation between route groups; sign-out unmounts
- * it (and closes the socket) with the provider.
+ * Runs the socket while a session exists. The provider is always rendered
+ * (only `active` flips), so a `flow` change cannot remount the app tree or
+ * dispose the socket.
  */
 export function WsGate({ children }: { children: React.ReactNode }) {
-  const { flow } = useProfile()
-  if (flow !== "ready") return <>{children}</>
-  return <WsProvider>{children}</WsProvider>
+  const { signedIn } = useProfile()
+  return <WsProvider active={signedIn}>{children}</WsProvider>
 }

@@ -34,6 +34,11 @@ function unwrap<T>(body: unknown): T {
   return body as T
 }
 
+/** HTTP status of a failed axios call, or `undefined` when offline/aborted. */
+export function responseStatus(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } } | null)?.response?.status
+}
+
 /**
  * Conversation endpoints. Screens call these instead of `apiClient` directly so
  * URL shapes and envelope handling stay in one place.

@@ -27,15 +27,24 @@ export interface ThemeProviderProps {
   className?: string
 }
 
-const applyTheme = (resolved: "light" | "dark") => {
-  if (Uniwind?.setTheme) {
-    Uniwind.setTheme(resolved)
-  } else {
-    try {
+/**
+ * Applies a theme. `Uniwind.setTheme` underlies the Android
+ * `Appearance.setColorScheme` bridge, which rejects the literal "system" and
+ * throws; an uncaught throw inside a provider unmounts everything below it
+ * (websocket provider included), so failures are swallowed here.
+ */
+const applyTheme = (theme: Theme) => {
+  const resolved: "light" | "dark" =
+    theme === "system" ? (Appearance.getColorScheme() === "dark" ? "dark" : "light") : theme
+  try {
+    if (theme !== "system" && Uniwind?.setTheme) {
+      Uniwind.setTheme(theme)
+    } else {
       Appearance.setColorScheme(resolved)
-    } catch {
-      // Older React Native builds without Appearance.setColorScheme.
     }
+  } catch {
+    // Never let a theme failure take the app down.
+    console.warn("[theme] could not apply", theme)
   }
 }
 
@@ -50,15 +59,10 @@ export function ThemeProvider({
   const resolvedTheme: "light" | "dark" =
     theme === "system" ? (systemScheme === "dark" ? "dark" : "light") : theme
 
-  const setTheme = useCallback(
-    (newTheme: Theme) => {
-      setThemeState(newTheme)
-      const resolved =
-        newTheme === "system" ? (systemScheme === "dark" ? "dark" : "light") : newTheme
-      applyTheme(resolved)
-    },
-    [systemScheme],
-  )
+  const setTheme = useCallback((newTheme: Theme) => {
+    setThemeState(newTheme)
+    applyTheme(newTheme)
+  }, [])
 
   const toggleTheme = useCallback(() => {
     setThemeState((prev) => {

@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { Pressable, View } from "react-native"
-import { BellOff, BadgeCheck, CheckCheck } from "lucide-react-native"
+import { BadgeCheck, CheckCheck } from "lucide-react-native"
 import { Text, useThemeColors } from "@repo/ui"
 import type { ChatListItem } from "@/components/chats/chat-list"
 import { UserAvatar } from "@/components/user-avatar"
@@ -33,9 +33,8 @@ export interface ConversationRowProps {
 }
 
 /**
- * One chat row built from the API: avatar (initials when there is none), peer
- * name + @username, and a preview line. With no message yet the preview becomes
- * a "Get started" nudge so fresh conversations are still tappable.
+ * One chat row: avatar, peer name, preview line and unread count. Message-less
+ * conversations show a "Get started" nudge so they are still tappable.
  */
 export function ConversationRow({
   item,
@@ -108,10 +107,4 @@ export function ConversationRow({
       </View>
     </Pressable>
   )
-}
-
-/** Muted-bell marker kept for rows the product later marks as muted. */
-export function MutedIndicator() {
-  const colors = useThemeColors()
-  return <BellOff size={13} color={colors.mutedForeground} strokeWidth={2} />
 }

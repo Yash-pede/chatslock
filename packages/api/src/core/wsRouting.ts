@@ -9,13 +9,16 @@ export interface WsRequestContext {
   connectionId: string
   messageId?: string
   requestTimeEpoch?: number
+  /** API Gateway's own id for the invocation (logging/debugging only). */
   requestId?: string
   domainName: string
   stage: string
   apiId: string
+  identity?: { sourceIp?: string; userAgent?: string }
   authorizer?: {
     principalId?: string
     userId?: string
+    /** Cognito `client_id` of the token, set by the WS authorizer. */
     clientId?: string
     [key: string]: unknown
   }
@@ -62,11 +65,17 @@ export interface WsContext {
   get: <T = unknown>(key: string) => T | undefined
   set: (key: string, value: unknown) => void
 
-  /** Build a reply: `return c.reply(200, { ok: true })`. */
+  /**
+   * Return the invocation's response. The body is **not** delivered to the
+   * client: API Gateway only forwards an integration response on `$default`.
+   * Use `c.send()` for a frame the client must receive.
+   */
   reply: (statusCode: number, body?: unknown) => WsReply
 
-  /** Persist data to DynamoDB and send the body to the caller. */
+  /** Deliver `body` to this connection as a frame (works on every route). */
   send: (body: unknown) => Promise<WsReply>
+  /** Same as `send`, but resolves to the body instead of `NO_CONTENT`. */
+  push: (body: unknown) => Promise<unknown>
   /** Send a payload to any connection (e.g. broadcast to a room). */
   postToConnection: (connectionId: string, body: unknown) => Promise<void>
 }
@@ -126,6 +135,10 @@ function createContext(event: WsEvent, client: () => ApiGatewayManagementApiClie
     send: async (body) => {
       await c.postToConnection(requestContext.connectionId, body)
       return NO_CONTENT
+    },
+    push: async (body) => {
+      await c.postToConnection(requestContext.connectionId, body)
+      return body
     },
     postToConnection: async (connectionId, body) => {
       await client().send(
@@ -291,7 +304,18 @@ export class WsRouter {
           if (result === undefined || result === null) continue
 
           if (typeof result === "object" && "statusCode" in (result as WsReply)) {
-            return toGatewayReply(result as WsReply)
+            const reply = result as WsReply
+            // A refused handshake has no open socket to receive a frame, and the
+            // gateway access log only records the status (`error`/`integration`
+            // come out as "-"), so the reason must be logged here.
+            if (routeKey === "$connect" && reply.statusCode >= 400) {
+              console.error("[ws] $connect refused", {
+                status: reply.statusCode,
+                reason: reply.body ?? null,
+                authorizer: event.requestContext.authorizer ?? null,
+              })
+            }
+            return toGatewayReply(reply)
           }
 
           await c.postToConnection(c.connectionId, result)

@@ -42,17 +42,12 @@ export function MessageComposer({
   const [value, setValue] = useState("")
   const canSend = value.trim().length > 0 && !disabled
 
-  // Drives the panel's slide/height so opening and closing are animated
-  // rather than snapping.
   const panelProgress = useState(() => new Animated.Value(emojiOpen ? 1 : 0))[0]
 
   const toggleEmoji = () => {
     const next = !emojiOpen
 
-    if (next) {
-      // Hide the keyboard first; the panel grows into the freed space.
-      inputRef.current?.blur()
-    }
+    if (next) inputRef.current?.blur()
 
     Animated.timing(panelProgress, {
       toValue: next ? 1 : 0,
@@ -64,8 +59,6 @@ export function MessageComposer({
     onEmojiOpenChange?.(next)
   }
 
-  // Derived once: interpolations only re-read the animated value, they are not
-  // state, so computing this during render is safe.
   const panelHeight = useMemo(
     () =>
       panelProgress.interpolate({
@@ -77,6 +70,13 @@ export function MessageComposer({
 
   const insertEmoji = (emoji: string) => {
     setValue((current) => `${current}${emoji}`)
+  }
+
+  const submit = async () => {
+    const text = value.trim()
+    if (!text) return
+    await onSend(text)
+    setValue("")
   }
 
   return (
@@ -111,7 +111,6 @@ export function MessageComposer({
             keyboardAppearance={dark ? "dark" : "light"}
             onFocus={() => {
               if (!emojiOpen) return
-              // Tapping the field swaps the panel back to the keyboard.
               panelProgress.setValue(0)
               onEmojiOpenChange?.(false)
             }}
@@ -129,7 +128,7 @@ export function MessageComposer({
         </View>
 
         <Pressable
-          onPress={() => void onSend(value.trim())}
+          onPress={() => void submit()}
           disabled={!canSend}
           accessibilityRole="button"
           accessibilityLabel="Send message"
@@ -144,10 +143,7 @@ export function MessageComposer({
         </Pressable>
       </View>
 
-      {/*
-          Always mounted: the native view is expensive to create on demand, so
-          mounting it at the moment of the tap is what made opening feel janky.
-        */}
+      {/* Always mounted: creating the native view on demand made opening feel janky. */}
       <Animated.View style={{ height: panelHeight, overflow: "hidden" }}>
         <View style={{ height: EMOJI_PANEL_HEIGHT }}>
           <EmojiSheetView

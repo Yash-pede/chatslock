@@ -33,7 +33,9 @@ function RootNavigator() {
   if (flow === "loading") return <LoadingGate />
 
   if (flow === "unverified") {
-    return <UnverifiedGate error={error} onRetry={() => void reload()} onSignOut={() => void reset()} />
+    return (
+      <UnverifiedGate error={error} onRetry={() => void reload()} onSignOut={() => void reset()} />
+    )
   }
 
   return <ProtectedNavigator flow={flow} />

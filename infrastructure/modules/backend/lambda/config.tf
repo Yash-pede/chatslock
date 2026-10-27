@@ -83,7 +83,7 @@ resource "aws_iam_role_policy" "api_lambda_policy" {
         Action = [
           "execute-api:ManageConnections"
         ]
-        Resource = ["arn:aws:execute-api:*:*:*/*"]
+        Resource = ["*"]
       },
       {
         Sid    = "AllowDynamodb"

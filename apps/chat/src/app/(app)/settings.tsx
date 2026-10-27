@@ -14,40 +14,133 @@ import {
   Sun,
   UserRound,
   Volume2,
+  type LucideIcon,
 } from "lucide-react-native"
 import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui"
+import Constants from "expo-constants"
 import { useSettings, type ThemePreference } from "@/context/SettingsContext"
 
-const THEME_OPTIONS: { key: ThemePreference; label: string; icon: typeof Sun }[] = [
+const APP_VERSION = Constants.expoConfig?.version ?? "1.0.0"
+
+const THEME_OPTIONS: { key: ThemePreference; label: string; icon: LucideIcon }[] = [
   { key: "light", label: "Light", icon: Sun },
   { key: "dark", label: "Dark", icon: Moon },
   { key: "system", label: "System", icon: Monitor },
 ]
 
-const APP_VERSION = "1.0.0"
+/** A row whose trailing control is a boolean switch. */
+function SettingSwitch({
+  title,
+  description,
+  icon: Icon,
+  value,
+  onChange,
+  disabled,
+}: {
+  title: string
+  description: string
+  icon: LucideIcon
+  value: boolean
+  onChange: (value: boolean) => void
+  disabled?: boolean
+}) {
+  const colors = useThemeColors()
 
-/**
- * Settings modelled on Telegram: grouped cards, an inline theme switcher, and
- * notification/privacy toggles. Everything persists locally through
- * `SettingsContext`; features that need backend support are marked as such
- * instead of pretending to work.
- */
+  return (
+    <SettingsRow
+      title={title}
+      description={description}
+      leading={
+        <SettingsIcon>
+          <Icon size={16} color={colors.primary} />
+        </SettingsIcon>
+      }
+      trailing={
+        <Switch
+          value={value}
+          disabled={disabled}
+          onValueChange={onChange}
+          trackColor={{ false: colors.input, true: colors.primary }}
+          thumbColor={colors.background}
+        />
+      }
+    />
+  )
+}
+
+/** A row that only advertises a feature that does not exist yet. */
+function ComingSoonRow({
+  title,
+  description,
+  icon: Icon,
+}: {
+  title: string
+  description?: string
+  icon: LucideIcon
+}) {
+  const colors = useThemeColors()
+
+  return (
+    <SettingsRow
+      title={title}
+      description={description}
+      leading={
+        <SettingsIcon tone="neutral">
+          <Icon size={16} color={colors.foreground} />
+        </SettingsIcon>
+      }
+      value="Soon"
+      chevron={false}
+    />
+  )
+}
+
+function ThemePicker() {
+  const colors = useThemeColors()
+  const { settings, setSetting } = useSettings()
+
+  return (
+    <View className="gap-3 p-4">
+      <View className="flex-row items-center gap-2">
+        <Text className="flex-1 text-base font-medium text-foreground">Theme</Text>
+        <Text variant="small" className="font-normal text-muted-foreground">
+          {THEME_OPTIONS.find((option) => option.key === settings.theme)?.label ?? "System"}
+        </Text>
+      </View>
+      <View className="flex-row gap-2 rounded-xl bg-secondary p-1">
+        {THEME_OPTIONS.map(({ key, label, icon: Icon }) => {
+          const active = settings.theme === key
+          return (
+            <Pressable
+              key={key}
+              onPress={() => setSetting("theme", key)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={`${label} theme`}
+              className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${
+                active ? "bg-card" : "bg-transparent"
+              }`}
+            >
+              <Icon
+                size={15}
+                color={active ? colors.primary : colors.mutedForeground}
+                strokeWidth={2}
+              />
+              <Text variant="small" className={active ? "text-primary" : "text-muted-foreground"}>
+                {label}
+              </Text>
+            </Pressable>
+          )
+        })}
+      </View>
+    </View>
+  )
+}
+
 export default function SettingsScreen() {
   const colors = useThemeColors()
   const router = useRouter()
   const { settings, setSetting } = useSettings()
-
-  const toggle =
-    (
-      key:
-        | "messageNotifications"
-        | "notificationSound"
-        | "messagePreview"
-        | "readReceipts"
-        | "mediaAutoDownload",
-    ) =>
-    (value: boolean) =>
-      setSetting(key, value)
 
   return (
     <SafeArea edges={["top", "left", "right"]}>
@@ -60,99 +153,32 @@ export default function SettingsScreen() {
         </Text>
 
         <SettingsGroup title="Appearance">
-          <View className="gap-3 p-4">
-            <View className="flex-row items-center gap-2">
-              <Text className="flex-1 text-base font-medium text-foreground">Theme</Text>
-              <Text variant="small" className="font-normal text-muted-foreground">
-                {THEME_OPTIONS.find((option) => option.key === settings.theme)?.label ?? "System"}
-              </Text>
-            </View>
-            <View className="flex-row gap-2 rounded-xl bg-secondary p-1">
-              {THEME_OPTIONS.map(({ key, label, icon: Icon }) => {
-                const active = settings.theme === key
-
-                return (
-                  <Pressable
-                    key={key}
-                    onPress={() => setSetting("theme", key)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active }}
-                    accessibilityLabel={`${label} theme`}
-                    className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2 ${
-                      active ? "bg-card" : "bg-transparent"
-                    }`}
-                  >
-                    <Icon
-                      size={15}
-                      color={active ? colors.primary : colors.mutedForeground}
-                      strokeWidth={2}
-                    />
-                    <Text
-                      variant="small"
-                      className={active ? "text-primary" : "text-muted-foreground"}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-          </View>
+          <ThemePicker />
         </SettingsGroup>
 
         <SettingsGroup title="Notifications">
-          <SettingsRow
+          <SettingSwitch
             title="Message notifications"
             description="Alerts for new messages"
-            leading={
-              <SettingsIcon>
-                <Bell size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Switch
-                value={settings.messageNotifications}
-                onValueChange={toggle("messageNotifications")}
-                trackColor={{ false: colors.input, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            }
+            icon={Bell}
+            value={settings.messageNotifications}
+            onChange={(next) => setSetting("messageNotifications", next)}
           />
-          <SettingsRow
+          <SettingSwitch
             title="Sound"
             description="Play a sound for new messages"
-            leading={
-              <SettingsIcon>
-                <Volume2 size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Switch
-                value={settings.notificationSound}
-                onValueChange={toggle("notificationSound")}
-                disabled={!settings.messageNotifications}
-                trackColor={{ false: colors.input, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            }
+            icon={Volume2}
+            value={settings.notificationSound}
+            onChange={(next) => setSetting("notificationSound", next)}
+            disabled={!settings.messageNotifications}
           />
-          <SettingsRow
+          <SettingSwitch
             title="Message preview"
             description="Show message text in notifications"
-            leading={
-              <SettingsIcon>
-                <MessageSquare size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Switch
-                value={settings.messagePreview}
-                onValueChange={toggle("messagePreview")}
-                disabled={!settings.messageNotifications}
-                trackColor={{ false: colors.input, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            }
+            icon={MessageSquare}
+            value={settings.messagePreview}
+            onChange={(next) => setSetting("messagePreview", next)}
+            disabled={!settings.messageNotifications}
           />
         </SettingsGroup>
 
@@ -160,56 +186,27 @@ export default function SettingsScreen() {
           title="Privacy"
           footer="Read receipts tell the other person you have seen their message."
         >
-          <SettingsRow
+          <SettingSwitch
             title="Read receipts"
             description="Share when you have read messages"
-            leading={
-              <SettingsIcon>
-                <Eye size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Switch
-                value={settings.readReceipts}
-                onValueChange={toggle("readReceipts")}
-                trackColor={{ false: colors.input, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            }
+            icon={Eye}
+            value={settings.readReceipts}
+            onChange={(next) => setSetting("readReceipts", next)}
           />
-          <SettingsRow
+          <ComingSoonRow
             title="Blocked contacts"
             description="Manage people you have blocked"
-            leading={
-              <SettingsIcon>
-                <Lock size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Text variant="small" className="font-normal text-muted-foreground">
-                Soon
-              </Text>
-            }
+            icon={Lock}
           />
         </SettingsGroup>
 
         <SettingsGroup title="Data and storage">
-          <SettingsRow
+          <SettingSwitch
             title="Auto-download media"
             description="Download photos on Wi-Fi"
-            leading={
-              <SettingsIcon>
-                <Database size={16} color={colors.primary} />
-              </SettingsIcon>
-            }
-            trailing={
-              <Switch
-                value={settings.mediaAutoDownload}
-                onValueChange={toggle("mediaAutoDownload")}
-                trackColor={{ false: colors.input, true: colors.primary }}
-                thumbColor={colors.background}
-              />
-            }
+            icon={Database}
+            value={settings.mediaAutoDownload}
+            onChange={(next) => setSetting("mediaAutoDownload", next)}
           />
           <SettingsRow
             title="Storage usage"
@@ -235,27 +232,12 @@ export default function SettingsScreen() {
               </SettingsIcon>
             }
           />
-          <SettingsRow
+          <ComingSoonRow
             title="Share Chatslock"
             description="Invite someone to chat with you"
-            leading={
-              <SettingsIcon tone="neutral">
-                <Share2 size={16} color={colors.foreground} />
-              </SettingsIcon>
-            }
-            value="Soon"
-            chevron={false}
+            icon={Share2}
           />
-          <SettingsRow
-            title="Report a problem"
-            leading={
-              <SettingsIcon tone="neutral">
-                <Bug size={16} color={colors.foreground} />
-              </SettingsIcon>
-            }
-            value="Soon"
-            chevron={false}
-          />
+          <ComingSoonRow title="Report a problem" icon={Bug} />
         </SettingsGroup>
 
         <SettingsGroup>
