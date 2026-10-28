@@ -4,21 +4,23 @@
     "slug": "chatzy",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/files/icon-1024.png",
     "scheme": "chatslock",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/files/icon-1024.png",
       "bundleIdentifier": "com.chatslock.app",
-      "associatedDomains": ["applinks:chatslock.com", "applinks:www.chatslock.com"]
+      "associatedDomains": [
+        "applinks:chatslock.com",
+        "applinks:www.chatslock.com"
+      ]
     },
     "android": {
       "package": "com.yash.chatzy",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/files/adaptive-icon-foreground-1024.png",
+        "backgroundImage": "./assets/files/adaptive-icon-background-1024.png"
       },
       "predictiveBackGestureEnabled": false,
       "intentFilters": [
@@ -37,13 +39,16 @@
               "pathPrefix": "/u"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/files/favicon-196.png"
     },
     "plugins": [
       "expo-router",
@@ -51,7 +56,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/files/splash-icon.png",
           "imageWidth": 76
         }
       ],

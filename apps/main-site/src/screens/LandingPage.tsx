@@ -31,7 +31,12 @@ export default function LandingPage() {
 
       <footer className="site-footer">
         <span>chatslock</span>
-        <span>Private messaging.</span>
+        <span className="site-footer__links">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <a href="/delete-account">Delete account</a>
+          <a href="/support">Support</a>
+        </span>
       </footer>
     </div>
   )

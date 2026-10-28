@@ -8,14 +8,17 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
       "default": "./dist/index.js"
     },
     "./schema": {
       "types": "./dist/schema/index.d.ts",
+      "react-native": "./src/schema/index.ts",
       "default": "./dist/schema/index.js"
     },
     "./req": {
       "types": "./dist/req/index.d.ts",
+      "react-native": "./src/req/index.ts",
       "default": "./dist/req/index.js"
     }
   },
