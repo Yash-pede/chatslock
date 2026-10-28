@@ -81,7 +81,7 @@ export default function ConversationScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} disabled={!Keyboard.isVisible()}>
         <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
           <ConversationHeader name={name} avatar={avatar} />
 

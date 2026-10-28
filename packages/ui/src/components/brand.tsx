@@ -33,7 +33,11 @@ export function BrandMark({ size = "md", className, source }: BrandMarkProps) {
   }
 
   return (
-    <View className={cn(tile, "bg-primary")} accessibilityRole="image" accessibilityLabel="Chatslock">
+    <View
+      className={cn(tile, "bg-primary")}
+      accessibilityRole="image"
+      accessibilityLabel="Chatslock"
+    >
       <MessageSquareLock size={spec.icon} color={colors.primaryForeground} strokeWidth={2} />
     </View>
   )

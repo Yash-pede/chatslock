@@ -31,14 +31,14 @@ export function ConversationHeader({ name, avatar }: { name: string; avatar?: st
         </Text>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Conversation options"
-        hitSlop={8}
-        className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
-      >
-        <MoreVertical size={20} color={colors.foreground} />
-      </Pressable>
+      {/*<Pressable*/}
+      {/*  accessibilityRole="button"*/}
+      {/*  accessibilityLabel="Conversation options"*/}
+      {/*  hitSlop={8}*/}
+      {/*  className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"*/}
+      {/*>*/}
+      {/*  <MoreVertical size={20} color={colors.foreground} />*/}
+      {/*</Pressable>*/}
     </View>
   )
 }
