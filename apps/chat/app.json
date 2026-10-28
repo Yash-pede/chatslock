@@ -10,13 +10,11 @@
     "ios": {
       "icon": "./assets/files/icon-1024.png",
       "bundleIdentifier": "com.chatslock.app",
-      "associatedDomains": [
-        "applinks:chatslock.com",
-        "applinks:www.chatslock.com"
-      ]
+      "associatedDomains": ["applinks:chatslock.com", "applinks:www.chatslock.com"]
     },
     "android": {
       "package": "com.yash.chatzy",
+      "softwareKeyboardLayoutMode": "pan",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/files/adaptive-icon-foreground-1024.png",
@@ -39,10 +37,7 @@
               "pathPrefix": "/u"
             }
           ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "category": ["BROWSABLE", "DEFAULT"]
         }
       ]
     },
@@ -57,7 +52,8 @@
         {
           "backgroundColor": "#208AEF",
           "image": "./assets/files/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "resizeMode": "contain"
         }
       ],
       "expo-secure-store",
@@ -68,7 +64,6 @@
           "microphonePermission": false
         }
       ],
-      "expo-native-sheet-emojis",
       "expo-font",
       "expo-image",
       "expo-status-bar",

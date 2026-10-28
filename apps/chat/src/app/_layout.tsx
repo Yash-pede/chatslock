@@ -10,12 +10,14 @@ import { UnverifiedGate } from "@/components/unverified-gate"
 import type { Flow } from "@/context/profile/profile"
 import "../../global.css"
 
+const appIcon = require("../../assets/files/icon-1024.png")
+
 /** Splash while the session is restored and the profile is loaded. */
 function LoadingGate() {
   return (
     <SafeArea>
       <View className="flex-1 items-center justify-center gap-4">
-        <BrandMark />
+        <BrandMark source={appIcon} />
         <Spinner size="sm" />
       </View>
     </SafeArea>
@@ -92,7 +94,7 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   return (
     <SafeArea>
       <View className="flex-1 items-center justify-center gap-4 px-6">
-        <BrandMark />
+        <BrandMark source={appIcon} />
         <Text variant="muted" className="text-center">
           {error.message || "Something went wrong."}
         </Text>

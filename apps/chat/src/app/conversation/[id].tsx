@@ -1,8 +1,16 @@
 import { useLocalSearchParams } from "expo-router"
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 import { ChevronDown } from "lucide-react-native"
 import { FlashList, type ListRenderItem } from "@shopify/flash-list"
-import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from "react-native"
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useThemeColors } from "@repo/ui"
 import { useProfile } from "@/context/profile/ProfileContext"
@@ -47,12 +55,6 @@ export default function ConversationScreen() {
 
   const { listRef, awayFromBottom, onScroll, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
-  const [emojiOpen, setEmojiOpen] = useState(false)
-
-  const onEmojiOpenChange = useCallback((open: boolean) => {
-    if (open) Keyboard.dismiss()
-    setEmojiOpen(open)
-  }, [])
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
@@ -74,57 +76,55 @@ export default function ConversationScreen() {
     )
 
   return (
-    <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      <ConversationHeader name={name} avatar={avatar} />
+    <KeyboardAvoidingView
+      className="flex-1"
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+          <ConversationHeader name={name} avatar={avatar} />
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={0}
-      >
-        <FlashList
-          ref={listRef}
-          data={messages}
-          renderItem={renderItem}
-          keyExtractor={keyExtractor}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          showsVerticalScrollIndicator={false}
-          maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 0.2 }}
-          onLoad={onLoad}
-          onScroll={onScroll}
-          scrollEventThrottle={32}
-          ListHeaderComponent={
-            messages.length > 0 ? (
-              <ConversationListHeader
-                name={name}
-                avatar={avatar}
-                hasOlder={hasOlder}
-                loadingOlder={loadingOlder}
-              />
-            ) : null
-          }
-          ListEmptyComponent={emptyState}
-        />
+          <FlashList
+            ref={listRef}
+            data={messages}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            showsVerticalScrollIndicator={false}
+            maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 0.2 }}
+            onLoad={onLoad}
+            onScroll={onScroll}
+            scrollEventThrottle={32}
+            ListHeaderComponent={
+              messages.length > 0 ? (
+                <ConversationListHeader
+                  name={name}
+                  avatar={avatar}
+                  hasOlder={hasOlder}
+                  loadingOlder={loadingOlder}
+                />
+              ) : null
+            }
+            ListEmptyComponent={emptyState}
+          />
 
-        {awayFromBottom ? (
-          <Pressable
-            onPress={() => scrollToBottom(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Jump to latest message"
-            className="absolute bottom-24 end-4 h-10 w-10 items-center justify-center rounded-full border border-border bg-card shadow-md active:opacity-80"
-          >
-            <ChevronDown size={20} color={colors.foreground} />
-          </Pressable>
-        ) : null}
+          {awayFromBottom ? (
+            <Pressable
+              onPress={() => scrollToBottom(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Jump to latest message"
+              className="absolute bottom-24 end-4 h-10 w-10 items-center justify-center rounded-full border border-border bg-card shadow-md active:opacity-80"
+            >
+              <ChevronDown size={20} color={colors.foreground} />
+            </Pressable>
+          ) : null}
 
-        <MessageComposer
-          onSend={send}
-          emojiOpen={emojiOpen}
-          onEmojiOpenChange={onEmojiOpenChange}
-        />
-      </KeyboardAvoidingView>
-    </View>
+          <MessageComposer onSend={send} />
+        </View>
+      </TouchableWithoutFeedback>
+    </KeyboardAvoidingView>
   )
 }

@@ -1,5 +1,5 @@
 import React from "react"
-import { View } from "react-native"
+import { Image, ImageSourcePropType, View } from "react-native"
 import { MessageSquareLock } from "lucide-react-native"
 import { cn } from "../lib/utils"
 import { radius } from "../lib/radius"
@@ -14,19 +14,26 @@ const sizeMap = {
 export interface BrandMarkProps {
   size?: keyof typeof sizeMap
   className?: string
+  /** App icon image source. Rendered instead of the default glyph when provided. */
+  source?: ImageSourcePropType
 }
 
-/** App logo tile. The only place the brand gradient/shape is defined. */
-export function BrandMark({ size = "md", className }: BrandMarkProps) {
+/** App logo tile. The only place the brand shape is defined. */
+export function BrandMark({ size = "md", className, source }: BrandMarkProps) {
   const colors = useThemeColors()
   const spec = sizeMap[size]
+  const tile = cn("items-center justify-center overflow-hidden", spec.box, className)
+
+  if (source) {
+    return (
+      <View className={tile} accessibilityRole="image" accessibilityLabel="Chatslock">
+        <Image source={source} className="h-full w-full" resizeMode="cover" />
+      </View>
+    )
+  }
 
   return (
-    <View
-      className={cn("items-center justify-center bg-primary", spec.box, className)}
-      accessibilityRole="image"
-      accessibilityLabel="Chatslock"
-    >
+    <View className={cn(tile, "bg-primary")} accessibilityRole="image" accessibilityLabel="Chatslock">
       <MessageSquareLock size={spec.icon} color={colors.primaryForeground} strokeWidth={2} />
     </View>
   )

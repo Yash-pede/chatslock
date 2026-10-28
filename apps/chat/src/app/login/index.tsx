@@ -4,6 +4,8 @@ import { Pressable, View } from "react-native"
 import { BrandMark, SafeArea, Text, useThemeColors } from "@repo/ui"
 import { useAuth } from "@/context/AuthContext"
 
+const appIcon = require("../../../assets/files/icon-1024.png")
+
 /**
  * Entry point for signed-out users: pick which kind of account is signing in.
  * Users continue with a phone OTP; agents sign in with username + password.
@@ -19,7 +21,7 @@ export default function LoginChoiceScreen() {
     <SafeArea>
       <View className="flex-1 justify-center px-6 py-10">
         <View className="mb-12">
-          <BrandMark className="mb-6" />
+          <BrandMark source={appIcon} className="mb-6" />
           <Text variant="h1" className="text-[2.15rem]">
             Chatslock
           </Text>
