@@ -10,7 +10,10 @@
     "ios": {
       "icon": "./assets/files/icon-1024.png",
       "bundleIdentifier": "com.chatslock.app",
-      "associatedDomains": ["applinks:chatslock.com", "applinks:www.chatslock.com"]
+      "associatedDomains": [
+        "applinks:chatslock.com",
+        "applinks:www.chatslock.com"
+      ]
     },
     "android": {
       "package": "com.yash.chatzy",
@@ -36,7 +39,10 @@
               "pathPrefix": "/u"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -65,7 +71,8 @@
       "expo-native-sheet-emojis",
       "expo-font",
       "expo-image",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
