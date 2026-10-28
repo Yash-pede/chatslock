@@ -1,12 +1,7 @@
 import { useEffect, useState } from "react"
 import LandingPage from "./screens/LandingPage"
 import AgentRedirect from "./screens/AgentRedirect"
-import {
-  DeleteAccountPage,
-  PrivacyPage,
-  SupportPage,
-  TermsPage,
-} from "./screens/LegalPages"
+import { DeleteAccountPage, PrivacyPage, SupportPage, TermsPage } from "./screens/LegalPages"
 import { resolveChatId } from "./lib/app-links"
 import "./App.css"
 

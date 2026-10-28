@@ -80,8 +80,8 @@ export function PrivacyPage() {
 
       <h2>Who we share it with</h2>
       <p>
-        Only our infrastructure providers (Amazon Web Services) that host the app and database.
-        They process data on our behalf and do not use it for their own purposes.
+        Only our infrastructure providers (Amazon Web Services) that host the app and database. They
+        process data on our behalf and do not use it for their own purposes.
       </p>
 
       <h2>Security</h2>
@@ -93,12 +93,14 @@ export function PrivacyPage() {
       <h2>Retention and deletion</h2>
       <p>
         Your account and messages are kept while your account exists. You can ask us to delete your
-        account and data at any time — see{" "}
-        <a href="/delete-account">Delete your account</a>.
+        account and data at any time — see <a href="/delete-account">Delete your account</a>.
       </p>
 
       <h2>Children</h2>
-      <p>chatslock is not intended for anyone under 18, and we do not knowingly collect data from children.</p>
+      <p>
+        chatslock is not intended for anyone under 18, and we do not knowingly collect data from
+        children.
+      </p>
 
       <h2>Changes</h2>
       <p>If this policy changes we will update this page and the date above.</p>
@@ -108,10 +110,7 @@ export function PrivacyPage() {
 
 export function TermsPage() {
   return (
-    <LegalPage
-      title="Terms of service"
-      intro="By using chatslock you agree to these terms."
-    >
+    <LegalPage title="Terms of service" intro="By using chatslock you agree to these terms.">
       <h2>Your account</h2>
       <p>
         Provide accurate information, keep access to your phone number, and do not share your
@@ -127,7 +126,10 @@ export function TermsPage() {
       <p>We may suspend or remove accounts that break these rules.</p>
 
       <h2>Content</h2>
-      <p>You keep ownership of what you send. You give us permission to store and transmit it only to run the service.</p>
+      <p>
+        You keep ownership of what you send. You give us permission to store and transmit it only to
+        run the service.
+      </p>
 
       <h2>Availability</h2>
       <p>
@@ -153,8 +155,9 @@ export function DeleteAccountPage() {
       <h2>How to request deletion</h2>
       <ol>
         <li>
-          Email <a href={`mailto:${CONTACT_EMAIL}?subject=Delete%20my%20account`}>{CONTACT_EMAIL}</a>{" "}
-          from any address, with the subject “Delete my account”.
+          Email{" "}
+          <a href={`mailto:${CONTACT_EMAIL}?subject=Delete%20my%20account`}>{CONTACT_EMAIL}</a> from
+          any address, with the subject “Delete my account”.
         </li>
         <li>Include the phone number you use to sign in to chatslock.</li>
         <li>We verify the request and confirm once it is done.</li>
