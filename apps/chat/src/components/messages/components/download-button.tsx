@@ -2,7 +2,7 @@ import { Check, Download } from "lucide-react-native"
 import { Pressable } from "react-native"
 import Svg, { Circle } from "react-native-svg"
 import { Spinner, useToast, useThemeColors } from "@repo/ui"
-import { useDocumentDownload } from "@/components/messages/use-document-download"
+import { useDocumentDownload } from "../hooks/use-document-download"
 
 const SIZE = 40
 const STROKE = 3
@@ -70,11 +70,6 @@ export function DownloadButton({ url, fileName, mimeType, tint }: DownloadButton
       if (outcome === "saved") {
         toast({ title: "Downloaded", description: `${fileName} saved` })
       } else if (outcome === "error") {
-        // toast({
-        //   title: "Download failed",
-        //   description: "Could not save the file",
-        //   variant: "destructive",
-        // })
         console.error("File not saved")
       }
       // "cancelled" (user dismissed the folder picker) stays silent.

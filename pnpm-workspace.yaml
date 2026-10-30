@@ -12,18 +12,41 @@ overrides:
 # depends on. Packages reference these as "catalog:", so a bump here lands
 # everywhere at once instead of drifting apart one `pnpm add` at a time.
 catalog:
+  # React Native / Expo client stack
+  "@types/react": ~19.3.0
+  expo: ~58.0.20
+  react: 19.3.0
+  react-native: 0.88.0
+  react-native-reanimated: 4.7.1
+  react-native-safe-area-context: ~5.10.1
+  uniwind: ^1.13.0
+  # UI primitives
+  class-variance-authority: ^0.7.1
+  clsx: ^2.1.1
+  tailwind-merge: ^3.7.0
+  # Server / runtime (shared by @repo/api and functions)
+  "@hono/aws-lambda": ^1.0.0
+  hono: ^4.13.13
+  zod: ^4.6.5
+  # AWS SDKs (shared by @repo/api and functions)
+  "@aws-sdk/client-apigatewaymanagementapi": ^3.1154.0
+  "@aws-sdk/client-cognito-identity-provider": ^3.1147.0
+  "@aws-sdk/client-dynamodb": ^3.1149.0
+  "@aws-sdk/client-s3": ^3.1153.0
+  "@aws-sdk/s3-presigned-post": ^3.1159.0
+  "@aws-sdk/s3-request-presigner": ^3.1153.0
+  "@aws-sdk/util-dynamodb": ^3.996.9
+  # Build / lint tooling
   "@eslint/js": 10.0.1
-  "@react-native-async-storage/async-storage": 2.2.0
-  "@types/react": ~19.2.2
+  esbuild: ^0.28.1
   eslint-config-prettier: 10.1.8
   eslint-plugin-only-warn: 1.2.1
   eslint-plugin-react-hooks: 7.1.1
-  expo-secure-store: ~58.0.2
   globals: 17.12.0
-  react: 19.2.3
-  react-native: 0.86.3
-  react-native-reanimated: 4.5.1
-  react-native-safe-area-context: ~5.7.0
+  tsup: ^8.5.1
+  # Storage
+  "@react-native-async-storage/async-storage": 2.2.0
+  expo-secure-store: ~58.0.2
 allowBuilds:
   esbuild: true
   lefthook: true

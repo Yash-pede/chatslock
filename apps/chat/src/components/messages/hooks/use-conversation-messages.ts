@@ -4,9 +4,9 @@ import { MEDIA_CONTENT_TYPES, type MediaContentType } from "@repo/types/req"
 import { useToast } from "@repo/ui"
 import { conversationsApi, responseStatus, uploadMediaToBucket } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
-import { mergeMessages, toChatMessage, waveformFrom } from "@/components/messages/mappers"
-import type { ChatMessage, PickedMedia } from "@/components/messages/types"
-import type { RecordedAudio } from "@/components/messages/use-audio-recorder"
+import { mergeMessages, toChatMessage, waveformFrom } from "../lib/mappers"
+import type { ChatMessage, PickedMedia } from "../types"
+import type { RecordedAudio } from "./use-audio-recorder"
 
 export type MessagesStatus = "loading" | "ready" | "error"
 

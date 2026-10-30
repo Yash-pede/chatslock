@@ -65,7 +65,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow chatslock to access your photos so you can choose a profile picture.",
+          "photosPermission": "Allow chatslock to access your photos so you can choose a profile picture."
         }
       ],
       "expo-font",

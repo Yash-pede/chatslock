@@ -1,10 +1,10 @@
 import { router } from "expo-router"
-import { ChevronLeft, MoreVertical } from "lucide-react-native"
+import { ChevronLeft } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { Text, useThemeColors } from "@repo/ui"
 import { UserAvatar } from "@/components/user-avatar"
 
-/** Conversation top bar: back, peer identity, and options. */
+/** Conversation top bar: back and peer identity. */
 export function ConversationHeader({ name, avatar }: { name: string; avatar?: string }) {
   const colors = useThemeColors()
 
@@ -30,15 +30,6 @@ export function ConversationHeader({ name, avatar }: { name: string; avatar?: st
           Direct message
         </Text>
       </View>
-
-      {/*<Pressable*/}
-      {/*  accessibilityRole="button"*/}
-      {/*  accessibilityLabel="Conversation options"*/}
-      {/*  hitSlop={8}*/}
-      {/*  className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"*/}
-      {/*>*/}
-      {/*  <MoreVertical size={20} color={colors.foreground} />*/}
-      {/*</Pressable>*/}
     </View>
   )
 }

@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/components/messages/types"
+import type { ChatMessage } from "../types"
 
 /** A photo or video that can be opened in the full-screen viewer. */
 export interface MediaItem {

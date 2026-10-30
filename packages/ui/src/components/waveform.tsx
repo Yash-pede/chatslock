@@ -45,11 +45,7 @@ export function Waveform({
   const playedBars = Math.round(Math.max(0, Math.min(1, progress)) * levels.length)
 
   return (
-    <View
-      className={cn("flex-row items-center", className)}
-      style={{ height, gap }}
-      {...props}
-    >
+    <View className={cn("flex-row items-center", className)} style={{ height, gap }} {...props}>
       {levels.map((level, index) => (
         <View
           key={index}

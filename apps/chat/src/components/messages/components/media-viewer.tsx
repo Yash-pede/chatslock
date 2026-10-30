@@ -6,8 +6,8 @@ import { VideoView, useVideoPlayer } from "expo-video"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Play, X } from "lucide-react-native"
 import { Carousel, Spinner, Text } from "@repo/ui"
-import { useVideoThumbnail } from "@/components/messages/use-video-thumbnail"
-import type { MediaItem } from "@/components/messages/media"
+import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
+import type { MediaItem } from "../lib/media"
 
 /** Full-screen photo that shows a loader until the image has loaded. */
 function FullImage({ url, width, height }: { url: string; width: number; height: number }) {

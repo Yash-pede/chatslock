@@ -20,9 +20,9 @@ import {
   Trash2,
 } from "lucide-react-native"
 import { Text, Waveform, useToast, useThemeColors } from "@repo/ui"
-import { AttachmentTray, type TrayAction } from "@/components/messages/attachment-tray"
-import { useAudioRecorder, type RecordedAudio } from "@/components/messages/use-audio-recorder"
-import type { PickedMedia } from "@/components/messages/types"
+import { AttachmentTray, type TrayAction } from "./attachment-tray"
+import { useAudioRecorder, type RecordedAudio } from "../hooks/use-audio-recorder"
+import type { PickedMedia } from "../types"
 
 export interface MessageComposerProps {
   onSend: (text: string) => void | Promise<void>
@@ -253,9 +253,7 @@ export function MessageComposer({
           >
             <Mic
               size={18}
-              color={
-                onSendAudio && !disabled ? colors.primaryForeground : colors.mutedForeground
-              }
+              color={onSendAudio && !disabled ? colors.primaryForeground : colors.mutedForeground}
             />
           </Pressable>
         )}

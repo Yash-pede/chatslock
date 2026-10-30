@@ -1,5 +1,5 @@
 import type { Message } from "@repo/types/schema"
-import type { ChatMessage } from "./types"
+import type { ChatMessage } from "../types"
 
 /**
  * Deterministic pseudo-waveform for voice bubbles: the server stores only the

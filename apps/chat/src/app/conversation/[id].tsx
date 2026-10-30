@@ -14,19 +14,19 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useThemeColors } from "@repo/ui"
 import { useProfile } from "@/context/profile/ProfileContext"
-import { MessageBubble } from "@/components/messages/message-bubble"
-import { MessageComposer } from "@/components/messages/message-composer"
-import { MediaViewer } from "@/components/messages/media-viewer"
-import { collectMedia } from "@/components/messages/media"
-import { ConversationHeader } from "@/components/messages/conversation-header"
 import {
+  collectMedia,
   ConversationEmpty,
+  ConversationHeader,
   ConversationListHeader,
   ConversationLoading,
-} from "@/components/messages/conversation-list-states"
-import type { ChatMessage } from "@/components/messages/types"
-import { useConversationMessages } from "@/components/messages/use-conversation-messages"
-import { useMessageListScroll } from "@/components/messages/use-message-list-scroll"
+  MediaViewer,
+  MessageBubble,
+  MessageComposer,
+  useConversationMessages,
+  useMessageListScroll,
+  type ChatMessage,
+} from "@/components/messages"
 
 const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 12, paddingBottom: 12 },

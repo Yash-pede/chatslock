@@ -4,9 +4,9 @@ import { Pressable, View } from "react-native"
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
 import { FileText, Pause, Play } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
-import { DownloadButton } from "@/components/messages/download-button"
-import { useVideoThumbnail } from "@/components/messages/use-video-thumbnail"
-import type { ChatMessage } from "@/components/messages/types"
+import { DownloadButton } from "./download-button"
+import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
+import type { ChatMessage } from "../types"
 
 function clock(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
