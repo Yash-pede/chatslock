@@ -8,6 +8,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "eas:build": "cd apps/chat && eas build --platform android --profile production",
+    "eas:submit": "cd apps/chat && eas submit --platform android",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint -- --fix",
     "format": "prettier --write .",
