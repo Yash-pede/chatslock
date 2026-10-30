@@ -1,3 +1,5 @@
+import type { MessageType } from "@repo/types/schema"
+
 /**
  * Message shapes used by the conversation screen. Media messages carry the
  * dimensions so the list can reserve the right space before the image loads,
@@ -9,8 +11,16 @@ export interface MessageImage {
   height: number
 }
 
+/** A video message (stored as `DOC` on the wire, surfaced as a playable preview). */
+export interface MessageVideo {
+  url: string
+  width: number
+  height: number
+}
+
 export interface MessageAttachment {
   id: string
+  url: string
   fileName: string
   sizeBytes: number
   mimeType: string
@@ -23,9 +33,10 @@ export interface ChatMessage {
   senderId: string
   /** True when the signed-in user sent it. */
   isMine: boolean
-  kind: "text" | "image" | "file" | "voice"
+  type: MessageType
   text?: string
   image?: MessageImage
+  video?: MessageVideo
   attachment?: MessageAttachment
   voice?: { durationSeconds: number; waveform: number[] }
   /** Epoch milliseconds. */
@@ -39,4 +50,15 @@ export interface ChatMessage {
   pendingId?: string
   /** System notices (date chips, "X joined") render centered without a bubble. */
   isSystem?: boolean
+}
+
+/** A locally picked file ready to be uploaded and attached to a media message. */
+export interface PickedMedia {
+  uri: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  /** Pixel dimensions when the picker knows them (images/videos); avoids reflow. */
+  width?: number
+  height?: number
 }

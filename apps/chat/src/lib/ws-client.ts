@@ -85,7 +85,12 @@ export class WsClient {
 
     this.clearReconnect()
     const socket = this.options.open()
-    if (!socket) return
+    if (!socket) {
+      // No token yet (a refresh is likely in flight). Retry with backoff instead
+      // of giving up, so the socket connects as soon as one is available.
+      this.scheduleReconnect()
+      return
+    }
 
     this.socket = socket
     this.opened = false
@@ -161,6 +166,17 @@ export class WsClient {
 
   // ---- internals ----
 
+  /** Arms the next connect attempt with exponential backoff. */
+  private scheduleReconnect(): void {
+    this.attempts += 1
+    const retryInMs = Math.min(RECONNECT_MIN_MS * 2 ** (this.attempts - 1), RECONNECT_MAX_MS)
+    this.options.onStatusChange("reconnecting")
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      this.connect()
+    }, retryInMs)
+  }
+
   /** Single teardown path: every close, timeout and error lands here. */
   private end(): void {
     if (!this.socket) return
@@ -182,7 +198,9 @@ export class WsClient {
       wasOpen,
       retryInMs,
     })
-    if (wasOpen) this.options.onDropped?.()
+    // `reconnect-now` is a deliberate refresh (app foregrounded), not a drop,
+    // so it must not surface the "you are offline" toast.
+    if (wasOpen && this.closingReason !== "reconnect-now") this.options.onDropped?.()
     wsTraffic.event(wasOpen ? "closed" : "closed before opening", {
       code: this.closingCode,
       reason: this.closingReason || undefined,

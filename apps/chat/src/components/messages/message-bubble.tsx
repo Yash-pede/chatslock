@@ -1,8 +1,10 @@
-import { memo } from "react"
+import { memo, useState } from "react"
 import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
 import { FileText, Play } from "lucide-react-native"
-import { ChatBubble, Text, cn, useThemeColors } from "@repo/ui"
+import { ChatBubble, Spinner, Text, cn, useThemeColors } from "@repo/ui"
+import { DownloadButton } from "@/components/messages/download-button"
+import { useVideoThumbnail } from "@/components/messages/use-video-thumbnail"
 import type { ChatMessage } from "@/components/messages/types"
 
 function clock(ms: number): string {
@@ -35,13 +37,69 @@ export interface MessageBubbleProps {
   message: ChatMessage
   /** Present when a failed message can be retried; makes the bubble tappable. */
   onRetry?: () => void
+  /** Opens the full-screen media viewer at this message's photo/video. */
+  onOpenMedia?: (id: string) => void
+}
+
+/** Photo bubble that shows a loader until the image has loaded. */
+function BubbleImage({
+  url,
+  width,
+  height,
+}: {
+  url: string
+  width: number
+  height: number
+}) {
+  const [loading, setLoading] = useState(true)
+  return (
+    <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/10">
+      <Image
+        source={{ uri: url }}
+        style={{ width, height }}
+        contentFit="cover"
+        transition={120}
+        accessibilityLabel="Photo"
+        onLoadStart={() => setLoading(true)}
+        onLoad={() => setLoading(false)}
+        onError={() => setLoading(false)}
+      />
+      {loading ? <Spinner className="absolute inset-0" color="#ffffff" /> : null}
+    </View>
+  )
+}
+
+/** Video poster with a play affordance; shows a loader until the poster is ready. */
+function VideoPreview({ url, width, height }: { url: string; width: number; height: number }) {
+  const { thumbnail, loading } = useVideoThumbnail(url)
+
+  return (
+    <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/80">
+      {thumbnail ? (
+        <Image source={thumbnail} style={{ width, height }} contentFit="cover" />
+      ) : null}
+      <View className="absolute inset-0 items-center justify-center">
+        {loading ? (
+          <Spinner color="#ffffff" />
+        ) : (
+          <View className="h-11 w-11 items-center justify-center rounded-full bg-black/50">
+            <Play size={20} color="#ffffff" fill="#ffffff" />
+          </View>
+        )}
+      </View>
+    </View>
+  )
 }
 
 /**
  * Renders one message. Memoized and free of layout-affecting side effects so
  * FlashList can recycle rows without re-measuring.
  */
-export const MessageBubble = memo(function MessageBubble({ message, onRetry }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({
+  message,
+  onRetry,
+  onOpenMedia,
+}: MessageBubbleProps) {
   const colors = useThemeColors()
   const variant = message.isMine ? "sent" : "received"
   const time = clock(message.createdAt)
@@ -63,7 +121,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onRetry }: M
       )
     }
 
-    if (message.kind === "image" && message.image) {
+    if (message.type === "IMAGE" && message.image) {
       const { width, height, url } = message.image
       const ratio = height > 0 ? width / height : 1
       const imageWidth = Math.min(IMAGE_MAX_WIDTH, width)
@@ -76,13 +134,15 @@ export const MessageBubble = memo(function MessageBubble({ message, onRetry }: M
           status={message.status}
           className={cn("p-1 px-1 pb-1.5", failedClass)}
         >
-          <Image
-            source={{ uri: url }}
-            style={{ width: imageWidth, height: imageHeight, borderRadius: 10 }}
-            contentFit="cover"
-            transition={120}
-            accessibilityLabel="Photo"
-          />
+          <Pressable
+            onPress={() => onOpenMedia?.(message.id)}
+            disabled={!onOpenMedia}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Open photo"
+            className="active:opacity-90"
+          >
+            <BubbleImage url={url} width={imageWidth} height={imageHeight} />
+          </Pressable>
           {message.text ? (
             <Text className="mt-1 px-1.5 text-base" style={{ color: tint }}>
               {message.text}
@@ -92,8 +152,33 @@ export const MessageBubble = memo(function MessageBubble({ message, onRetry }: M
       )
     }
 
-    if (message.kind === "file" && message.attachment) {
-      const { fileName, sizeBytes } = message.attachment
+    if (message.video) {
+      const ratio = message.video.height > 0 ? message.video.width / message.video.height : 1
+      const videoWidth = Math.min(IMAGE_MAX_WIDTH, message.video.width)
+      const videoHeight = Math.round(videoWidth / ratio)
+
+      return (
+        <ChatBubble
+          variant={variant}
+          timestamp={time}
+          status={message.status}
+          className={cn("p-1 px-1 pb-1.5", failedClass)}
+        >
+          <Pressable
+            onPress={() => onOpenMedia?.(message.id)}
+            disabled={!onOpenMedia}
+            accessibilityRole="button"
+            accessibilityLabel="Play video"
+            className="active:opacity-90"
+          >
+            <VideoPreview url={message.video.url} width={videoWidth} height={videoHeight} />
+          </Pressable>
+        </ChatBubble>
+      )
+    }
+
+    if (message.type === "DOC" && message.attachment) {
+      const { fileName, sizeBytes, url, mimeType } = message.attachment
 
       return (
         <ChatBubble
@@ -122,12 +207,15 @@ export const MessageBubble = memo(function MessageBubble({ message, onRetry }: M
                 {formatSize(sizeBytes)}
               </Text>
             </View>
+            {url.startsWith("http") ? (
+              <DownloadButton url={url} fileName={fileName} mimeType={mimeType} tint={tint} />
+            ) : null}
           </View>
         </ChatBubble>
       )
     }
 
-    if (message.kind === "voice" && message.voice) {
+    if (message.type === "AUDIO" && message.voice) {
       return (
         <ChatBubble
           variant={variant}

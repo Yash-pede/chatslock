@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router"
-import { useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react-native"
 import { FlashList, type ListRenderItem } from "@shopify/flash-list"
 import {
@@ -16,6 +16,8 @@ import { useThemeColors } from "@repo/ui"
 import { useProfile } from "@/context/profile/ProfileContext"
 import { MessageBubble } from "@/components/messages/message-bubble"
 import { MessageComposer } from "@/components/messages/message-composer"
+import { MediaViewer } from "@/components/messages/media-viewer"
+import { collectMedia } from "@/components/messages/media"
 import { ConversationHeader } from "@/components/messages/conversation-header"
 import {
   ConversationEmpty,
@@ -31,7 +33,10 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 3 },
 })
 
-const keyExtractor = (item: ChatMessage) => item.id
+// Prefer `pendingId`: it stays the same before and after the server ack, so a
+// just-sent row is reused instead of remounted (which would jump the list and
+// reload the image).
+const keyExtractor = (item: ChatMessage) => item.pendingId ?? item.id
 
 export default function ConversationScreen() {
   const colors = useThemeColors()
@@ -48,7 +53,7 @@ export default function ConversationScreen() {
   const name = params.name ?? "Conversation"
   const avatar = params.avatar
 
-  const { messages, status, hasOlder, loadingOlder, loadOlder, send, retry } =
+  const { messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, retry } =
     useConversationMessages(conversationId, user?.userId ?? null, {
       unreadCount: Number(params.unread) || 0,
     })
@@ -56,16 +61,30 @@ export default function ConversationScreen() {
   const { listRef, awayFromBottom, onScroll, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
 
+  // Photos/videos from the messages loaded in this screen only; the viewer
+  // never fetches older pages.
+  const media = useMemo(() => collectMedia(messages), [messages])
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+
+  const openMedia = useCallback(
+    (id: string) => {
+      const index = media.findIndex((item) => item.id === id)
+      if (index >= 0) setViewerIndex(index)
+    },
+    [media],
+  )
+
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
       <View style={styles.row}>
         <MessageBubble
           message={item}
           onRetry={item.status === "failed" ? () => retry(item) : undefined}
+          onOpenMedia={openMedia}
         />
       </View>
     ),
-    [retry],
+    [openMedia, retry],
   )
 
   const emptyState =
@@ -122,7 +141,14 @@ export default function ConversationScreen() {
             </Pressable>
           ) : null}
 
-          <MessageComposer onSend={send} />
+          <MessageComposer onSend={send} onSendMedia={sendMedia} />
+
+          <MediaViewer
+            items={media}
+            initialIndex={viewerIndex ?? 0}
+            visible={viewerIndex !== null}
+            onClose={() => setViewerIndex(null)}
+          />
         </View>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>

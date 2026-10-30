@@ -31,13 +31,30 @@ interface WsContextValue {
   send: (input: WsSendInput) => boolean
   /** Subscribes to frames of a given `type`; returns an unsubscribe. */
   on: (type: string, handler: (payload: WsFrame) => void) => () => void
-  /** Sends `{action, op}` and resolves/rejects from the first matching frame. */
-  request: <T>(input: WsSendInput, options: { types: string[]; timeoutMs: number }) => Promise<T>
+  /**
+   * Sends `{action, op}` and resolves/rejects from the first matching frame.
+   * `waitForOpenMs` lets the call wait for the socket to (re)open before sending
+   * instead of failing immediately; pass `0` to fail fast (e.g. when the caller
+   * has a REST fallback). Defaults to `timeoutMs`.
+   */
+  request: <T>(
+    input: WsSendInput,
+    options: { types: string[]; timeoutMs: number; waitForOpenMs?: number },
+  ) => Promise<T>
 }
 
 const WsContext = createContext<WsContextValue | null>(null)
 
 const TOAST_THROTTLE_MS = 8_000
+
+/**
+ * On foreground we only rebuild the socket after a real background stay. Brief
+ * flaps (native image picker, permission dialog, control centre) keep the live
+ * socket, so a healthy connection is never torn down mid-action.
+ */
+const BACKGROUND_RECONNECT_MS = 30_000
+/** How often to poll for the socket to reopen while waiting to send. */
+const OPEN_POLL_MS = 100
 
 /** `[ws] status …` / `[ws] closed …` always; the rest only in development. */
 const log = {
@@ -73,6 +90,8 @@ export function WsProvider({
   const [status, setStatus] = useState<WsStatus>("connecting")
   const clientRef = useRef<WsClient | null>(null)
   const lastToastRef = useRef(0)
+  /** When the app left the foreground, to measure how long it stayed away. */
+  const backgroundedAtRef = useRef<number | null>(null)
 
   const dispatch = useCallback((frame: WsFrame) => {
     if (!frame.type) return
@@ -127,7 +146,16 @@ export function WsProvider({
     client.connect()
 
     const subscription = AppState.addEventListener("change", (next) => {
-      if (next === "active") client.reconnectNow()
+      if (next === "active") {
+        const awayMs = backgroundedAtRef.current ? Date.now() - backgroundedAtRef.current : 0
+        backgroundedAtRef.current = null
+        // Rebuild only after a real background stay (pings were suspended, so
+        // the socket is likely dead) or when the socket is already closed. A
+        // short flap keeps the live socket and avoids needless churn.
+        if (awayMs >= BACKGROUND_RECONNECT_MS || !client.isOpen) client.reconnectNow()
+      } else {
+        backgroundedAtRef.current = Date.now()
+      }
     })
 
     return () => {
@@ -150,6 +178,25 @@ export function WsProvider({
    */
   const isOpen = useCallback(() => clientRef.current?.isOpen ?? false, [])
 
+  /**
+   * Resolves once the socket is open, polling until `timeoutMs`. Pass `0` to
+   * fail immediately when it is not open yet (callers with a REST fallback).
+   */
+  const waitForOpen = useCallback((timeoutMs: number): Promise<void> => {
+    if (clientRef.current?.isOpen) return Promise.resolve()
+    if (timeoutMs <= 0) return Promise.reject(new Error("socket not open"))
+
+    return new Promise<void>((resolve, reject) => {
+      const deadline = Date.now() + timeoutMs
+      const tick = () => {
+        if (clientRef.current?.isOpen) return resolve()
+        if (Date.now() >= deadline) return reject(new Error("socket not open"))
+        setTimeout(tick, OPEN_POLL_MS)
+      }
+      tick()
+    })
+  }, [])
+
   const on = useCallback((type: string, handler: (payload: WsFrame) => void) => {
     const handlers = frameListeners.get(type) ?? new Set()
     handlers.add(handler)
@@ -160,31 +207,43 @@ export function WsProvider({
     }
   }, [])
 
+  /**
+   * Sends one frame and waits for the reply that belongs to it.
+   *
+   * Every request is tagged with a unique `clientId` (sent inside the frame). The
+   * server echoes that id back on its reply, so we can tell our reply apart from
+   * replies to other in-flight requests. The first frame with a matching
+   * `clientId` and one of the expected `types` settles this promise:
+   * `"error"` rejects, anything else resolves with the frame.
+   */
   const request = useCallback(
-    <T,>(input: WsSendInput, { types, timeoutMs }: { types: string[]; timeoutMs: number }) =>
+    <T,>(
+      input: WsSendInput,
+      { types, timeoutMs, waitForOpenMs = timeoutMs }: { types: string[]; timeoutMs: number; waitForOpenMs?: number },
+    ) =>
       new Promise<T>((resolve, reject) => {
-        // The caller's own `clientId` (e.g. an optimistic send) wins: it is what
-        // the screen uses to match the ack.
-        const requested = (input.data as { clientId?: string } | undefined)?.clientId
-        const clientId = requested ?? newRequestId()
-        const offs: (() => void)[] = []
+        const clientId =
+          (input.data as { clientId?: string } | undefined)?.clientId ?? newRequestId()
 
-        const settle = (run: () => void) => {
-          offs.forEach((off) => off())
+        const offs: (() => void)[] = []
+        let timer: ReturnType<typeof setTimeout>
+
+        // Only settle once, whether we succeed, fail or time out.
+        let done = false
+        const finish = (settle: () => void) => {
+          if (done) return
+          done = true
           clearTimeout(timer)
-          run()
+          offs.forEach((off) => off())
+          settle()
         }
 
-        const timer = setTimeout(
-          () => settle(() => reject(new Error(`${input.op} timed out`))),
-          timeoutMs,
-        )
-
+        // Listen for the reply on each expected frame type.
         for (const type of types) {
           offs.push(
             on(type, (frame) => {
               if (frame.clientId !== clientId) return
-              settle(() => {
+              finish(() => {
                 if (frame.type === "error") reject(new Error(String(frame.message ?? "Failed")))
                 else resolve(frame as T)
               })
@@ -192,11 +251,23 @@ export function WsProvider({
           )
         }
 
-        if (!send({ ...input, data: { ...(input.data as object), clientId } })) {
-          settle(() => reject(new Error("socket not open")))
-        }
+        // One deadline covers both waiting for the socket to reopen and the reply.
+        timer = setTimeout(
+          () => finish(() => reject(new Error(`${input.op} timed out`))),
+          timeoutMs,
+        )
+
+        // Wait for the socket to (re)open, then send the frame with its `clientId`.
+        waitForOpen(waitForOpenMs)
+          .then(() => {
+            if (done) return
+            if (!send({ ...input, data: { ...(input.data as object), clientId } })) {
+              finish(() => reject(new Error("socket not open")))
+            }
+          })
+          .catch((error: unknown) => finish(() => reject(error)))
       }),
-    [on, send],
+    [on, send, waitForOpen],
   )
 
   const value = useMemo<WsContextValue>(

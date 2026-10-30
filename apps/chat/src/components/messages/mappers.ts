@@ -28,14 +28,14 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
   }
 
   if (message.deletedAt) {
-    return { ...base, kind: "text", text: "This message was deleted", isSystem: true }
+    return { ...base, type: "TEXT", text: "This message was deleted", isSystem: true }
   }
 
   switch (message.type) {
     case "IMAGE":
       return {
         ...base,
-        kind: "image",
+        type: "IMAGE",
         text: message.body,
         image: {
           url: message.attachment?.thumbnailUrl ?? message.attachment?.url ?? "",
@@ -46,26 +46,33 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
     case "AUDIO":
       return {
         ...base,
-        kind: "voice",
+        type: "AUDIO",
         voice: {
           durationSeconds: Math.max(1, Math.round((message.attachment?.durationMs ?? 0) / 1000)),
           waveform: waveformFrom(message.messageId),
         },
       }
-    case "DOC":
-      return {
+    case "DOC": {
+      const mimeType = message.attachment?.mimeType ?? "application/octet-stream"
+      const doc = {
         ...base,
-        kind: "file",
+        type: "DOC" as const,
         text: message.body,
         attachment: {
           id: message.messageId,
+          url: message.attachment?.url ?? "",
           fileName: message.attachment?.fileName ?? "document",
           sizeBytes: message.attachment?.sizeBytes ?? 0,
-          mimeType: message.attachment?.mimeType ?? "application/octet-stream",
+          mimeType,
         },
       }
+      // A video is stored as `DOC` but should render as a playable preview.
+      return mimeType.startsWith("video/")
+        ? { ...doc, video: { url: message.attachment?.url ?? "", width: 600, height: 600 } }
+        : doc
+    }
     default:
-      return { ...base, kind: "text", text: message.body ?? "" }
+      return { ...base, type: "TEXT", text: message.body ?? "" }
   }
 }
 

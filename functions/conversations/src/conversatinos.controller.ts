@@ -3,11 +3,13 @@ import type {
   GetChatPageConversationRequest,
   GetConversationMessagesRequest,
   GetConversationProfilesRequest,
+  MediaUploadPresignUrlRequest,
 } from "@repo/types/req"
 import {
   chatPageConversationsService,
   conversationMessagesService,
   conversationProfilesService,
+  getMediaUploadPresignedUrl,
 } from "./conversatinos.service"
 
 export const chatPageConversationsController = async (c: Context) => {
@@ -38,4 +40,15 @@ export const conversationMessagesController = async (c: Context) => {
   })
 
   return c.json(resp)
+}
+
+export const getMediaUploadPresignedUrlController = async (c: Context) => {
+  const { body }: MediaUploadPresignUrlRequest = c.get("valid")
+
+  const url = await getMediaUploadPresignedUrl({
+    contentType: body.contentType,
+    fileName: body.fileName,
+    conversationId: body.conversationId,
+  })
+  return c.json(url)
 }

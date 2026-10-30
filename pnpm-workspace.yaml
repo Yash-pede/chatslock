@@ -2,6 +2,12 @@ packages:
   - "apps/*"
   - "packages/*"
   - "functions/*"
+# Dedupe @aws-sdk to the versions @aws-sdk/s3-presigned-post depends on.
+# Otherwise @repo/api resolves older client-s3/presigner copies and
+# AWSManager.s3Client types don't satisfy the S3 upload helpers.
+overrides:
+  "@aws-sdk/client-s3": "3.1159.0"
+  "@aws-sdk/s3-request-presigner": "3.1159.0"
 # Single source of truth for versions that more than one workspace package
 # depends on. Packages reference these as "catalog:", so a bump here lands
 # everywhere at once instead of drifting apart one `pnpm add` at a time.

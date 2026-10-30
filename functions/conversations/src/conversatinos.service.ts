@@ -1,5 +1,13 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
-import { ApiException, parseConversationId } from "@repo/api/utils"
+import { ApiException, AWSManager, generateUlid, parseConversationId } from "@repo/api/utils"
+import {
+  AVATAR_CONTENT_TYPES,
+  avatarFileExtension,
+  type AvatarContentType,
+  MEDIA_CONTENT_TYPES,
+  mediaFileExtension,
+  type MediaContentType,
+} from "@repo/types/req"
 import type {
   ConversationId,
   ConversationType,
@@ -8,7 +16,8 @@ import type {
   UserMemberConversation,
   UserId,
 } from "@repo/types/schema"
-import { MAX_MESSAGES_LOOKUP } from "@repo/types/req"
+import { MAX_MEDIA_FILE_SIZE, MAX_MESSAGES_LOOKUP } from "@repo/types/req"
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post"
 
 export const chatPageConversationsService = async ({
   userId,
@@ -67,4 +76,41 @@ export const conversationMessagesService = async ({
   })
 
   return { messages }
+}
+
+/**
+ * Presigns a direct PUT of a media file into the media bucket.
+ */
+export const getMediaUploadPresignedUrl = async ({
+  contentType,
+  fileName,
+  conversationId,
+}: {
+  contentType: MediaContentType
+  fileName: string
+  conversationId: string
+}) => {
+  const extension = mediaFileExtension(fileName)
+  if (!MEDIA_CONTENT_TYPES.includes(contentType) || !extension) {
+    throw new ApiException(400, {
+      code: "INVALID_FILE_TYPE",
+      message: "This file type is not allowed",
+    })
+  }
+
+  const bucket = await AWSManager.getSecretValue("s3_media_bucket")
+  if (!bucket) {
+    console.error("Media bucket is not configured")
+    throw new ApiException(500, { message: "Could not prepare the upload" })
+  }
+
+  const key = `uploads/conversation/${conversationId}/${generateUlid()}.${extension}`
+  const command = await createPresignedPost(AWSManager.s3Client, {
+    Bucket: bucket,
+    Key: key,
+    Expires: 60 * 2,
+    Conditions: [["content-length-range", 1, MAX_MEDIA_FILE_SIZE]],
+  })
+
+  return { uploadUrl: encodeURI(command.url), fields: command.fields, key }
 }

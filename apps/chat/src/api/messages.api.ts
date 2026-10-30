@@ -63,16 +63,17 @@ function parseReply<T>(op: string, reply: Reply): T {
  * each other's results. `subscribe` is for unsolicited peer events.
  */
 export function useMessagesApi() {
-  const { request, on, isOpen } = useWs()
+  const { request, on } = useWs()
 
   const api = useMemo(() => {
     const sendFrame = <T>(op: string, data: Record<string, unknown>): Promise<T> => {
-      // Fail fast while the socket is down: waiting `REPLY_TIMEOUT_MS` only
-      // delays the caller's REST fallback (history, optimistic sends).
-      if (!isOpen()) return Promise.reject(new Error("socket not open"))
+      // `list` has a REST fallback, so it must fail fast while the socket is
+      // down. Sends have no fallback: wait for the socket to reopen (e.g. right
+      // after a foreground reconnect) instead of dropping the frame.
+      const waitForOpenMs = op === WS_MESSAGE_OP.list ? 0 : REPLY_TIMEOUT_MS
       return request<T>(
         { action: WS_MESSAGE_ACTION, op, data },
-        { types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error], timeoutMs: REPLY_TIMEOUT_MS },
+        { types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error], timeoutMs: REPLY_TIMEOUT_MS, waitForOpenMs },
       ).then((reply) => parseReply<T>(op, reply as unknown as Reply))
     }
 
@@ -86,7 +87,7 @@ export function useMessagesApi() {
         }),
       read: (input: ReadMessagesInput) => sendFrame<void>(WS_MESSAGE_OP.read, { ...input }),
     }
-  }, [isOpen, request])
+  }, [request])
 
   const onMessageCreated = (handler: (message: Message) => void) =>
     on(WS_MESSAGE_EVENT_TYPE.created, (frame) => handler((frame as { message: Message }).message))
