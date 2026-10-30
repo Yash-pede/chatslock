@@ -38,7 +38,7 @@ export interface ChatMessage {
   image?: MessageImage
   video?: MessageVideo
   attachment?: MessageAttachment
-  voice?: { durationSeconds: number; waveform: number[] }
+  voice?: { url: string; durationSeconds: number; waveform: number[] }
   /** Epoch milliseconds. */
   createdAt: number
   status?: "sending" | "sent" | "delivered" | "read" | "failed"

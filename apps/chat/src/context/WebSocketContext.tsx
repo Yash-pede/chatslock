@@ -219,7 +219,11 @@ export function WsProvider({
   const request = useCallback(
     <T,>(
       input: WsSendInput,
-      { types, timeoutMs, waitForOpenMs = timeoutMs }: { types: string[]; timeoutMs: number; waitForOpenMs?: number },
+      {
+        types,
+        timeoutMs,
+        waitForOpenMs = timeoutMs,
+      }: { types: string[]; timeoutMs: number; waitForOpenMs?: number },
     ) =>
       new Promise<T>((resolve, reject) => {
         const clientId =

@@ -19,6 +19,7 @@
     "android": {
       "package": "com.yash.chatzy",
       "softwareKeyboardLayoutMode": "pan",
+      "permissions": ["android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/files/adaptive-icon-foreground-1024.png",
@@ -65,7 +66,6 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow chatslock to access your photos so you can choose a profile picture.",
-          "microphonePermission": false
         }
       ],
       "expo-font",
@@ -79,6 +79,12 @@
         {
           "supportsOpeningDocumentsInPlace": true,
           "enableFileSharing": true
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow chatslock to access your microphone to record voice messages."
         }
       ]
     ],

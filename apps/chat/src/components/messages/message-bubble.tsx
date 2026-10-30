@@ -1,8 +1,9 @@
 import { memo, useState } from "react"
 import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
-import { FileText, Play } from "lucide-react-native"
-import { ChatBubble, Spinner, Text, cn, useThemeColors } from "@repo/ui"
+import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
+import { FileText, Pause, Play } from "lucide-react-native"
+import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
 import { DownloadButton } from "@/components/messages/download-button"
 import { useVideoThumbnail } from "@/components/messages/use-video-thumbnail"
 import type { ChatMessage } from "@/components/messages/types"
@@ -20,17 +21,78 @@ function formatSize(bytes: number): string {
 /** Fixed image width so rows keep a stable height while scrolling (no reflow jank). */
 const IMAGE_MAX_WIDTH = 240
 
-function VoiceWaveform({ waveform, tint }: { waveform: number[]; tint: string }) {
+/** A playable voice note with an ambient waveform that fills as it plays. */
+function AudioBubble({
+  voice,
+  tint,
+  subtle,
+  variant,
+  time,
+  status,
+  failedClass,
+}: {
+  voice: { url: string; durationSeconds: number; waveform: number[] }
+  tint: string
+  subtle: string
+  variant: "sent" | "received"
+  time: string
+  status: ChatMessage["status"]
+  failedClass?: string
+}) {
+  const player = useAudioPlayer(voice.url ? { uri: voice.url } : null)
+  const audio = useAudioPlayerStatus(player)
+  const durationSeconds = audio.duration > 0 ? audio.duration : voice.durationSeconds
+  const progress = durationSeconds > 0 ? audio.currentTime / durationSeconds : 0
+
+  const toggle = () => {
+    if (audio.playing) {
+      player.pause()
+    } else {
+      if (audio.didJustFinish || audio.currentTime >= durationSeconds) void player.seekTo(0)
+      player.play()
+    }
+  }
+
   return (
-    <View className="h-6 flex-row items-center gap-[3px]">
-      {waveform.map((bar, index) => (
-        <View
-          key={index}
-          style={{ height: 4 + bar * 2, width: 3, borderRadius: 2, backgroundColor: tint }}
+    <ChatBubble
+      variant={variant}
+      timestamp={time}
+      status={status}
+      className={cn("w-[62%] max-w-[66%]", failedClass)}
+    >
+      <View className="flex-row items-center gap-2.5">
+        <Pressable
+          onPress={toggle}
+          accessibilityRole="button"
+          accessibilityLabel={audio.playing ? "Pause voice message" : "Play voice message"}
+          className="h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: `${tint}22` }}
+        >
+          {audio.playing ? (
+            <Pause size={15} color={tint} fill={tint} />
+          ) : (
+            <Play size={15} color={tint} fill={tint} />
+          )}
+        </Pressable>
+        <Waveform
+          mode="ambient"
+          levels={voice.waveform}
+          progress={progress}
+          color={tint}
+          className="flex-1"
+          height={22}
         />
-      ))}
-    </View>
+        <Text className="shrink-0 text-xs leading-4" style={{ color: subtle }}>
+          {formatDuration(durationSeconds)}
+        </Text>
+      </View>
+    </ChatBubble>
   )
+}
+
+function formatDuration(totalSeconds: number): string {
+  const safe = Number.isFinite(totalSeconds) ? Math.max(0, Math.round(totalSeconds)) : 0
+  return `${Math.floor(safe / 60)}:${(safe % 60).toString().padStart(2, "0")}`
 }
 
 export interface MessageBubbleProps {
@@ -42,15 +104,7 @@ export interface MessageBubbleProps {
 }
 
 /** Photo bubble that shows a loader until the image has loaded. */
-function BubbleImage({
-  url,
-  width,
-  height,
-}: {
-  url: string
-  width: number
-  height: number
-}) {
+function BubbleImage({ url, width, height }: { url: string; width: number; height: number }) {
   const [loading, setLoading] = useState(true)
   return (
     <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/10">
@@ -75,9 +129,7 @@ function VideoPreview({ url, width, height }: { url: string; width: number; heig
 
   return (
     <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/80">
-      {thumbnail ? (
-        <Image source={thumbnail} style={{ width, height }} contentFit="cover" />
-      ) : null}
+      {thumbnail ? <Image source={thumbnail} style={{ width, height }} contentFit="cover" /> : null}
       <View className="absolute inset-0 items-center justify-center">
         {loading ? (
           <Spinner color="#ffffff" />
@@ -217,27 +269,15 @@ export const MessageBubble = memo(function MessageBubble({
 
     if (message.type === "AUDIO" && message.voice) {
       return (
-        <ChatBubble
+        <AudioBubble
+          voice={message.voice}
+          tint={tint}
+          subtle={subtle}
           variant={variant}
-          timestamp={time}
+          time={time}
           status={message.status}
-          className={failedClass}
-        >
-          <View className="flex-row items-center gap-2.5">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Play voice message"
-              className="h-8 w-8 items-center justify-center rounded-full"
-              style={{ backgroundColor: `${tint}22` }}
-            >
-              <Play size={15} color={tint} fill={tint} />
-            </Pressable>
-            <VoiceWaveform waveform={message.voice.waveform} tint={subtle} />
-            <Text className="text-xs leading-4" style={{ color: subtle }}>
-              {message.voice.durationSeconds}s
-            </Text>
-          </View>
-        </ChatBubble>
+          failedClass={failedClass}
+        />
       )
     }
 

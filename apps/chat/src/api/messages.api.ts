@@ -73,7 +73,11 @@ export function useMessagesApi() {
       const waitForOpenMs = op === WS_MESSAGE_OP.list ? 0 : REPLY_TIMEOUT_MS
       return request<T>(
         { action: WS_MESSAGE_ACTION, op, data },
-        { types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error], timeoutMs: REPLY_TIMEOUT_MS, waitForOpenMs },
+        {
+          types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error],
+          timeoutMs: REPLY_TIMEOUT_MS,
+          waitForOpenMs,
+        },
       ).then((reply) => parseReply<T>(op, reply as unknown as Reply))
     }
 

@@ -6,11 +6,12 @@ import type { ChatMessage } from "./types"
  * duration, so bars are derived from the message id to keep rendering stable
  * across re-renders and reloads.
  */
-function waveformFrom(seed: string, bars = 20): number[] {
-  return Array.from(
-    { length: bars },
-    (_, index) => ((seed.charCodeAt(index % seed.length) ?? 0) % 8) + 1,
-  )
+export function waveformFrom(seed: string, bars = 24): number[] {
+  return Array.from({ length: bars }, (_, index) => {
+    const code = seed.charCodeAt(index % seed.length) || 0
+    // Keep bars in 0.25..1 so none look flat.
+    return 0.25 + ((code % 8) / 8) * 0.75
+  })
 }
 
 /**
@@ -48,6 +49,7 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
         ...base,
         type: "AUDIO",
         voice: {
+          url: message.attachment?.url ?? "",
           durationSeconds: Math.max(1, Math.round((message.attachment?.durationMs ?? 0) / 1000)),
           waveform: waveformFrom(message.messageId),
         },

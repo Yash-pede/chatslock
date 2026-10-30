@@ -4,8 +4,9 @@ import { MEDIA_CONTENT_TYPES, type MediaContentType } from "@repo/types/req"
 import { useToast } from "@repo/ui"
 import { conversationsApi, responseStatus, uploadMediaToBucket } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
-import { mergeMessages, toChatMessage } from "@/components/messages/mappers"
+import { mergeMessages, toChatMessage, waveformFrom } from "@/components/messages/mappers"
 import type { ChatMessage, PickedMedia } from "@/components/messages/types"
+import type { RecordedAudio } from "@/components/messages/use-audio-recorder"
 
 export type MessagesStatus = "loading" | "ready" | "error"
 
@@ -17,6 +18,7 @@ export interface UseConversationMessagesResult {
   loadOlder: () => void
   send: (text: string) => void
   sendMedia: (media: PickedMedia) => void
+  sendAudio: (audio: RecordedAudio & { fileName: string; mimeType: string }) => void
   retry: (message: ChatMessage) => void
 }
 
@@ -111,6 +113,10 @@ export function useConversationMessages(
               previous.video && !previous.video.url.startsWith("http")
                 ? previous.video
                 : mapped.video,
+            voice:
+              previous.voice && !previous.voice.url.startsWith("http")
+                ? previous.voice
+                : mapped.voice,
           }
           return next
         }
@@ -354,6 +360,70 @@ export function useConversationMessages(
     [api, conversationId, currentUserId, setMessageStatus, toast, upsertServerMessage],
   )
 
+  /**
+   * Sends a recorded voice note. The row appears immediately with the local
+   * file for instant playback, then uploads with a progress-free best-effort and
+   * sends the `AUDIO` message (which requires `durationMs`).
+   */
+  const sendAudio = useCallback(
+    (audio: RecordedAudio & { fileName: string; mimeType: string }) => {
+      if (!audio?.uri || !currentUserId) return
+
+      const clientId = newClientId()
+      const optimisticId = `optimistic-${clientId}`
+      const durationSeconds = Math.max(1, Math.round(audio.durationMs / 1000))
+
+      const optimistic: ChatMessage = {
+        id: optimisticId,
+        conversationId,
+        senderId: currentUserId,
+        isMine: true,
+        type: "AUDIO",
+        voice: { url: audio.uri, durationSeconds, waveform: waveformFrom(clientId) },
+        createdAt: Date.now(),
+        status: "sending",
+        pendingId: clientId,
+      }
+      setMessages((current) => [...current, optimistic])
+
+      void (async () => {
+        try {
+          const presign = await conversationsApi.getMediaPresign({
+            contentType: audio.mimeType as MediaContentType,
+            fileName: audio.fileName,
+            fileSize: audio.sizeBytes,
+            conversationId,
+          })
+
+          await uploadMediaToBucket({
+            uploadUrl: presign.uploadUrl,
+            fields: presign.fields,
+            file: { uri: audio.uri, name: audio.fileName, type: audio.mimeType },
+          })
+
+          const url = mediaObjectUrl(new URL(presign.uploadUrl).origin, presign.key)
+          const message = await api.send({
+            conversationId,
+            type: "AUDIO",
+            attachment: {
+              url,
+              mimeType: audio.mimeType,
+              sizeBytes: audio.sizeBytes,
+              fileName: audio.fileName,
+              durationMs: audio.durationMs,
+            },
+            clientId,
+          })
+          upsertServerMessage(message, clientId)
+        } catch {
+          toast({ title: "Could not send the audio", variant: "destructive" })
+          setMessageStatus(optimisticId, "failed")
+        }
+      })()
+    },
+    [api, conversationId, currentUserId, setMessageStatus, toast, upsertServerMessage],
+  )
+
   const retry = useCallback(
     (message: ChatMessage) => {
       // Only text can be retried: a failed media row needs a fresh upload, and
@@ -378,7 +448,17 @@ export function useConversationMessages(
   )
 
   return useMemo(
-    () => ({ messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, retry }),
-    [messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, retry],
+    () => ({
+      messages,
+      status,
+      hasOlder,
+      loadingOlder,
+      loadOlder,
+      send,
+      sendMedia,
+      sendAudio,
+      retry,
+    }),
+    [messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, sendAudio, retry],
   )
 }

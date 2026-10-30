@@ -18,12 +18,16 @@ export interface ToastProviderProps {
   children: React.ReactNode
 }
 
+/** At most this many toasts on screen; a newer one pushes out the oldest. */
+const MAX_TOASTS = 3
+
 export function ToastProvider({ children }: ToastProviderProps) {
   const [toasts, setToasts] = useState<ToastData[]>([])
 
   const toast = useCallback((data: Omit<ToastData, "id">) => {
-    const id = Date.now().toString()
-    setToasts((prev) => [...prev, { ...data, id }])
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    // Keep only the newest `MAX_TOASTS`, dropping the oldest when full.
+    setToasts((prev) => [...prev, { ...data, id }].slice(-MAX_TOASTS))
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000)
   }, [])
 

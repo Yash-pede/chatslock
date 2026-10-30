@@ -53,7 +53,7 @@ export default function ConversationScreen() {
   const name = params.name ?? "Conversation"
   const avatar = params.avatar
 
-  const { messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, retry } =
+  const { messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, sendAudio, retry } =
     useConversationMessages(conversationId, user?.userId ?? null, {
       unreadCount: Number(params.unread) || 0,
     })
@@ -141,7 +141,7 @@ export default function ConversationScreen() {
             </Pressable>
           ) : null}
 
-          <MessageComposer onSend={send} onSendMedia={sendMedia} />
+          <MessageComposer onSend={send} onSendMedia={sendMedia} onSendAudio={sendAudio} />
 
           <MediaViewer
             items={media}
