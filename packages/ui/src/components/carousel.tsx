@@ -13,6 +13,8 @@ export interface CarouselProps extends React.ComponentPropsWithoutRef<typeof Vie
   initialIndex?: number
   /** Called with the settled page index after a swipe. */
   onIndexChange?: (index: number) => void
+  /** Set `false` to lock paging (e.g. while a media page handles its own pan). */
+  scrollEnabled?: boolean
 }
 
 /**
@@ -29,6 +31,7 @@ export function Carousel({
   interval = 3000,
   initialIndex = 0,
   onIndexChange,
+  scrollEnabled = true,
   ...props
 }: CarouselProps) {
   const [active, setActive] = React.useState(initialIndex)
@@ -51,6 +54,7 @@ export function Carousel({
         data={data}
         horizontal
         pagingEnabled
+        scrollEnabled={scrollEnabled}
         style={{ flex: 1 }}
         showsHorizontalScrollIndicator={false}
         initialScrollIndex={initialIndex}

@@ -162,7 +162,7 @@ export function MessageComposer({
   return (
     <View
       className="border-t border-border bg-background"
-      style={{ paddingBottom: insets.bottom - 12 }}
+      style={{ paddingBottom: insets.bottom }}
     >
       <View className="flex-row items-end gap-2 px-3 pt-2">
         {recording ? (

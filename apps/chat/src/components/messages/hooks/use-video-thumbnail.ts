@@ -1,26 +1,25 @@
 import { useEffect, useState } from "react"
-import { createVideoPlayer, type VideoThumbnail } from "expo-video"
+import { getThumbnailAsync, type VideoThumbnailsResult } from "expo-video-thumbnails"
+
+type Thumbnail = VideoThumbnailsResult
 
 /**
- * Video posters are generated once per URL with a throwaway player and cached
- * for the session, so re-rendering a bubble (or reopening the viewer) never
- * regenerates them.
+ * Video posters are generated once per URL with `expo-video-thumbnails` and
+ * cached for the session, so re-rendering a bubble (or reopening the viewer)
+ * never regenerates them.
  */
-const cache = new Map<string, VideoThumbnail | null>()
-const inflight = new Map<string, Promise<VideoThumbnail | null>>()
+const cache = new Map<string, Thumbnail | null>()
+const inflight = new Map<string, Promise<Thumbnail | null>>()
 
-function load(url: string): Promise<VideoThumbnail | null> {
+function load(url: string): Promise<Thumbnail | null> {
   if (cache.has(url)) return Promise.resolve(cache.get(url) ?? null)
 
   const pending = inflight.get(url)
   if (pending) return pending
 
-  const player = createVideoPlayer(url)
-  const promise = player
-    .generateThumbnailsAsync([0], { maxWidth: 480 })
-    .then(([thumbnail]) => thumbnail ?? null)
+  const promise = getThumbnailAsync(url, { time: 0, quality: 0.7 })
+    .then((thumbnail) => thumbnail ?? null)
     .catch(() => null)
-    .finally(() => player.release())
 
   inflight.set(url, promise)
   void promise.then((thumbnail) => {
@@ -31,7 +30,7 @@ function load(url: string): Promise<VideoThumbnail | null> {
 }
 
 interface ThumbnailState {
-  thumbnail: VideoThumbnail | null
+  thumbnail: Thumbnail | null
   /** True until generation settles (success or failure). */
   loading: boolean
 }
