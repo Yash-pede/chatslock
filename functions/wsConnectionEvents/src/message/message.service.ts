@@ -1,5 +1,5 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
-import { GoneException } from "@aws-sdk/client-apigatewaymanagementapi"
+import { messagePushNotification, sendPushNotification } from "@repo/api/notifications"
 import { ApiException, parseConversationId, parseOrThrow } from "@repo/api/utils"
 import {
   messageCreatedEventSchema,
@@ -7,24 +7,19 @@ import {
   messageUpdatedEventSchema,
   WS_MESSAGE_EVENT_TYPE,
   type ConversationId,
-  type ConversationType,
+  type DeleteMessageData,
+  type EditMessageData,
+  type ListMessageData,
   type Message,
   type MessageId,
+  type SendMessageData,
   type UserId,
 } from "@repo/types/schema"
-import type {
-  DeleteMessageData,
-  EditMessageData,
-  ListMessageData,
-  SendMessageData,
-} from "@repo/types/req"
 
 type PostToConnection = (connectionId: string, body: unknown) => Promise<void>
 
 /** Splits `TYPE#id`; a malformed id is a client error. */
-const conversationRef = (
-  conversationId: ConversationId,
-): { type: ConversationType; conversationId: string } => {
+const conversationRef = (conversationId: ConversationId) => {
   try {
     return parseConversationId(conversationId)
   } catch {
@@ -52,64 +47,75 @@ const assertConversationAccess = async ({
 }
 
 /**
- * Sends to one socket, pruning it when API Gateway reports 410 Gone (the
- * client disconnected without `$disconnect` reaching us). Other failures are
- * logged so one bad socket cannot fail the sender's request.
+ * Pushes a message notification to every registered device of a peer. This is
+ * best-effort: a push failure must never fail the message action.
  */
-const deliver = async ({
-  userId,
-  connectionId,
-  payload,
-  postToConnection,
+const notifyPeer = async ({
+  peerId,
+  senderId,
+  message,
 }: {
-  userId: UserId
-  connectionId: string
-  payload: unknown
-  postToConnection: PostToConnection
+  peerId: UserId
+  senderId: UserId
+  message: Message
 }): Promise<void> => {
   try {
-    await postToConnection(connectionId, payload)
+    const [sender, devices] = await Promise.all([
+      usersDao.getUserById({ userId: senderId }).catch((error) => {
+        console.warn("[ws] could not load sender for notification", error)
+        return undefined
+      }),
+      usersDao.getUserAllPushToken({ userId: peerId }),
+    ])
+
+    const tokens = devices.map((device) => device.expoPushToken)
+    if (tokens.length === 0) return
+
+    await sendPushNotification({
+      tokens,
+      ...messagePushNotification(message, sender?.username ?? "New message"),
+    })
   } catch (error) {
-    if (error instanceof GoneException || (error as { name?: string })?.name === "GoneException") {
-      await usersDao.deleteUserConnection({ userId, connectionId })
-      return
-    }
-    console.error(`fan-out to ${connectionId} failed`, error)
+    console.error("[ws] push notification failed", error)
   }
 }
 
 /**
  * Pushes an event to every open socket of the other participant(s), read from
  * the conversation id. The sender is excluded: their confirmation is the ack.
+ * If the peer has no open socket, a new message also goes out as a push.
  */
-const fanOut = async ({
+const deliverMessageToPeer = async ({
   userId,
   conversationId,
   payload,
   postToConnection,
+  notifyMessage,
 }: {
   userId: UserId
   conversationId: ConversationId
   payload: unknown
   postToConnection: PostToConnection
+  /** Set only for a newly created message; edits/deletes do not notify. */
+  notifyMessage?: Message
 }): Promise<void> => {
-  const peerIds = conversationRef(conversationId)
+  const peerId = parseConversationId(conversationId)
     .conversationId.split("#")
-    .filter((id) => id !== userId)
+    .find((id) => id !== userId)
 
-  const peers = await Promise.all(
-    peerIds.map(async (peer) => ({
-      userId: peer,
-      connectionIds: await usersDao.getUserConnections({ userId: peer }),
-    })),
-  )
+  if (!peerId) return
+
+  const [peersConnectionIds, peerActiveConversation] = await Promise.all([
+    usersDao.getUserConnections({ userId: peerId }),
+    conversationsDao.getUserActiveConversation({ userId: peerId }),
+  ])
+
+  if (peerActiveConversation != conversationId && notifyMessage) {
+    await notifyPeer({ peerId, senderId: userId, message: notifyMessage })
+  }
 
   await Promise.all(
-    peers.flatMap(({ userId: peer, connectionIds }) =>
-      connectionIds.map((connectionId) =>
-        deliver({ userId: peer, connectionId, payload, postToConnection }),
-      ),
-    ),
+    peersConnectionIds.map((connectionId) => postToConnection(connectionId, payload)),
   )
 }
 
@@ -133,8 +139,6 @@ export const sendMessageService = async ({
     await assertConversationAccess({ userId: senderId, conversationId: message.conversationId })
 
     const { conversationId, type, body, attachment } = message
-    // `TEXT` always has a body (schema-checked); only non-text types may carry
-    // an attachment, so these never both appear on the DAO input.
     const created = await messagesDao.createMessage({
       conversationId,
       type,
@@ -143,7 +147,7 @@ export const sendMessageService = async ({
       senderId,
     })
 
-    await fanOut({
+    await deliverMessageToPeer({
       userId: senderId,
       conversationId: message.conversationId,
       payload: parseOrThrow(messageCreatedEventSchema, {
@@ -151,6 +155,7 @@ export const sendMessageService = async ({
         message: created,
       }),
       postToConnection,
+      notifyMessage: created,
     })
 
     console.log("[ws] message.send stored", {
@@ -202,7 +207,7 @@ export const editMessageService = async ({
     const updated = await messagesDao.getMessageById(edit)
     if (!updated) throw new ApiException(404, { message: "Message not found" })
 
-    await fanOut({
+    await deliverMessageToPeer({
       userId: editorId,
       conversationId: edit.conversationId,
       payload: parseOrThrow(messageUpdatedEventSchema, {
@@ -242,7 +247,7 @@ export const deleteMessageService = async ({
     })
     const deletedAt = Date.now()
 
-    await fanOut({
+    await deliverMessageToPeer({
       userId: deleterId,
       conversationId: target.conversationId,
       payload: parseOrThrow(messageDeletedEventSchema, {

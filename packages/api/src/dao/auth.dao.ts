@@ -1,5 +1,5 @@
 import type { AuthClient } from "@repo/types/schema"
-import { AWSManager, awsManagerInstance, RoleName } from "../utils"
+import { AWSManager, RoleName } from "../utils"
 import {
   AdminAddUserToGroupCommand,
   AdminCreateUserCommand,
@@ -15,9 +15,9 @@ import {
   type AttributeType,
 } from "@aws-sdk/client-cognito-identity-provider"
 
-const getUserPoolId = () => awsManagerInstance.getSecretValue("cognito_user_pool_id")
-const getUserClientId = () => awsManagerInstance.getSecretValue("cognito_user_client_id")
-const getAdminClientId = () => awsManagerInstance.getSecretValue("cognito_admin_client_id")
+const getUserPoolId = () => AWSManager.getSecretValue("cognito_user_pool_id")
+const getUserClientId = () => AWSManager.getSecretValue("cognito_user_client_id")
+const getAdminClientId = () => AWSManager.getSecretValue("cognito_admin_client_id")
 
 /** Refresh tokens are bound to their issuing app client, so this must match. */
 const getClientId = (client: AuthClient) =>

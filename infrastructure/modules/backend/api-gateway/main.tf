@@ -150,8 +150,18 @@ module "apigateway-v2-ws" {
         uri  = var.ws_events_lambda_invoke_arn
       }
     },
+    # TODO: Seprate WS Event lambda
     "message" = {
       operation_name     = "MessageRoute"
+      authorization_type = "NONE"
+
+      integration = {
+        type = "AWS_PROXY"
+        uri  = var.ws_events_lambda_invoke_arn
+      }
+    },
+    "user" = {
+      operation_name     = "userRoute"
       authorization_type = "NONE"
 
       integration = {

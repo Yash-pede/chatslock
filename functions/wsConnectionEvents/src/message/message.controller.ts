@@ -1,11 +1,4 @@
 import type { WsContext, WsReply } from "@repo/api/core"
-import type {
-  DeleteMessageData,
-  EditMessageData,
-  ListMessageData,
-  ReadMessageData,
-  SendMessageData,
-} from "@repo/types/req"
 import { ApiException, parseOrThrow } from "@repo/api/utils"
 import {
   messageDeletedAckSchema,
@@ -15,6 +8,11 @@ import {
   WS_EVENT_TYPE,
   WS_MESSAGE_ACK_TYPE,
   wsErrorAckSchema,
+  type DeleteMessageData,
+  type EditMessageData,
+  type ListMessageData,
+  type ReadMessageData,
+  type SendMessageData,
 } from "@repo/types/schema"
 import {
   deleteMessageService,
@@ -46,9 +44,6 @@ export const sendMessageController = async (c: WsContext): Promise<WsReply | voi
       postToConnection: c.postToConnection,
     })
 
-    // Validate before replying: a bad shape here would throw AFTER the row was
-    // written and turn into a 500 the client never sees (the socket was fine,
-    // but the sender sees no ack and re-sends).
     const ack = parseOrThrow(messageSentAckSchema, {
       type: WS_MESSAGE_ACK_TYPE.sent,
       message,

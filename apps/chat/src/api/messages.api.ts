@@ -1,23 +1,22 @@
 import { useMemo } from "react"
-import type { Message, MessageListAck } from "@repo/types/schema"
-import type {
-  DeleteMessageData,
-  EditMessageData,
-  ListMessageData,
-  ReadMessageData,
-  SendMessageData,
-} from "@repo/types/req"
 import {
   WS_EVENT_TYPE,
   WS_MESSAGE_ACK_TYPE,
   WS_MESSAGE_ACTION,
   WS_MESSAGE_EVENT_TYPE,
   WS_MESSAGE_OP,
+  type DeleteMessageData,
+  type EditMessageData,
+  type ListMessageData,
+  type Message,
+  type MessageListAck,
+  type ReadMessageData,
+  type SendMessageData,
 } from "@repo/types/schema"
 import { useWs } from "@/context/WebSocketContext"
 
 /**
- * The wire types are the schema's own (`@repo/types/req`), shared with the
+ * The wire types are the schema's own (`@repo/types/schema`), shared with the
  * Lambda — this module only narrows what the app may omit. `clientId` is left
  * to the transport (`useWs().request`), except for `send` where the caller
  * supplies it to match its optimistic row.

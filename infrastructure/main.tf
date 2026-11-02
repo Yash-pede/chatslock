@@ -66,6 +66,15 @@ module "dynamodb" {
 
 }
 
+module "cache" {
+  source = "./modules/backend/cache"
+
+  vpc_id                       = module.vpc.vpc_id
+  private_subnet_ids           = module.vpc.private_subnets
+  api_lambda_security_group_id = module.api_lambdas.api_lambda_security_group_id
+
+}
+
 module "s3_media" {
   source               = "./modules/s3"
   s3_media_bucket_name = "${local.name}-media"
@@ -98,6 +107,9 @@ resource "aws_secretsmanager_secret_version" "example" {
     cognito_admin_client_id = module.cognito.admin_client
     cognito_user_client_id  = module.cognito.user_client
     s3_media_bucket         = module.s3_media.bucket_name
+    cache_endpoint          = module.cache.endpoint
+    cache_port              = module.cache.port
+
   })
 }
 

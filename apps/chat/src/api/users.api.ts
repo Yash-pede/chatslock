@@ -1,6 +1,10 @@
 import { apiClient } from "@/api/client"
 import type { getUser } from "@repo/types/schema"
-import type { AvatarContentType, UserOnboardingRequest } from "@repo/types/req"
+import type {
+  AvatarContentType,
+  SetPushTokenRequest,
+  UserOnboardingRequest,
+} from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
@@ -28,6 +32,9 @@ export type OnboardingInput = UserOnboardingRequest["body"]
 /** What the onboarding screen collects; `phone` comes from the session. */
 export type OnboardingForm = Omit<OnboardingInput, "phone">
 
+/** Device id + Expo token sent when the app opens. */
+export type PushTokenInput = SetPushTokenRequest["body"]
+
 /**
  * User endpoints. Screens call these instead of `apiClient` directly so URL
  * shapes and envelope handling stay in one place.
@@ -42,6 +49,11 @@ export const usersApi = {
   /** `POST /api/users/onboarding` — creates the profile row for a fresh session. */
   onboard: async (input: OnboardingInput): Promise<void> => {
     await apiClient.post("/api/users/onboarding", input)
+  },
+
+  /** `POST /api/users/pushtoken` — upserts this device's Expo push token. */
+  setPushToken: async (input: PushTokenInput): Promise<void> => {
+    await apiClient.post("/api/users/pushtoken", input)
   },
 
   /** `PATCH /api/users/me` — rename and/or set the avatar URL; returns the updated profile. */

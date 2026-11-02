@@ -25,7 +25,23 @@ export const connectController = async (c: WsContext): Promise<WsReply> => {
     })
   }
 
-  await connectService({ userId: c.userId, connectionId: c.connectionId })
+  try {
+    await connectService({ userId: c.userId, connectionId: c.connectionId })
+  } catch (error) {
+    // Without this, a cache/DNS failure is an opaque Lambda 500 in the
+    // gateway access log. The handshake still fails, but the cause is logged.
+    console.error("[ws] $connect failed", {
+      userId: c.userId,
+      connectionId: c.connectionId,
+      error: error instanceof Error ? error.message : String(error),
+      cause: error instanceof Error ? (error.cause as Error | undefined)?.message : undefined,
+    })
+    return c.reply(500, {
+      type: WS_EVENT_TYPE.error,
+      code: "INTERNAL_ERROR",
+      message: "Could not register connection",
+    })
+  }
 
   // The access log shows this route as `status: 200` with every field "-", so
   // a successful socket is only visible here.

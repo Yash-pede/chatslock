@@ -104,4 +104,23 @@ export const conversationsDao = {
       }),
     )
   },
+
+  setUserActiveConversation: async ({
+    userId,
+    conversationId,
+  }: {
+    userId: string
+    conversationId: ConversationId
+  }) => {
+    return (await AWSManager.cacheClient()).set(
+      buildKey(PREFIXES.USER, userId, "ACTIVECONV"),
+      conversationId,
+    )
+  },
+  getUserActiveConversation: async ({ userId }: { userId: string }) => {
+    return await (await AWSManager.cacheClient()).get(buildKey(PREFIXES.USER, userId, "ACTIVECONV"))
+  },
+  deleteUserActiveConversation: async ({ userId }: { userId: string }) => {
+    return (await AWSManager.cacheClient()).del(buildKey(PREFIXES.USER, userId, "ACTIVECONV"))
+  },
 }

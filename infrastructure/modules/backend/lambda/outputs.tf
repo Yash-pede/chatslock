@@ -14,3 +14,7 @@ output "ws_events_lambda_invoke_arn" {
 output "lambda_details" {
   value = local.api_lambdas
 }
+
+output "api_lambda_security_group_id" {
+  value = aws_security_group.api_lambda_sg.id
+}

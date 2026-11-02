@@ -4,7 +4,13 @@ import dotenv from "dotenv"
 dotenv.config()
 
 export default defineConfig({
-  entry: ["src/dao/index.ts", "src/utils/index.ts", "src/req/index.ts", "src/core/index.ts"],
+  entry: [
+    "src/dao/index.ts",
+    "src/utils/index.ts",
+    "src/req/index.ts",
+    "src/core/index.ts",
+    "src/notifications/index.ts",
+  ],
   clean: true,
   splitting: false,
   format: ["esm"],

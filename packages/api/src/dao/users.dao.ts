@@ -1,15 +1,8 @@
-import {
-  BatchGetCommand,
-  PutCommand,
-  QueryCommand,
-  UpdateCommand,
-  DeleteCommand,
-} from "@aws-sdk/lib-dynamodb"
+import { BatchGetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 import {
   createUserSchema,
   PREFIXES,
   TABLE_NAME,
-  USER_SK,
   updateUserSchema,
   userItem,
   conversationUserProfileSchema,
@@ -17,19 +10,26 @@ import {
   USERNAME_GSI,
   getUserSchema,
   type CreateUserInput,
+  type DeviceId,
   type UpdateUserInput,
   type ConversationUserProfile,
   type UserId,
+  usersk,
+  UserSK,
+  userDeviceSchema,
+  type UserDevice,
 } from "@repo/types/schema"
 import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
 import z from "zod"
 import { AWSManager, buildKey, definedEntries, parseOrThrow } from "../utils"
 
-/** How long a stored WebSocket connection row is kept (DynamoDB TTL). */
-const CONNECTION_TTL_SECONDS = 2 * 60 * 60
+const userKey = (userId: UserId, sk?: UserSK) => ({
+  PK: buildKey(PREFIXES.USER, userId),
+  SK: sk ? sk : usersk.PROFILE,
+})
 
-/** Key of a user's profile item: `PK USER#<userId>`, `SK PROFILE`. */
-const userKey = (userId: UserId) => ({ PK: buildKey(PREFIXES.USER, userId), SK: USER_SK[0] })
+/** Device push registrations expire unless the app refreshes them. */
+const PUSH_TOKEN_TTL_SECONDS = 15 * 24 * 60 * 60
 
 export const usersDao = {
   getUserById: async (input: {
@@ -42,7 +42,7 @@ export const usersDao = {
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": buildKey(PREFIXES.USER, input.userId),
-          ":sk": USER_SK[0],
+          ":sk": usersk.PROFILE,
         },
       }),
     )
@@ -87,7 +87,7 @@ export const usersDao = {
           "#username": "username",
         },
         ExpressionAttributeValues: {
-          ":sk": USER_SK[0],
+          ":sk": usersk.PROFILE,
           ":username": input.username.toLowerCase(),
         },
       }),
@@ -126,6 +126,7 @@ export const usersDao = {
       ...userKey(data.userId),
       ...data,
       createdAt: now,
+      lastActiveAt: now,
       updatedAt: now,
     })
 
@@ -137,7 +138,6 @@ export const usersDao = {
       }),
     )
   },
-  /** Records an open WebSocket connection for a user (one row per socket). */
   createUserConnection: async ({
     userId,
     connectionId,
@@ -145,49 +145,63 @@ export const usersDao = {
     userId: UserId
     connectionId: string
   }) => {
+    return (await AWSManager.cacheClient()).sadd(
+      buildKey(PREFIXES.USER, userId, usersk.CONNECTION),
+      connectionId,
+    )
+  },
+
+  getUserConnections: async (input: { userId: UserId }) => {
+    return await (
+      await AWSManager.cacheClient()
+    ).smembers(buildKey(PREFIXES.USER, input.userId, usersk.CONNECTION))
+  },
+  deleteUserConnection: async (input: { userId: UserId; connectionId: string }) => {
+    return (await AWSManager.cacheClient()).srem(
+      buildKey(PREFIXES.USER, input.userId, usersk.CONNECTION),
+      input.connectionId,
+    )
+  },
+  setUserDevicePushToken: async (input: {
+    userId: UserId
+    deviceId: DeviceId
+    expoPushToken: string
+  }): Promise<void> => {
+    const now = Date.now()
+
     await AWSManager.dbClient.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: TABLE_NAME,
-        Item: {
-          PK: buildKey(PREFIXES.USER, userId),
-          SK: buildKey(PREFIXES.CONNECTION, connectionId),
-          userId,
-          connectionId,
-          connectedAt: Date.now(),
-          expiresAt: Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS,
+        Key: {
+          PK: buildKey(PREFIXES.USER, input.userId),
+          SK: buildKey(usersk.DEVICE, input.deviceId),
         },
-        ConditionExpression: "attribute_not_exists(PK)",
+        UpdateExpression:
+          "SET deviceId = :deviceId, expoPushToken = :expoPushToken, #updatedAt = :updatedAt, expiresAt = :expiresAt",
+        ExpressionAttributeNames: {
+          "#updatedAt": "updatedAt",
+        },
+        ExpressionAttributeValues: {
+          ":deviceId": input.deviceId,
+          ":expoPushToken": input.expoPushToken,
+          ":updatedAt": now,
+          ":expiresAt": Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
+        },
       }),
     )
   },
-  /** All open connection ids for a user (multiple devices). */
-  getUserConnections: async (input: { userId: UserId }): Promise<string[]> => {
-    const result = await AWSManager.dbClient.send(
+  getUserAllPushToken: async (input: { userId: UserId }): Promise<UserDevice[]> => {
+    const resp = await AWSManager.dbClient.send(
       new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": buildKey(PREFIXES.USER, input.userId),
-          ":sk": PREFIXES.CONNECTION,
-        },
-        ProjectionExpression: "connectionId",
-      }),
-    )
-
-    return (result.Items ?? [])
-      .map((item) => item.connectionId)
-      .filter((id): id is string => typeof id === "string" && id.length > 0)
-  },
-  deleteUserConnection: (input: { userId: UserId; connectionId: string }) => {
-    return AWSManager.dbClient.send(
-      new DeleteCommand({
-        TableName: TABLE_NAME,
-        Key: {
-          PK: buildKey(PREFIXES.USER, input.userId),
-          SK: buildKey(PREFIXES.CONNECTION, input.connectionId),
+          ":sk": usersk.DEVICE,
         },
       }),
     )
+    return (resp.Items ?? []).map((item) => parseOrThrow(userDeviceSchema, item))
   },
 }

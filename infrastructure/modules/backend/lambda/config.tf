@@ -93,6 +93,14 @@ resource "aws_iam_role_policy" "api_lambda_policy" {
         ],
         Resource = ["*"]
       },
+      {
+        Sid    = "AllowCache"
+        Effect = "Allow",
+        Action = [
+          "elasticache:Connect"
+        ],
+        Resource = ["*"]
+      },
     ]
   })
 }

@@ -60,15 +60,19 @@ BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/api-layer.XXXXXX")"
 #trap cleanup EXIT
 NODEJS="$BUILD_DIR/nodejs"
 
-# --- 1. layer package.json = @repo/api's production deps (single source) ------
-# Workspace deps (@repo/types) use the "workspace:" protocol, which npm cannot
-# resolve; their built output is copied into the layer in step 3 instead.
+# --- 1. layer package.json = @repo/api's resolved production deps ------------
+# Read exact versions from pnpm instead of package.json: workspace specs use the
+# "workspace:" protocol and shared versions use "catalog:", neither of which npm
+# can install. Resolved versions also keep the layer in sync with pnpm-lock.yaml.
 mkdir -p "$NODEJS"
+( cd "$ROOT" && pnpm --filter @repo/api list --prod --json --depth 0 ) > "$BUILD_DIR/api-deps.json"
 node -e '
   const fs = require("fs");
-  const api = require(process.argv[1]);
+  const [pkg] = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   const deps = Object.fromEntries(
-    Object.entries(api.dependencies || {}).filter(([, spec]) => !String(spec).startsWith("workspace:")),
+    Object.entries(pkg.dependencies || {})
+      .filter(([, info]) => !String(info.version).startsWith("link:"))
+      .map(([name, info]) => [name, info.version]),
   );
   const layer = {
     name: "api-layer",
@@ -77,11 +81,13 @@ node -e '
     dependencies: deps,
   };
   fs.writeFileSync(process.argv[2], JSON.stringify(layer, null, 2) + "\n");
-' "$API_PKG/package.json" "$NODEJS/package.json"
+' "$BUILD_DIR/api-deps.json" "$NODEJS/package.json"
 
 # --- 2. install deps as real files (no pnpm symlinks) -------------------------
+# `--legacy-peer-deps` matches pnpm's peer handling: pnpm resolves the workspace
+# with these peers, and npm's strict resolver otherwise rejects the same tree.
 echo "==> Installing layer dependencies (real files)"
-( cd "$NODEJS" && npm install --omit=dev --no-package-lock --ignore-scripts --silent )
+( cd "$NODEJS" && npm install --omit=dev --no-package-lock --ignore-scripts --legacy-peer-deps )
 
 # --- 3. add the compiled workspace packages so Lambdas can import them --------
 # @repo/types is a runtime dependency of @repo/api (its DAOs import the storage

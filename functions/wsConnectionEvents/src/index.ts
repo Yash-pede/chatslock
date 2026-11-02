@@ -1,39 +1,41 @@
 import { WsRouter, type WsContext, type WsReply } from "@repo/api/core"
 import { parseOrThrow } from "@repo/api/utils"
-import { MESSAGES_OP_SCHEMAS, wsFrameSchema, type MessagesWsOp } from "@repo/types/req"
-import { WS_EVENT_TYPE } from "@repo/types/schema"
-import { connectController, disconnectController } from "./connection.controller"
+import {
+  getWsGroup,
+  wsFrameSchema,
+  WS_EVENT_TYPE,
+  WS_MESSAGE_ACTION,
+  WS_MESSAGE_OP,
+  WS_USER_ACTION,
+  WS_USER_OP,
+} from "@repo/types/schema"
+import { connectController, disconnectController } from "./connection/connection.controller"
 import {
   deleteMessageController,
   editMessageController,
   listMessagesController,
   readMessageController,
   sendMessageController,
-} from "./message.controller"
+} from "./message/message.controller"
+import { userConversationController } from "./user/user.controller"
 
 const app = new WsRouter()
 
-const pickSchema = (routeKey: string, op?: string) => {
-  if (routeKey !== "message" || !op) return wsFrameSchema
-  return MESSAGES_OP_SCHEMAS[op as MessagesWsOp] ?? wsFrameSchema
-}
-
-/**
- * Validates the frame and stores the **parsed data** under `valid`, which is
- * what controllers read (`c.get<SendMessageData>("valid")`). Storing the whole
- * envelope here is what made every `conversationId` undefined downstream.
- */
 const validateFrame = async (c: WsContext): Promise<WsReply | void> => {
   const frame = c.req.json<{ action?: string; op?: string }>()
   const { op } = frame
 
   try {
-    const parsed = parseOrThrow(pickSchema(c.routeKey, op), frame) as { data?: unknown }
+    const group = getWsGroup(c.routeKey)
+    const schema = group ? (op ? group.ops[op] : undefined) : wsFrameSchema
+    if (!schema) {
+      throw new Error(op ? `Unknown op "${op}" for ${c.routeKey}` : `Missing op for ${c.routeKey}`)
+    }
+
+    const parsed = parseOrThrow(schema, frame) as { data?: unknown }
     c.set("valid", parsed.data)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Invalid frame"
-    // Without this the 400 only exists in the access log, where every error
-    // field is "-": a rejected frame would look like a healthy invocation.
     console.warn("[ws] frame rejected", {
       connectionId: c.connectionId,
       routeKey: c.routeKey,
@@ -41,8 +43,6 @@ const validateFrame = async (c: WsContext): Promise<WsReply | void> => {
       op,
       message,
     })
-    // Pushed, not replied: a reply body never reaches the client on a
-    // non-`$default` route, so a rejected frame looked like silence.
     await c.push({ type: WS_EVENT_TYPE.error, code: "BAD_REQUEST", message })
     return
   }
@@ -54,18 +54,14 @@ app.route("$connect", connectController)
 app.route("$disconnect", disconnectController)
 
 app
-  .group("message")
-  .on("send", sendMessageController)
-  .on("edit", editMessageController)
-  .on("delete", deleteMessageController)
-  .on("list", listMessagesController)
-  .on("read", readMessageController)
+  .group(WS_MESSAGE_ACTION)
+  .on(WS_MESSAGE_OP.send, sendMessageController)
+  .on(WS_MESSAGE_OP.edit, editMessageController)
+  .on(WS_MESSAGE_OP.delete, deleteMessageController)
+  .on(WS_MESSAGE_OP.list, listMessagesController)
+  .on(WS_MESSAGE_OP.read, readMessageController)
 
-/**
- * Heartbeat (`{"action":"system"}`) is answered by API Gateway's MOCK
- * integration, not here: the Lambda has no route for it, and a mocked reply
- * cannot 5xx or cost an invocation.
- */
+app.group(WS_USER_ACTION).on(WS_USER_OP.conversation, userConversationController)
 
 app.route("$default", async (c) => {
   // Anything else (unknown action, or a body without `action`). Answering an

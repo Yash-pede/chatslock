@@ -72,20 +72,12 @@ module "ws_authorizer_lambda" {
   lambda_role    = aws_iam_role.api_lambda_role.arn
   vpc_subnet_ids = var.vpc_subnet_ids
 
-  # Bundled ESM (`pnpm build` in the function) — a bare index.js is loaded as
-  # CommonJS and its imports would fail at init.
   source_path = "${path.root}/../functions/wsAuthorizer/dist/index.mjs"
   environment_variables = {
     SECRET_NAME = var.api_lambda_secret_name
-
   }
 }
 
-# Deliberately OUTSIDE the VPC (like `ws_authorizer_lambda`). It only talks to
-# DynamoDB (has a gateway endpoint) and to API Gateway's `@connections` API
-# (`execute-api` over the public endpoint); a private subnet adds ENI cold
-# starts and NAT/firewall failure modes without buying anything. Networking it
-# back into the VPC means re-adding `vpc_security_group_ids` + `vpc_subnet_ids`.
 module "ws_events_lambda" {
   source = "terraform-aws-modules/lambda/aws"
 
@@ -99,11 +91,10 @@ module "ws_events_lambda" {
   layers        = [aws_lambda_layer_version.lambda_layer.arn]
   lambda_role   = aws_iam_role.api_lambda_role.arn
 
-  source_path = "${path.root}/../functions/wsConnectionEvents/dist/index.mjs"
+  source_path            = "${path.root}/../functions/wsConnectionEvents/dist/index.mjs"
+  vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
+  vpc_subnet_ids         = var.vpc_subnet_ids
 
-  # Emits every LOG level so a refused frame / failed fan-out is visible in
-  # CloudWatch (the default only logs INFO and above, which hides nothing today
-  # because nothing is logged — see `validateFrame`).
   environment_variables = {
     AWS_LAMBDA_LOG_LEVEL = "INFO"
   }

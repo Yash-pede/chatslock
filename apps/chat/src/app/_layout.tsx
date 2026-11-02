@@ -9,6 +9,7 @@ import { WsGate } from "@/context/WebSocketContext"
 import { UnverifiedGate } from "@/components/unverified-gate"
 import type { Flow } from "@/context/profile/profile"
 import "../../global.css"
+import { NotificationProvider } from "@/context/NotificationContext"
 
 const appIcon = require("../../assets/files/icon-1024.png")
 
@@ -24,11 +25,6 @@ function LoadingGate() {
   )
 }
 
-/**
- * Splash/verified gates render instead of the navigator; the navigator itself
- * is guarded by the flow (see `ProtectedNavigator`). The flow is the single
- * routing input: it is derived from the session plus `GET /me`.
- */
 function RootNavigator() {
   const { flow, error, reload, reset } = useProfile()
 
@@ -43,15 +39,6 @@ function RootNavigator() {
   return <ProtectedNavigator flow={flow} />
 }
 
-/**
- * Screens are protected per flow so `Stack.Protected` handles navigation in
- * one place (no redirect effect to race against):
- * - signedOut: only the sign-in screens exist. A verified user therefore can
- *   never see `/login` again: as soon as the session exists the guard flips.
- * - onboarding: only the profile-completion screen exists.
- * - ready: only the app exists.
- * Public links (`u/[id]`) stay mounted so a shared link keeps working.
- */
 function ProtectedNavigator({ flow }: { flow: Flow }) {
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -76,12 +63,14 @@ export default function RootLayout() {
       <ToastProvider>
         <AuthProvider>
           <ProfileProvider>
-            <SettingsProvider>
-              <WsGate>
-                <StatusBar style="auto" />
-                <RootNavigator />
-              </WsGate>
-            </SettingsProvider>
+            <NotificationProvider>
+              <SettingsProvider>
+                <WsGate>
+                  <StatusBar style="auto" />
+                  <RootNavigator />
+                </WsGate>
+              </SettingsProvider>
+            </NotificationProvider>
           </ProfileProvider>
         </AuthProvider>
       </ToastProvider>

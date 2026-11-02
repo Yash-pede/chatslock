@@ -47,7 +47,6 @@ export const MAX_MESSAGES_LOOKUP = 50
 
 export const getConversationMessagesSchema = baseSchema.extend({
   body: z.strictObject({
-    /** Composite `TYPE#id`, exactly what `GET /api/conversations/chat` returns. */
     conversationId: compositeConversationId,
   }),
 })

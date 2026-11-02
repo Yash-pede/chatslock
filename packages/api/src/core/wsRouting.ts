@@ -161,7 +161,7 @@ function createContext(event: WsEvent, client: () => ApiGatewayManagementApiClie
  * const app = new WsRouter();
  * app.use(authMiddleware);
  * app.route("$connect", onConnect);
- * app.route("message.send", onSend);
+ * app.group("message").on("send", onSend);
  * export const handler = app.handle();
  * ```
  */

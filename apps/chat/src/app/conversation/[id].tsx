@@ -23,6 +23,7 @@ import {
   MediaViewer,
   MessageBubble,
   MessageComposer,
+  useActiveConversation,
   useConversationMessages,
   useMessageListScroll,
   type ChatMessage,
@@ -52,6 +53,8 @@ export default function ConversationScreen() {
   const conversationId = params.id ?? ""
   const name = params.name ?? "Conversation"
   const avatar = params.avatar
+
+  useActiveConversation(conversationId)
 
   const { messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, sendAudio, retry } =
     useConversationMessages(conversationId, user?.userId ?? null, {
@@ -97,7 +100,7 @@ export default function ConversationScreen() {
   return (
     <KeyboardAvoidingView
       className="flex-1"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} disabled={!Keyboard.isVisible()}>
@@ -113,7 +116,10 @@ export default function ConversationScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
-            maintainVisibleContentPosition={{ autoscrollToBottomThreshold: 0.2 }}
+            maintainVisibleContentPosition={{
+              autoscrollToBottomThreshold: 0.2,
+              startRenderingFromBottom: true,
+            }}
             onLoad={onLoad}
             onScroll={onScroll}
             scrollEventThrottle={32}

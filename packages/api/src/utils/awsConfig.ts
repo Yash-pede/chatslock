@@ -3,6 +3,7 @@ import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-sec
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb"
 import { S3Client } from "@aws-sdk/client-s3"
+import Redis from "ioredis"
 
 type Secret = { id?: string; values?: Record<string, string> }
 
@@ -18,6 +19,7 @@ export class AWSManager {
   private static secrets?: SecretsManagerClient
   private static secretsCache?: Secret
   private static secretsInFlight?: Promise<Secret>
+  private static cache: Redis
 
   static get cognitoClient() {
     return (AWSManager.cognito ??= new CognitoIdentityProviderClient())
@@ -28,18 +30,42 @@ export class AWSManager {
   }
 
   static get dbClient() {
-    return (AWSManager.document ??= DynamoDBDocumentClient.from(AWSManager.dynamodbClient))
+    return (AWSManager.document ??= DynamoDBDocumentClient.from(AWSManager.dynamodbClient, {
+      marshallOptions: {
+        convertClassInstanceToMap: true,
+      },
+    }))
   }
 
   static get s3Client() {
     return (AWSManager.s3 ??= new S3Client())
   }
 
+  static async cacheClient() {
+    if (AWSManager.cache) return AWSManager.cache
+
+    const host = await this.getSecretValue("cache_endpoint")
+    const port = await this.getSecretValue("cache_port")
+
+    if (!host || !port) {
+      throw new Error("Cache endpoint is not configured in the API secret")
+    }
+
+    return (AWSManager.cache ??= new Redis({
+      host,
+      port: Number.parseInt(port, 10),
+      // ElastiCache Serverless always encrypts in transit, so the client must
+      // speak TLS. `servername` is required for SNI certificate validation.
+      tls: { servername: host },
+      connectTimeout: 5_000,
+      maxRetriesPerRequest: 3,
+    }))
+  }
+
   private static get secretsManagerClient() {
     return (AWSManager.secrets ??= new SecretsManagerClient())
   }
 
-  /** Secret is fetched once per cold start and reused; concurrent callers share one request. */
   static async getSecretValue(secretName: string): Promise<string | undefined> {
     const pending = (AWSManager.secretsInFlight ??= AWSManager.loadSecret().finally(() => {
       AWSManager.secretsInFlight = undefined
@@ -64,5 +90,3 @@ export class AWSManager {
     return (AWSManager.secretsCache = secret)
   }
 }
-
-export const awsManagerInstance = AWSManager

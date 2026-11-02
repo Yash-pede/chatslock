@@ -3,6 +3,7 @@ import { handle } from "@hono/aws-lambda"
 import {
   avatarImagePresignUrlSchema,
   confirmAvatarUploadSchema,
+  setPushTokenSchema,
   updateMyProfileSchema,
   userOnboardingSchema,
 } from "@repo/types/req"
@@ -12,6 +13,7 @@ import {
   getAvatarPresignedUrlController,
   getUserByIdController,
   onboardingController,
+  setPushTokenController,
   updateMyProfileController,
 } from "./users.controller"
 import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
@@ -37,6 +39,7 @@ app.post(
   confirmAvatarUploadController,
 )
 app.patch("/me", validateWithZod(updateMyProfileSchema), updateMyProfileController)
+app.post("/pushtoken", validateWithZod(setPushTokenSchema), setPushTokenController)
 
 app.onError(apiErrorHandler)
 

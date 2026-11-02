@@ -17,7 +17,7 @@ import {
   AdminInitiateAuthCommand,
   CognitoIdentityProviderServiceException,
 } from "@aws-sdk/client-cognito-identity-provider"
-import { awsManagerInstance } from "@repo/api/utils"
+import { AWSManager } from "@repo/api/utils"
 import { HTTPException } from "hono/http-exception"
 import { cognitoErrorName } from "./auth.service"
 
@@ -87,8 +87,8 @@ export const loginController = async (c: Context) => {
       throw new HTTPException(403, { message: "Use phone sign-in instead." })
     }
 
-    const userPoolId = await awsManagerInstance.getSecretValue("cognito_user_pool_id")
-    const clientId = await awsManagerInstance.getSecretValue("cognito_admin_client_id")
+    const userPoolId = await AWSManager.getSecretValue("cognito_user_pool_id")
+    const clientId = await AWSManager.getSecretValue("cognito_admin_client_id")
 
     const command = new AdminInitiateAuthCommand({
       UserPoolId: userPoolId,
@@ -99,7 +99,7 @@ export const loginController = async (c: Context) => {
         PASSWORD: body.password,
       },
     })
-    const response = await awsManagerInstance.cognitoClient.send(command)
+    const response = await AWSManager.cognitoClient.send(command)
     const { AccessToken, RefreshToken } = response.AuthenticationResult || {}
 
     if (!AccessToken || !RefreshToken) {

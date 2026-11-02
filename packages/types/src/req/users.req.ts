@@ -1,6 +1,6 @@
 import z from "zod"
 import { baseSchema } from "./base"
-import { avatar, fullName, phone, role, userId, username } from "../schema"
+import { avatar, deviceId, fullName, phone, role, userId, username } from "../schema"
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max)
 
@@ -53,6 +53,18 @@ export const confirmAvatarUploadSchema = baseSchema.extend({
   }),
 })
 
+/**
+ * Registers (or refreshes) this device's Expo push token. `deviceId` is a
+ * client-generated UUID stored on the device, so one user can have several
+ * installations and re-registering the same device updates its token.
+ */
+export const setPushTokenSchema = baseSchema.extend({
+  body: z.strictObject({
+    expoPushToken: str(1, 255),
+    deviceId,
+  }),
+})
+
 export type UserSearchRequest = z.infer<typeof userSearchSchema>
 export type UserOnboardingRequest = z.infer<typeof userOnboardingSchema>
 export type GetUserProfileImagePresignUrlRequest = z.infer<
@@ -60,3 +72,4 @@ export type GetUserProfileImagePresignUrlRequest = z.infer<
 >
 export type UpdateMyProfileRequest = z.infer<typeof updateMyProfileSchema>
 export type ConfirmAvatarUploadRequest = z.infer<typeof confirmAvatarUploadSchema>
+export type SetPushTokenRequest = z.infer<typeof setPushTokenSchema>

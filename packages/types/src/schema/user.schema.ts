@@ -8,30 +8,22 @@ const zodTimestamp = z.number().int().nonnegative()
 export const userIdRegex = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i
 
 export const userId = z.string().regex(userIdRegex, "Invalid userId")
-/** Cognito sub — a lowercase uuid, no storage prefix. */
 export type UserId = z.infer<typeof userId>
 export const role = z.enum(ROLE_NAMES)
 export const fullName = str(3, 50)
 export const username = str(3, 20)
-/** Public profile image URL. Stored as `avatar` everywhere. */
 export const avatar = z.url("Invalid avatar URL format")
 export const phone = z.string().regex(/^\+\d{10,15}$/, "Invalid phone number")
 
-export const USER_SK = ["PROFILE"] as const
+export const USER_SK = ["PROFILE", "DEVICE", "CONNECTION"] as const
 
-/** Valid SK values for user items; extend this union as new user sub-items are added. */
 export type UserSK = (typeof USER_SK)[number]
 
-/** Key attributes of a user item in the single-table design. */
 export const userKeys = z.strictObject({
   PK: z.string().regex(new RegExp(`^${PREFIXES.USER}[^#]+$`), "Invalid user PK"),
   SK: z.enum(USER_SK),
 })
 
-/**
- * A user item as stored in DynamoDB.
- * Timestamps are epoch milliseconds and are populated by the DAO, never by callers.
- */
 export const userItem = z.strictObject({
   PK: userKeys.shape.PK,
   SK: userKeys.shape.SK,
@@ -43,6 +35,7 @@ export const userItem = z.strictObject({
   phone: phone.optional(),
   role,
   agentId: userId.optional(),
+  lastActiveAt: zodTimestamp,
   createdAt: zodTimestamp,
   updatedAt: zodTimestamp,
 })
@@ -55,6 +48,7 @@ export const userItem = z.strictObject({
 export const userSchema = z.object(userItem.omit({ PK: true, SK: true }).shape)
 
 export const createUserSchema = userSchema.omit({
+  lastActiveAt: true,
   createdAt: true,
   updatedAt: true,
 })
@@ -89,3 +83,34 @@ export type getUser = z.infer<typeof getUserSchema>
 export type UserItem = z.infer<typeof userItem>
 export type CreateUserInput = z.infer<typeof createUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>
+
+export const usersk = Object.fromEntries(USER_SK.map((key) => [key, key])) as {
+  [K in UserSK]: K
+}
+
+/** Client-generated installation id (UUID v4), stable for the life of the install. */
+export const deviceIdRegex =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+export const deviceId = z.string().regex(deviceIdRegex, "Invalid device id")
+export type DeviceId = z.infer<typeof deviceId>
+
+/**
+ * A device's push registration: `PK USER#<userId>`, `SK DEVICE#<deviceId>`.
+ * `expiresAt` is a DynamoDB TTL (epoch seconds) refreshed on every write, so a
+ * device that stops opening the app is dropped automatically.
+ */
+export const userDeviceItem = z.strictObject({
+  PK: userKeys.shape.PK,
+  SK: z.string().regex(new RegExp(`^${usersk.DEVICE}[^#]+$`), "Invalid device SK"),
+  deviceId,
+  expoPushToken: str(1, 255),
+  updatedAt: zodTimestamp,
+  expiresAt: z.number().int().positive(),
+})
+
+export const userDeviceSchema = z.object(userDeviceItem.omit({ PK: true, SK: true }).shape)
+
+/** A device row exactly as stored in DynamoDB. */
+export type UserDeviceItem = z.infer<typeof userDeviceItem>
+/** The device fields exposed to callers (keys are storage-only). */
+export type UserDevice = z.infer<typeof userDeviceSchema>

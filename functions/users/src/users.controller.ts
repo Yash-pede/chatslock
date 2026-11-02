@@ -2,6 +2,7 @@ import type { Context } from "hono"
 import type {
   AvatarImagePresignUrlRequest,
   ConfirmAvatarUploadRequest,
+  SetPushTokenRequest,
   UpdateMyProfileRequest,
   UserOnboardingRequest,
 } from "@repo/types/req"
@@ -10,6 +11,7 @@ import {
   getAvatarPresignedUrl,
   getUserById,
   onboardUser,
+  savePushToken,
   updateMyProfile,
 } from "./users.service"
 
@@ -64,4 +66,17 @@ export const updateMyProfileController = async (c: Context) => {
   })
 
   return c.json(resp)
+}
+
+/** Registers (or refreshes) the Expo push token for the calling device. */
+export const setPushTokenController = async (c: Context) => {
+  const { body }: SetPushTokenRequest = c.get("valid")
+
+  await savePushToken({
+    userId: c.get("userId"),
+    deviceId: body.deviceId,
+    expoPushToken: body.expoPushToken,
+  })
+
+  return c.json({ message: "Push token saved" })
 }

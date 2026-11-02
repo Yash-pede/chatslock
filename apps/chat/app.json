@@ -18,8 +18,9 @@
     },
     "android": {
       "package": "com.yash.chatzy",
-      "softwareKeyboardLayoutMode": "pan",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": ["android.permission.RECORD_AUDIO"],
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/files/adaptive-icon-foreground-1024.png",
@@ -73,6 +74,7 @@
       "expo-status-bar",
       "expo-web-browser",
       "expo-video",
+      "expo-notifications",
       "expo-sharing",
       [
         "expo-file-system",

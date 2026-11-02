@@ -14,7 +14,6 @@ import {
   FileText,
   Image as ImageIcon,
   Mic,
-  Music,
   Paperclip,
   SendHorizontal,
   Trash2,
@@ -147,23 +146,11 @@ export function MessageComposer({
       tint: "#2AABEE",
       icon: <FileText size={24} color="#ffffff" />,
       onPress: () => void pickDocument(),
-    },
-    {
-      key: "audio",
-      label: "Audio",
-      tint: "#F5A623",
-      icon: <Music size={24} color="#ffffff" />,
-      // Dummy for now: audio attachments are not implemented yet.
-      onPress: () =>
-        toast({ title: "Coming soon", description: "Audio attachments are not available yet." }),
-    },
+    }
   ]
 
   return (
-    <View
-      className="border-t border-border bg-background"
-      style={{ paddingBottom: insets.bottom }}
-    >
+    <View className="border-t border-border bg-background" style={{ paddingBottom: insets.bottom }}>
       <View className="flex-row items-end gap-2 px-3 pt-2">
         {recording ? (
           <Pressable
