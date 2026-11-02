@@ -63,11 +63,7 @@ export const defineWsGroup = <const G extends WsGroup>(group: G): G => group
  * Builds the schema for one operation: a strict `{ action, op, data }` frame.
  * Keeping the envelope here means a new group only writes its `data` schemas.
  */
-export const wsFrame = <
-  const A extends string,
-  const Op extends string,
-  T extends ZodType,
->(
+export const wsFrame = <const A extends string, const Op extends string, T extends ZodType>(
   action: A,
   op: Op,
   data: T,

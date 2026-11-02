@@ -30,8 +30,7 @@ export const WS_MESSAGE_EVENT_TYPE = {
   updated: "message.updated",
   deleted: "message.deleted",
 } as const
-export type WsMessageEventType =
-  (typeof WS_MESSAGE_EVENT_TYPE)[keyof typeof WS_MESSAGE_EVENT_TYPE]
+export type WsMessageEventType = (typeof WS_MESSAGE_EVENT_TYPE)[keyof typeof WS_MESSAGE_EVENT_TYPE]
 
 /** Direct replies to the caller of an operation. */
 export const WS_MESSAGE_ACK_TYPE = {

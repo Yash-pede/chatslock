@@ -146,7 +146,7 @@ export function MessageComposer({
       tint: "#2AABEE",
       icon: <FileText size={24} color="#ffffff" />,
       onPress: () => void pickDocument(),
-    }
+    },
   ]
 
   return (

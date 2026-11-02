@@ -86,9 +86,7 @@ export const messagePushNotification = (
   return {
     title: senderName,
     body: MEDIA_BODY[message.type],
-    ...(message.type === "IMAGE" && message.attachment
-      ? { imageUrl: message.attachment.url }
-      : {}),
+    ...(message.type === "IMAGE" && message.attachment ? { imageUrl: message.attachment.url } : {}),
     data,
   }
 }

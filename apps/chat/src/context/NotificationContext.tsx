@@ -106,8 +106,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       if (handledResponseIds.current.has(responseId)) return
 
       const data = response.notification.request.content.data as
-        | { conversationId?: unknown }
-        | undefined
+        { conversationId?: unknown } | undefined
       const conversationId =
         typeof data?.conversationId === "string" && data.conversationId.length > 0
           ? data.conversationId
@@ -132,8 +131,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   // Tap while the app is foreground/background.
   useEffect(() => {
-    const subscription =
-      Notifications.addNotificationResponseReceivedListener(openConversationFromResponse)
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      openConversationFromResponse,
+    )
     return () => subscription.remove()
   }, [openConversationFromResponse])
 

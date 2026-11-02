@@ -1,10 +1,6 @@
 import { apiClient } from "@/api/client"
 import type { getUser } from "@repo/types/schema"
-import type {
-  AvatarContentType,
-  SetPushTokenRequest,
-  UserOnboardingRequest,
-} from "@repo/types/req"
+import type { AvatarContentType, SetPushTokenRequest, UserOnboardingRequest } from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
