@@ -1,9 +1,6 @@
 import { File as ExpoFile } from "expo-file-system"
 import { apiClient } from "@/api/client"
-import type {
-  ConversationUserProfile,
-  UserMemberConversation,
-} from "@repo/types/schema"
+import type { ConversationUserProfile, UserMemberConversation } from "@repo/types/schema"
 import type { MediaContentType } from "@repo/types/req"
 
 /** A media upload target returned by `POST /api/conversations/media` (presigned POST). */

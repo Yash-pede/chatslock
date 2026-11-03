@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router"
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react-native"
 import { FlashList, type ListRenderItem } from "@shopify/flash-list"
 import {
@@ -61,21 +61,21 @@ export default function ConversationScreen() {
       unreadCount: Number(params.unread) || 0,
     })
 
-  const { listRef, awayFromBottom, onScroll, scrollToBottom, onLoad } =
+  const { listRef, awayFromBottom, onScroll, onScrollBeginDrag, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
 
-  // Photos/videos from the messages loaded in this screen only; the viewer
-  // never fetches older pages.
   const media = useMemo(() => collectMedia(messages), [messages])
+
+  const mediaRef = useRef(media)
+  useEffect(() => {
+    mediaRef.current = media
+  }, [media])
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
 
-  const openMedia = useCallback(
-    (id: string) => {
-      const index = media.findIndex((item) => item.id === id)
-      if (index >= 0) setViewerIndex(index)
-    },
-    [media],
-  )
+  const openMedia = useCallback((id: string) => {
+    const index = mediaRef.current.findIndex((item) => item.id === id)
+    if (index >= 0) setViewerIndex(index)
+  }, [])
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
@@ -122,6 +122,7 @@ export default function ConversationScreen() {
             }}
             onLoad={onLoad}
             onScroll={onScroll}
+            onScrollBeginDrag={onScrollBeginDrag}
             scrollEventThrottle={32}
             ListHeaderComponent={
               messages.length > 0 ? (

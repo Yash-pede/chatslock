@@ -23,14 +23,15 @@ export function ConversationListHeader({
   hasOlder: boolean
   loadingOlder: boolean
 }) {
-  if (loadingOlder) {
+  // Keep the paging row at a constant height. Inserting/removing the spinner
+  // directly as the list header changes its height and shifts every message.
+  if (hasOlder || loadingOlder) {
     return (
-      <View className="items-center py-3">
-        <Spinner size="sm" />
+      <View className="h-11 items-center justify-center">
+        {loadingOlder ? <Spinner size="sm" /> : null}
       </View>
     )
   }
-  if (hasOlder) return null
 
   return (
     <View className="items-center gap-2 pb-4 pt-6">
