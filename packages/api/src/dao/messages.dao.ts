@@ -82,7 +82,6 @@ export const messagesDao = {
   getMessagesByConversationId: async (input: {
     conversationId: ConversationId
     limit: number
-    /** ULID of the last message from the previous page; pages strictly older messages. */
     cursor?: MessageId
   }): Promise<Message[]> => {
     const result = await AWSManager.dbClient.send(

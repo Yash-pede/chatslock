@@ -1,9 +1,7 @@
 import { File as ExpoFile } from "expo-file-system"
 import { apiClient } from "@/api/client"
 import type {
-  ConversationId,
   ConversationUserProfile,
-  Message,
   UserMemberConversation,
 } from "@repo/types/schema"
 import type { MediaContentType } from "@repo/types/req"
@@ -17,7 +15,7 @@ export interface MediaPresignResult {
   key: string
 }
 
-export type { ConversationUserProfile, Message, UserMemberConversation }
+export type { ConversationUserProfile, UserMemberConversation }
 
 /** `GET /api/conversations/chat` — one page of the caller's conversations. */
 export interface ChatPage {
@@ -27,11 +25,6 @@ export interface ChatPage {
 /** `POST /api/conversations/profiles` — public profiles for up to 25 user ids. */
 export interface ProfilesResponse {
   profiles: ConversationUserProfile[]
-}
-
-/** `GET /api/conversations/:conversationId/messages` — latest history page. */
-export interface MessagesResponse {
-  messages: Message[]
 }
 
 /** Max ids accepted by one profiles request (mirrors the server schema). */
@@ -71,12 +64,6 @@ export const conversationsApi = {
       userIds: userIds.slice(0, MAX_PROFILE_LOOKUP),
     })
     return unwrap<ProfilesResponse>(data).profiles
-  },
-
-  /** `POST /api/conversations/messages` — latest messages, newest first. */
-  getMessages: async (conversationId: ConversationId): Promise<MessagesResponse> => {
-    const { data } = await apiClient.post("/api/conversations/messages", { conversationId })
-    return unwrap<MessagesResponse>(data)
   },
 
   /** `POST /api/conversations/media` — presigns a media upload (S3 POST). */

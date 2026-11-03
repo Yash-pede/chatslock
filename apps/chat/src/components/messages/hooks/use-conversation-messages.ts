@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Message } from "@repo/types/schema"
 import { MEDIA_CONTENT_TYPES, type MediaContentType } from "@repo/types/req"
 import { useToast } from "@repo/ui"
-import { conversationsApi, responseStatus, uploadMediaToBucket } from "@/api/conversations.api"
+import { conversationsApi, uploadMediaToBucket } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
 import { mergeMessages, toChatMessage, waveformFrom } from "../lib/mappers"
 import type { ChatMessage, PickedMedia } from "../types"
@@ -63,6 +63,7 @@ export function useConversationMessages(
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   const cursorRef = useRef<string | undefined>(undefined)
+  const loadingOlderRef = useRef(false)
   const unreadRemainingRef = useRef(0)
   const readSentRef = useRef(false)
 
@@ -168,7 +169,10 @@ export function useConversationMessages(
   }, [api, conversationId])
 
   const loadOlder = useCallback(() => {
-    if (loadingOlder || !hasOlder || !cursorRef.current) return
+    // The ref guard makes repeated scroll events in the same frame harmless.
+    if (loadingOlderRef.current || !hasOlder || !cursorRef.current) return
+
+    loadingOlderRef.current = true
     setLoadingOlder(true)
     void fetchPage(cursorRef.current, PAGE_SIZE)
       .then((page) => {
@@ -179,49 +183,36 @@ export function useConversationMessages(
       .catch(() => {
         // keep hasOlder so the next scroll retries
       })
-      .finally(() => setLoadingOlder(false))
-  }, [applyPage, fetchPage, hasOlder, loadingOlder])
+      .finally(() => {
+        loadingOlderRef.current = false
+        setLoadingOlder(false)
+      })
+  }, [applyPage, fetchPage, hasOlder])
 
   /**
-   * The REST history endpoint is the primary load: it answers immediately, while
-   * a WS `list` request only settles once the socket is open (it rejects
-   * straight away while connecting, or waits for the ack once open).
+   * The socket is the only path for history: the initial page waits for the
+   * connection to open, and scroll-up pages use `message.list` from there.
    */
   useEffect(() => {
     if (!conversationId) return
 
     let cancelled = false
     cursorRef.current = undefined
+    loadingOlderRef.current = false
     readSentRef.current = false
     unreadRemainingRef.current = unreadCount
 
     void (async () => {
       try {
-        const rest = await conversationsApi.getMessages(conversationId)
+        const page = await fetchPage(undefined, PAGE_SIZE)
         if (cancelled) return
-        applyPage({ messages: rest.messages })
+        cursorRef.current = page.nextCursor
+        setHasOlder(Boolean(page.nextCursor))
+        applyPage(page)
         setStatus("ready")
         markRead()
-      } catch (error) {
-        if (cancelled) return
-        // 5xx/network: the socket may still reach the server, so try it once
-        // before surfacing an error. 4xx is authoritative (e.g. not a member).
-        const status = responseStatus(error)
-        if (status !== undefined && status < 500) {
-          setStatus("error")
-          return
-        }
-        try {
-          const page = await fetchPage(undefined, PAGE_SIZE)
-          if (cancelled) return
-          cursorRef.current = page.nextCursor
-          setHasOlder(Boolean(page.nextCursor))
-          applyPage(page)
-          setStatus("ready")
-          markRead()
-        } catch {
-          if (!cancelled) setStatus("error")
-        }
+      } catch {
+        if (!cancelled) setStatus("error")
       }
     })()
 

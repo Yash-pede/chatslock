@@ -34,8 +34,8 @@ interface WsContextValue {
   /**
    * Sends `{action, op}` and resolves/rejects from the first matching frame.
    * `waitForOpenMs` lets the call wait for the socket to (re)open before sending
-   * instead of failing immediately; pass `0` to fail fast (e.g. when the caller
-   * has a REST fallback). Defaults to `timeoutMs`.
+   * instead of failing immediately; pass `0` to fail fast. Defaults to
+   * `timeoutMs`.
    */
   request: <T>(
     input: WsSendInput,
@@ -180,7 +180,7 @@ export function WsProvider({
 
   /**
    * Resolves once the socket is open, polling until `timeoutMs`. Pass `0` to
-   * fail immediately when it is not open yet (callers with a REST fallback).
+   * fail immediately when it is not open yet.
    */
   const waitForOpen = useCallback((timeoutMs: number): Promise<void> => {
     if (clientRef.current?.isOpen) return Promise.resolve()

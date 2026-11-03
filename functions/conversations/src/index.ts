@@ -5,14 +5,12 @@ import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
 import {
   confirmAvatarUploadSchema,
   getChatPageConversationSchema,
-  getConversationMessagesSchema,
   getConversationProfilesSchema,
   mediaUploadPresignUrlSchema,
 } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
 import {
   chatPageConversationsController,
-  conversationMessagesController,
   conversationProfilesController,
   getMediaUploadPresignedUrlController,
 } from "./conversatinos.controller"
@@ -36,11 +34,6 @@ app.post(
   conversationProfilesController,
 )
 
-app.post(
-  "/messages",
-  validateWithZod(getConversationMessagesSchema),
-  conversationMessagesController,
-)
 app.post(
   "/media",
   validateWithZod(mediaUploadPresignUrlSchema),

@@ -66,16 +66,11 @@ export function useMessagesApi() {
 
   const api = useMemo(() => {
     const sendFrame = <T>(op: string, data: Record<string, unknown>): Promise<T> => {
-      // `list` has a REST fallback, so it must fail fast while the socket is
-      // down. Sends have no fallback: wait for the socket to reopen (e.g. right
-      // after a foreground reconnect) instead of dropping the frame.
-      const waitForOpenMs = op === WS_MESSAGE_OP.list ? 0 : REPLY_TIMEOUT_MS
       return request<T>(
         { action: WS_MESSAGE_ACTION, op, data },
         {
           types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error],
           timeoutMs: REPLY_TIMEOUT_MS,
-          waitForOpenMs,
         },
       ).then((reply) => parseReply<T>(op, reply as unknown as Reply))
     }

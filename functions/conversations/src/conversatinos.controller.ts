@@ -1,13 +1,11 @@
 import type { Context } from "hono"
 import type {
   GetChatPageConversationRequest,
-  GetConversationMessagesRequest,
   GetConversationProfilesRequest,
   MediaUploadPresignUrlRequest,
 } from "@repo/types/req"
 import {
   chatPageConversationsService,
-  conversationMessagesService,
   conversationProfilesService,
   getMediaUploadPresignedUrl,
 } from "./conversatinos.service"
@@ -27,17 +25,6 @@ export const chatPageConversationsController = async (c: Context) => {
 export const conversationProfilesController = async (c: Context) => {
   const { body }: GetConversationProfilesRequest = c.get("valid")
   const resp = await conversationProfilesService({ userIds: body.userIds })
-
-  return c.json(resp)
-}
-
-/** Latest messages of a conversation, newest first. */
-export const conversationMessagesController = async (c: Context) => {
-  const { body }: GetConversationMessagesRequest = c.get("valid")
-  const resp = await conversationMessagesService({
-    userId: c.get("userId"),
-    conversationId: body.conversationId,
-  })
 
   return c.json(resp)
 }
