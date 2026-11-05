@@ -35,7 +35,7 @@ export default function ProfileScreen() {
   const name = user?.fullName ?? user?.username ?? "Your profile"
   const avatar = avatarUri ?? user?.avatar ?? null
   const handle = user?.username ? `@${user.username}` : "Chatslock member"
-  const publicLink = user?.role === "agent" && user?.userId ? userProfileUrl(user.userId) : null
+  const publicLink = user?.role === "agent" && user?.username ? userProfileUrl(user.username) : null
   const trimmedDraft = nameDraft.trim()
   const canSaveName = trimmedDraft.length >= 3 && trimmedDraft !== (user?.fullName ?? "")
 

@@ -32,6 +32,8 @@ export const sendPushNotification = async ({
     to: token,
     sound: "default",
     channelId: "default",
+    priority: "high",
+    ttl: 60 * 60,
     title,
     body,
     ...(data ? { data } : {}),

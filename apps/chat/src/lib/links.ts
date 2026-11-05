@@ -7,7 +7,7 @@ const MAIN_SITE_URL = (
   process.env.EXPO_PUBLIC_MAIN_SITE_URL?.trim() || "https://chatslock.com"
 ).replace(/\/+$/, "")
 
-/** Public web profile for a user/agent: `<main site>/u/<userId>`. */
-export function userProfileUrl(userId: string): string {
-  return `${MAIN_SITE_URL}/u/${userId}`
+/** Public web profile for a user/agent: `<main site>/u/<username>`. */
+export function userProfileUrl(username: string): string {
+  return `${MAIN_SITE_URL}/u/${encodeURIComponent(username)}`
 }

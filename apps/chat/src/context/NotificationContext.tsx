@@ -50,6 +50,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     void syncPushToken()
   }, [ready, syncPushToken])
 
+  // FCM/APNs rotate the device token independently of app launches. Without
+  // this, the backend keeps a stale Expo token and later pushes fail with
+  // DeviceNotRegistered even though FCM accepted the first one.
+  useEffect(() => {
+    if (!ready) return
+
+    const subscription = Notifications.addPushTokenListener(() => {
+      void syncPushToken()
+    })
+
+    return () => subscription.remove()
+  }, [ready, syncPushToken])
+
   const openConversationFromResponse = useCallback(
     (response: Notifications.NotificationResponse | null) => {
       if (!response) return

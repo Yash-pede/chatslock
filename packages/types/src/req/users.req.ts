@@ -1,6 +1,6 @@
 import z from "zod"
 import { baseSchema } from "./base"
-import { avatar, fullName, phone, role, userId, username } from "../schema"
+import { avatar, fullName, phone, role, username } from "../schema"
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max)
 
@@ -16,7 +16,8 @@ export const userOnboardingSchema = baseSchema.extend({
     username: username.toLowerCase(),
     fullName,
     phone,
-    agentId: z.optional(userId),
+    // The shared /u/<username> link carries the inviter's username, not id.
+    agentUsername: z.optional(username.toLowerCase()),
   }),
 })
 

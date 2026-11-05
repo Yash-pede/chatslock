@@ -24,7 +24,7 @@ export const onboardingController = async (c: Context) => {
     username: body.username,
     fullName: body.fullName,
     phone: body.phone,
-    agentId: body.agentId,
+    agentUsername: body.agentUsername,
   })
 
   return c.json(resp)

@@ -11,15 +11,27 @@ export const onboardUser = async ({
   fullName,
   username,
   phone,
-  agentId,
+  agentUsername,
 }: {
   userId: string
   cognitoUsername: string
   fullName: string
   username: string
   phone: string
-  agentId?: string
+  agentUsername?: string
 }) => {
+  // The shared link carries a username; conversations are keyed by user id.
+  let agentUserId: string | undefined
+  if (agentUsername) {
+    try {
+      const [agent] = (await usersDao.getUserByUsername({ username: agentUsername })) ?? []
+      if (agent && agent.userId !== userId) agentUserId = agent.userId
+    } catch (err) {
+      // A bad/unknown invite link must not block onboarding.
+      console.error("Failed to resolve agent username", err)
+    }
+  }
+
   try {
     await authDao.addUserToGroup({ cognitoUsername, groupName: "user" })
     await usersDao.createUser({
@@ -29,12 +41,12 @@ export const onboardUser = async ({
       username,
       role: "user",
       phone,
-      ...(agentId !== undefined ? { agentId } : {}),
+      ...(agentUserId ? { agentId: agentUserId } : {}),
     })
 
-    if (agentId) {
+    if (agentUserId) {
       try {
-        await conversationsDao.createDirectConversation([userId, agentId])
+        await conversationsDao.createDirectConversation([userId, agentUserId])
       } catch (err) {
         console.error("Failed to start conversation", err)
         return "user Onboarding completed but failed to start conversation"

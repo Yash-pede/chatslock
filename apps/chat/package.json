@@ -12,6 +12,7 @@
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "expo": "catalog:",
+    "expo-application": "~58.1.2",
     "expo-audio": "~58.0.10",
     "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.14",

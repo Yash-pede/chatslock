@@ -9,6 +9,12 @@ import React, {
 } from "react"
 import { discardSession, tokenRefreshService } from "@repo/utils"
 import { usersApi, type OnboardingForm, type Profile } from "@/api/users.api"
+import {
+  clearPendingAgent,
+  loadPendingAgent,
+  readInstallReferrerAgentOnce,
+  savePendingAgent,
+} from "@/lib/pending-agent"
 import { useAuth } from "@/context/AuthContext"
 import { loadProfile, logProfile, userFlowFor, type Flow, type ProfileState } from "./profile"
 
@@ -24,9 +30,9 @@ interface ProfileContextValue {
   error: string | null
   reload: () => Promise<void>
   completeOnboarding: (input: OnboardingForm) => Promise<void>
-  /** Agent from a shared link (`/u/<agentId>`), used by onboarding. */
+  /** Invite username from a shared link (`/u/<username>`) or Play referrer. */
   pendingAgentId: string | null
-  setPendingAgentId: (agentId: string | null) => void
+  setPendingAgentId: (agentUsername: string | null) => void
   /** Drops the session locally *and* clears the profile. */
   reset: () => Promise<void>
 }
@@ -44,8 +50,17 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const [profile, setProfile] = useState<ProfileState>({ status: "idle" })
   const [staffResolved, setStaffResolved] = useState(false)
-  const [pendingAgentId, setPendingAgentId] = useState<string | null>(null)
+  const [pendingAgentId, setPendingAgentIdState] = useState<string | null>(null)
+  const pendingAgentRef = useRef<string | null>(null)
   const inFlight = useRef(0)
+
+  /** Persists the invite username until onboarding consumes it. */
+  const setPendingAgentId = useCallback((agentUsername: string | null) => {
+    pendingAgentRef.current = agentUsername
+    setPendingAgentIdState(agentUsername)
+    if (agentUsername) void savePendingAgent(agentUsername)
+    else void clearPendingAgent()
+  }, [])
 
   // Drop stale state in the same render that sees the session end or change.
   const [lastSessionKey, setLastSessionKey] = useState(sessionKey)
@@ -61,6 +76,36 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     if (staff) return staffResolved ? "ready" : "loading"
     return userFlowFor(profile)
   }, [auth.status, identity, staff, staffResolved, profile])
+
+  // Load a persisted invite or the Play referrer, unless the user is already
+  // onboarded. Clearing stored state when ready prevents stale invites.
+  useEffect(() => {
+    if (flow === "ready") return
+
+    let cancelled = false
+
+    void (async () => {
+      // A `/u/<username>` link may have already set this during this launch.
+      if (pendingAgentRef.current) return
+
+      const [stored, referred] = await Promise.all([
+        loadPendingAgent(),
+        readInstallReferrerAgentOnce(),
+      ])
+      if (cancelled || pendingAgentRef.current) return
+
+      const next = stored ?? referred
+      if (!next) return
+
+      pendingAgentRef.current = next
+      setPendingAgentIdState(next)
+      if (!stored) void savePendingAgent(next)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [flow])
 
   /** Loads `/me` for the current session; `null` when it no longer applies. */
   const fetchProfile = useCallback(async (): Promise<ProfileState | null> => {
@@ -82,6 +127,9 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setProfile(next)
       if (staff) setStaffResolved(true)
 
+      // Already onboarded: a stored invite is stale.
+      if (next.status === "ready" && pendingAgentRef.current) setPendingAgentId(null)
+
       if (next.status === "rejected") {
         setStaffResolved(false)
         // The server refuses this token: sign out instead of showing a gate
@@ -92,7 +140,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       }
       return next
     },
-    [staff, signOut],
+    [staff, signOut, setPendingAgentId],
   )
 
   useEffect(() => {
@@ -117,12 +165,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         // would be created unusable.
         throw new Error("Your session is missing your phone number. Please sign in again.")
       }
-      const agentId = pendingAgentId ?? undefined
+      const agentUsername = pendingAgentId ?? undefined
       await usersApi.onboard({
         fullName,
         username,
         phone,
-        ...(agentId ? { agentId } : {}),
+        ...(agentUsername ? { agentUsername } : {}),
       })
       setPendingAgentId(null)
       const next = await applyProfile(await fetchProfile())
@@ -131,7 +179,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Your profile was not saved. Please try again.")
       }
     },
-    [pendingAgentId, phone, fetchProfile, applyProfile],
+    [pendingAgentId, phone, fetchProfile, applyProfile, setPendingAgentId],
   )
 
   const reset = useCallback(async () => {
@@ -139,7 +187,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setProfile({ status: "idle" })
     setStaffResolved(false)
     await signOut()
-  }, [signOut])
+  }, [signOut, setPendingAgentId])
 
   const value = useMemo<ProfileContextValue>(
     () => ({
@@ -154,7 +202,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setPendingAgentId,
       reset,
     }),
-    [flow, signedIn, profile, reload, completeOnboarding, pendingAgentId, reset],
+    [flow, signedIn, profile, reload, completeOnboarding, pendingAgentId, setPendingAgentId, reset],
   )
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>

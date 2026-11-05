@@ -1,30 +1,30 @@
 import { useEffect } from "react"
 import { Redirect, useLocalSearchParams } from "expo-router"
-import { useIdentity } from "@/context/AuthContext"
 import { useProfile } from "@/context/profile/ProfileContext"
 
-/** Cognito `sub` values are UUIDs; anything else is not a profile id. */
-const USER_ID_PATTERN = /^[0-9a-z]{8}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{12}$/i
+const MIN_USERNAME_LENGTH = 3
+const MAX_USERNAME_LENGTH = 20
 
 /**
- * Public profile link (`chatslock.com/u/<agentId>`). It only exists to carry the
- * agent id into the session: signed-out visitors are sent to the phone OTP flow,
- * which keeps the id and passes it to the onboarding call once verified.
+ * Shared profile link (`chatslock.com/u/<username>`). It carries the invite
+ * username into the session: signed-out visitors go through phone OTP and
+ * onboarding picks the username up again.
  *
- * Viewing another user's profile is not implemented yet, so signed-in users are
- * sent to the app for now.
+ * A real profile view (view another user and start a chat while signed in) is
+ * not implemented yet; signed-in users are sent to the app for now.
  */
 export default function PublicProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
-  const identity = useIdentity()
-  const { flow, setPendingAgentId } = useProfile()
+  const { flow, user, setPendingAgentId } = useProfile()
 
-  const isOwnProfile = typeof id === "string" && id === identity?.id
-  const isLinkableAgent = typeof id === "string" && USER_ID_PATTERN.test(id)
+  const agentUsername = typeof id === "string" ? id.trim().toLowerCase() : ""
+  const isLinkable =
+    agentUsername.length >= MIN_USERNAME_LENGTH && agentUsername.length <= MAX_USERNAME_LENGTH
+  const isOwnProfile = agentUsername.length > 0 && agentUsername === user?.username
 
   useEffect(() => {
-    if (isLinkableAgent && !isOwnProfile) setPendingAgentId(id)
-  }, [id, isLinkableAgent, isOwnProfile, setPendingAgentId])
+    if (isLinkable && !isOwnProfile) setPendingAgentId(agentUsername)
+  }, [agentUsername, isLinkable, isOwnProfile, setPendingAgentId])
 
   // A link can arrive signed out, mid-onboarding or inside the app; the flow
   // already encodes which of those applies.
