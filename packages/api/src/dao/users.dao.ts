@@ -312,10 +312,7 @@ export const usersDao = {
       }),
     )
   },
-  deleteAuthSession: async (input: {
-    userId: UserId
-    refreshTokenHash: string
-  }): Promise<void> => {
+  deleteAuthSession: async (input: { userId: UserId; refreshTokenHash: string }): Promise<void> => {
     await AWSManager.dbClient.send(
       new DeleteCommand({
         TableName: TABLE_NAME,

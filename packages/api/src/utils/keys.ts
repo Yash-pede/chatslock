@@ -79,5 +79,3 @@ export const parseConversationId = (
 
   return { type: type as ConversationType, conversationId }
 }
-
-

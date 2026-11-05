@@ -42,7 +42,11 @@ app.post(
   confirmAvatarUploadController,
 )
 app.patch("/me", validateWithZod(updateMyProfileSchema), updateMyProfileController)
-app.post("/sessions", validateWithZod(updateSessionPushTokenSchema), updateSessionPushTokenController)
+app.post(
+  "/sessions",
+  validateWithZod(updateSessionPushTokenSchema),
+  updateSessionPushTokenController,
+)
 app.get("/sessions", getSessionsController)
 app.delete("/sessions/:id", validateWithZod(revokeSessionSchema), revokeSessionController)
 

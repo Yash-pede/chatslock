@@ -17,4 +17,3 @@ export const SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 
 /** Sort-key prefix for auth-session rows (`AUTHSESSION#<refreshTokenHash>`). */
 export const AUTH_SESSION_PREFIX = "AUTHSESSION#"
-

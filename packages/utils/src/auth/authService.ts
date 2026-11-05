@@ -290,11 +290,9 @@ export async function logout(): Promise<void> {
 
   try {
     if (accessToken) {
-      await http.post(
-        "/logout",
-        sessionId ? { sessionId } : {},
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      )
+      await http.post("/logout", sessionId ? { sessionId } : {}, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
     }
   } catch {
     // A failed sign-out shouldn't trap the user in the app.
