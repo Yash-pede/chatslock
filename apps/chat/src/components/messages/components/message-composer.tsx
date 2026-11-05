@@ -19,6 +19,7 @@ import {
   Trash2,
 } from "lucide-react-native"
 import { Text, Waveform, useToast, useThemeColors } from "@repo/ui"
+import { MAX_MESSAGE_LENGTH } from "@repo/types/schema"
 import { AttachmentTray, type TrayAction } from "./attachment-tray"
 import { useAudioRecorder, type RecordedAudio } from "../hooks/use-audio-recorder"
 import type { PickedMedia } from "../types"
@@ -58,12 +59,13 @@ export function MessageComposer({
   const inputRef = useRef<TextInputInstance>(null)
   const [value, setValue] = useState("")
   const [trayOpen, setTrayOpen] = useState(false)
-  const canSend = value.trim().length > 0 && !disabled
+  const canSend = value.trim().length > 0 && value.length <= MAX_MESSAGE_LENGTH && !disabled
+  const nearLimit = value.length >= MAX_MESSAGE_LENGTH - 200
   const recording = recorder.isRecording
 
   const submit = async () => {
     const text = value.trim()
-    if (!text) return
+    if (!text || text.length > MAX_MESSAGE_LENGTH) return
     await onSend(text)
     setValue("")
   }
@@ -151,6 +153,11 @@ export function MessageComposer({
 
   return (
     <View className="border-t border-border bg-background" style={{ paddingBottom: insets.bottom }}>
+      {nearLimit ? (
+        <Text variant="small" className="px-4 pt-1 text-right font-normal text-muted-foreground">
+          {value.length}/{MAX_MESSAGE_LENGTH}
+        </Text>
+      ) : null}
       <View className="flex-row items-end gap-2 px-3 pt-2">
         {recording ? (
           <Pressable
@@ -192,7 +199,7 @@ export function MessageComposer({
             />
           </View>
         ) : (
-          <View className="min-h-10 flex-1 flex-row items-end rounded-2xl bg-secondary px-3 py-2">
+          <View className="min-h-10 flex-1 flex-row items-center rounded-2xl bg-secondary px-3 py-2">
             <TextInput
               ref={inputRef}
               value={value}
@@ -200,9 +207,9 @@ export function MessageComposer({
               placeholder="Message"
               placeholderTextColor={colors.mutedForeground}
               multiline
-              maxLength={4000}
+              maxLength={MAX_MESSAGE_LENGTH}
               className="max-h-28 flex-1 p-0 text-foreground"
-              style={{ fontSize: 16 }}
+              style={{ fontSize: 16, lineHeight: 20, textAlignVertical: "center" }}
               selectionColor={colors.primary}
               cursorColor={colors.primary}
               keyboardAppearance={dark ? "dark" : "light"}

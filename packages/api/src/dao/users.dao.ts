@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto"
 import {
   BatchGetCommand,
+  GetCommand,
   PutCommand,
   QueryCommand,
   UpdateCommand,
@@ -15,28 +17,35 @@ import {
   userSchema,
   USERNAME_GSI,
   getUserSchema,
+  AUTH_SESSION_PREFIX,
+  SESSION_TTL_SECONDS,
   type CreateUserInput,
   type UpdateUserInput,
   type ConversationUserProfile,
   type UserId,
   usersk,
   UserSK,
-  MAX_USER_SESSIONS,
-  userSessionItem,
-  userSession,
-  userSessionSchema,
+  authSessionItem,
+  authSessionSchema,
+  type AuthSession,
 } from "@repo/types/schema"
 import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
 import z from "zod"
-import { AWSManager, buildKey, buildSessionSK, definedEntries, parseOrThrow } from "../utils"
+import { AWSManager, buildKey, definedEntries, parseOrThrow } from "../utils"
 
 const userKey = (userId: UserId, sk?: UserSK) => ({
   PK: buildKey(PREFIXES.USER, userId),
   SK: sk ? sk : usersk.PROFILE,
 })
 
-/** Device push registrations expire unless the app refreshes them. */
-const PUSH_TOKEN_TTL_SECONDS = 15 * 24 * 60 * 60
+/** Auth-session rows live as long as the Cognito refresh token. */
+const hashRefreshToken = (refreshToken: string) =>
+  createHash("sha256").update(refreshToken).digest("hex")
+
+const authSessionKey = (userId: UserId, refreshTokenHash: string) => ({
+  PK: buildKey(PREFIXES.USER, userId),
+  SK: `${AUTH_SESSION_PREFIX}${refreshTokenHash}`,
+})
 
 export const usersDao = {
   getUserById: async (input: {
@@ -169,69 +178,9 @@ export const usersDao = {
       input.connectionId,
     )
   },
-  setUserExpoSession: async (input: { userId: UserId; expoPushToken: string }) => {
-    const currentUserSessions = await usersDao.getUserAllExpoSession({ userId: input.userId })
-    const existingSession = currentUserSessions.find(
-      (session) => session.expoPushToken === input.expoPushToken,
-    )
 
-    // Re-opening the app re-sends the same token; refresh its TTL instead of
-    // creating a duplicate row.
-    if (existingSession) {
-      const now = Date.now()
-      await AWSManager.dbClient.send(
-        new UpdateCommand({
-          TableName: TABLE_NAME,
-          Key: {
-            PK: buildKey(PREFIXES.USER, input.userId),
-            SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
-          },
-          UpdateExpression: "SET #updatedAt = :updatedAt, expiresAt = :expiresAt",
-          ExpressionAttributeNames: { "#updatedAt": "updatedAt" },
-          ExpressionAttributeValues: {
-            ":updatedAt": now,
-            ":expiresAt": Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
-          },
-        }),
-      )
-      return "session updated"
-    }
-
-    if (currentUserSessions.length >= MAX_USER_SESSIONS) {
-      const { expiresAt, ...toDelSession } = currentUserSessions.reduce((acc, cur) =>
-        cur.updatedAt < acc.updatedAt ? cur : acc,
-      )
-      await usersDao.deleteUserExpoSession({ ...toDelSession, userId: input.userId })
-    }
-
-    const now = Date.now()
-    const items = parseOrThrow(userSessionItem, {
-      PK: buildKey(PREFIXES.USER, input.userId),
-      SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
-      expoPushToken: input.expoPushToken,
-      updatedAt: now,
-      expiresAt: Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
-    })
-
-    await AWSManager.dbClient.send(
-      new PutCommand({
-        TableName: TABLE_NAME,
-        Item: items,
-      }),
-    )
-  },
-  deleteUserExpoSession: async (input: { userId: UserId; expoPushToken: string }) => {
-    return await AWSManager.dbClient.send(
-      new DeleteCommand({
-        TableName: TABLE_NAME,
-        Key: {
-          PK: buildKey(PREFIXES.USER, input.userId),
-          SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
-        },
-      }),
-    )
-  },
-  getUserAllExpoSession: async (input: { userId: UserId }): Promise<userSession[]> => {
+  /** One auth-session row per login, newest last. */
+  getAuthSessions: async (input: { userId: UserId }): Promise<AuthSession[]> => {
     const resp = await AWSManager.dbClient.send(
       new QueryCommand({
         TableName: TABLE_NAME,
@@ -239,10 +188,150 @@ export const usersDao = {
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": buildKey(PREFIXES.USER, input.userId),
-          ":sk": `${usersk.SESSION}#`,
+          ":sk": AUTH_SESSION_PREFIX,
         },
       }),
     )
-    return (resp.Items ?? []).map((item) => parseOrThrow(userSessionSchema, item))
+
+    return (resp.Items ?? []).map((item) => parseOrThrow(authSessionSchema, item))
+  },
+  getAuthSessionByHash: async (input: {
+    userId: UserId
+    refreshTokenHash: string
+  }): Promise<AuthSession | undefined> => {
+    const resp = await AWSManager.dbClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: authSessionKey(input.userId, input.refreshTokenHash),
+      }),
+    )
+
+    return resp.Item ? parseOrThrow(authSessionSchema, resp.Item) : undefined
+  },
+  getAuthSession: async (input: {
+    userId: UserId
+    refreshToken: string
+  }): Promise<AuthSession | undefined> => {
+    return await usersDao.getAuthSessionByHash({
+      userId: input.userId,
+      refreshTokenHash: hashRefreshToken(input.refreshToken),
+    })
+  },
+  updateAuthSessionPushToken: async (input: {
+    userId: UserId
+    refreshTokenHash: string
+    expoPushToken: string
+  }): Promise<void> => {
+    await AWSManager.dbClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: authSessionKey(input.userId, input.refreshTokenHash),
+        UpdateExpression: "SET expoPushToken = :expoPushToken",
+        ConditionExpression: "attribute_exists(PK)",
+        ExpressionAttributeValues: {
+          ":expoPushToken": input.expoPushToken,
+        },
+      }),
+    )
+  },
+  createAuthSession: async (input: {
+    userId: UserId
+    refreshToken: string
+    client: AuthSession["client"]
+    deviceName?: string
+    platform?: AuthSession["platform"]
+  }): Promise<string> => {
+    const now = Date.now()
+    const refreshTokenHash = hashRefreshToken(input.refreshToken)
+
+    const item = parseOrThrow(authSessionItem, {
+      ...authSessionKey(input.userId, refreshTokenHash),
+      refreshToken: input.refreshToken,
+      refreshTokenHash,
+      client: input.client,
+      ...(input.deviceName ? { deviceName: input.deviceName } : {}),
+      ...(input.platform ? { platform: input.platform } : {}),
+      createdAt: now,
+      lastUsedAt: now,
+      expiresAt: Math.floor(now / 1000) + SESSION_TTL_SECONDS,
+    })
+
+    await AWSManager.dbClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: item,
+      }),
+    )
+
+    return refreshTokenHash
+  },
+  rotateAuthSession: async (input: {
+    userId: UserId
+    oldRefreshToken: string
+    newRefreshToken: string
+    client: AuthSession["client"]
+    deviceName?: string
+    platform?: AuthSession["platform"]
+    createdAt: number
+  }): Promise<void> => {
+    const now = Date.now()
+    const oldHash = hashRefreshToken(input.oldRefreshToken)
+    const newHash = hashRefreshToken(input.newRefreshToken)
+    const expiresAt = Math.floor(now / 1000) + SESSION_TTL_SECONDS
+
+    if (oldHash === newHash) {
+      await AWSManager.dbClient.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: authSessionKey(input.userId, oldHash),
+          UpdateExpression: "SET lastUsedAt = :lastUsedAt, expiresAt = :expiresAt",
+          ExpressionAttributeValues: {
+            ":lastUsedAt": now,
+            ":expiresAt": expiresAt,
+          },
+        }),
+      )
+      return
+    }
+
+    await usersDao.deleteAuthSession({ userId: input.userId, refreshTokenHash: oldHash })
+    await AWSManager.dbClient.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: parseOrThrow(authSessionItem, {
+          ...authSessionKey(input.userId, newHash),
+          refreshToken: input.newRefreshToken,
+          refreshTokenHash: newHash,
+          client: input.client,
+          ...(input.deviceName ? { deviceName: input.deviceName } : {}),
+          ...(input.platform ? { platform: input.platform } : {}),
+          createdAt: input.createdAt,
+          lastUsedAt: now,
+          expiresAt,
+        }),
+      }),
+    )
+  },
+  deleteAuthSession: async (input: {
+    userId: UserId
+    refreshTokenHash: string
+  }): Promise<void> => {
+    await AWSManager.dbClient.send(
+      new DeleteCommand({
+        TableName: TABLE_NAME,
+        Key: authSessionKey(input.userId, input.refreshTokenHash),
+      }),
+    )
+  },
+  deleteAllAuthSessions: async (input: { userId: UserId }): Promise<void> => {
+    const sessions = await usersDao.getAuthSessions({ userId: input.userId })
+    await Promise.all(
+      sessions.map((session) =>
+        usersDao.deleteAuthSession({
+          userId: input.userId,
+          refreshTokenHash: session.refreshTokenHash,
+        }),
+      ),
+    )
   },
 }

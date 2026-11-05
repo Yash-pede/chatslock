@@ -61,7 +61,6 @@ export function useOtpLogin() {
       setOtp("")
       setError(null)
       setResendIn(RESEND_COOLDOWN_SECONDS)
-      setAttempt((value) => value + 1)
       return next
     } catch (e) {
       if (current !== requestSeq.current) throw e

@@ -4,6 +4,7 @@ import { useRootNavigationState, useRouter } from "expo-router"
 import { usersApi } from "@/api/users.api"
 import { getExpoPushToken } from "@/lib/expo-push-token"
 import { useProfile } from "@/context/profile/ProfileContext"
+import { secureStorage } from "@repo/utils"
 
 interface NotificationContextValue {
   notification: Notifications.Notification | undefined
@@ -31,36 +32,33 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const pendingResponse = useRef<Notifications.NotificationResponse | null>(null)
   const handledResponseIds = useRef(new Set<string>())
+  const syncedPushToken = useRef<string | null>(null)
 
   const syncPushToken = useCallback(async () => {
     if (!ready) return
-    const expoPushToken = await getExpoPushToken({ requestPermission: true })
-    if (!expoPushToken) return
+
+    const [expoPushToken, sessionId] = await Promise.all([
+      getExpoPushToken({ requestPermission: true }),
+      secureStorage.getSessionId(),
+    ])
+    if (!expoPushToken || !sessionId) return
+
+    // One call per session per launch; a new login has a new sessionId.
+    const syncKey = `${sessionId}:${expoPushToken}`
+    if (syncedPushToken.current === syncKey) return
 
     try {
-      await usersApi.setPushToken({ expoPushToken })
+      await usersApi.updateSessionPushToken({ sessionId, expoPushToken })
+      syncedPushToken.current = syncKey
     } catch (error) {
       console.warn("[notifications] failed to save push token", error)
     }
   }, [ready])
 
-  // Register the token once per app launch, when the profile is ready.
+  // Register the push token exactly once per app launch, when ready.
   useEffect(() => {
     if (!ready) return
     void syncPushToken()
-  }, [ready, syncPushToken])
-
-  // FCM/APNs rotate the device token independently of app launches. Without
-  // this, the backend keeps a stale Expo token and later pushes fail with
-  // DeviceNotRegistered even though FCM accepted the first one.
-  useEffect(() => {
-    if (!ready) return
-
-    const subscription = Notifications.addPushTokenListener(() => {
-      void syncPushToken()
-    })
-
-    return () => subscription.remove()
   }, [ready, syncPushToken])
 
   const openConversationFromResponse = useCallback(

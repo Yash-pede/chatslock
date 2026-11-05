@@ -11,6 +11,7 @@ import {
   InitiateAuthCommand,
   ListUsersCommand,
   RespondToAuthChallengeCommand,
+  RevokeTokenCommand,
   UserNotFoundException,
   type AttributeType,
 } from "@aws-sdk/client-cognito-identity-provider"
@@ -170,6 +171,16 @@ export const authDao = {
     return await AWSManager.cognitoClient.send(
       new GlobalSignOutCommand({ AccessToken: accessToken }),
       // Logout must not sit on a broken VPC route until API Gateway times out.
+      { abortSignal: AbortSignal.timeout(5_000) },
+    )
+  },
+  /** Revokes one refresh token (the app client must match the issuing client). */
+  revokeToken: async ({ refreshToken, client }: { refreshToken: string; client: AuthClient }) => {
+    return await AWSManager.cognitoClient.send(
+      new RevokeTokenCommand({
+        Token: refreshToken,
+        ClientId: await getClientId(client),
+      }),
       { abortSignal: AbortSignal.timeout(5_000) },
     )
   },

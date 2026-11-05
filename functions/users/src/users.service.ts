@@ -1,6 +1,6 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { usersDao, authDao, conversationsDao } from "@repo/api/dao"
+import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
 import { ApiException, AWSManager } from "@repo/api/utils"
 import { AVATAR_CONTENT_TYPES, avatarFileExtension, type AvatarContentType } from "@repo/types/req"
 import { HTTPException } from "hono/http-exception"
@@ -174,17 +174,72 @@ export const updateMyProfile = async ({
  * `USER#<userId>` / `SESSION#<tokenValue>`. Re-registering the same token
  * refreshes its TTL; at most `MAX_USER_SESSIONS` sessions are kept.
  */
-export const savePushToken = async ({
+/**
+ * Attaches the Expo push token to the caller's current auth session. One row
+ * per session, so the token is updated in place (no separate push rows).
+ */
+export const updateSessionPushToken = async ({
   userId,
+  sessionId,
   expoPushToken,
 }: {
   userId: string
+  sessionId: string
   expoPushToken: string
 }): Promise<void> => {
-  try {
-    await usersDao.setUserExpoSession({ userId, expoPushToken })
-  } catch (err) {
-    console.error("Failed to save push token", err)
-    throw new HTTPException(500, { message: "Failed to save push token" })
-  }
+  const session = await usersDao.getAuthSessionByHash({
+    userId,
+    refreshTokenHash: sessionId,
+  })
+  if (!session) throw new HTTPException(404, { message: "Session not found" })
+
+  await usersDao.updateAuthSessionPushToken({
+    userId,
+    refreshTokenHash: session.refreshTokenHash,
+    expoPushToken,
+  })
+}
+
+export interface UserSessionSummary {
+  id: string
+  deviceName: string
+  platform: "ios" | "android" | "web" | null
+  createdAt: number
+  lastUsedAt: number
+}
+
+/** Active auth sessions for the Sessions screen, newest activity first. */
+export const getUserSessions = async ({
+  userId,
+}: {
+  userId: string
+}): Promise<UserSessionSummary[]> => {
+  const now = Math.floor(Date.now() / 1000)
+  const sessions = await usersDao.getAuthSessions({ userId })
+
+  return sessions
+    .filter((session) => session.expiresAt > now)
+    .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
+    .map((session) => ({
+      id: session.refreshTokenHash,
+      deviceName: session.deviceName ?? "Unknown device",
+      platform: session.platform ?? null,
+      createdAt: session.createdAt,
+      lastUsedAt: session.lastUsedAt,
+    }))
+}
+
+/**
+ * Revokes one session: Cognito refresh token first, then the registry row.
+ * Deleting the current device's session is handled by the client after this.
+ */
+export const revokeUserSession = async ({
+  userId,
+  refreshTokenHash,
+}: {
+  userId: string
+  refreshTokenHash: string
+}): Promise<void> => {
+  const revoked = await revokeAuthSession({ userId, refreshTokenHash })
+  if (!revoked) throw new HTTPException(404, { message: "Session not found" })
 }

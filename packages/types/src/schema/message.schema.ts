@@ -10,7 +10,7 @@ import { userId } from "./user.schema"
 const zodTimestamp = z.number().int().nonnegative()
 
 /** Hard cap for a text message body, enforced at the schema level everywhere. */
-export const MAX_MESSAGE_LENGTH = 4000
+export const MAX_MESSAGE_LENGTH = 4000 as const
 /** Hard cap for a single attachment (25 MB). */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
 

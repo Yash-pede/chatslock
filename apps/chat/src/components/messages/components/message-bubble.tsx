@@ -5,6 +5,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
 import { FileText, Pause, Play } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
 import { DownloadButton } from "./download-button"
+import { LinkifiedText } from "./linkified-text"
 import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
 import type { ChatMessage } from "../types"
 
@@ -196,9 +197,12 @@ export const MessageBubble = memo(function MessageBubble({
             <BubbleImage url={url} width={imageWidth} height={imageHeight} />
           </Pressable>
           {message.text ? (
-            <Text className="mt-1 px-1.5 text-base" style={{ color: tint }}>
-              {message.text}
-            </Text>
+            <LinkifiedText
+              text={message.text}
+              isMine={message.isMine}
+              className="mt-1 px-1.5 text-base leading-5"
+              style={{ color: tint }}
+            />
           ) : null}
         </ChatBubble>
       )
@@ -288,7 +292,12 @@ export const MessageBubble = memo(function MessageBubble({
         status={message.status}
         className={failedClass}
       >
-        {message.text ?? ""}
+        <LinkifiedText
+          text={message.text ?? ""}
+          isMine={message.isMine}
+          className="text-base leading-5"
+          style={{ color: tint }}
+        />
       </ChatBubble>
     )
   }

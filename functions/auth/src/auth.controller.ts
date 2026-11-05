@@ -10,7 +10,9 @@ import {
   cognitoLogout,
   cognitoRefreshCall,
   getCognitoUserGroups,
+  recordAuthSession,
   sendOtp,
+  subFromToken,
   verifyOtp,
 } from "./auth.service"
 import {
@@ -20,7 +22,7 @@ import {
 import { AWSManager } from "@repo/api/utils"
 import { HTTPException } from "hono/http-exception"
 import { cognitoErrorName } from "./auth.service"
-import { usersDao } from "@repo/api/dao"
+import { revokeAuthSession, usersDao } from "@repo/api/dao"
 
 export const otpController = async (c: Context) => {
   const { body }: InitiateOtpRequest = c.get("valid")
@@ -49,12 +51,21 @@ export const verifyOtpController = async (c: Context) => {
     })
   }
 
+  const sessionId = await recordAuthSession({
+    idToken: resp.AuthenticationResult?.IdToken,
+    refreshToken: resp.AuthenticationResult?.RefreshToken,
+    client: "otp",
+    deviceName: body.deviceName,
+    platform: body.platform,
+  })
+
   return c.json({
     refreshToken: resp.AuthenticationResult?.RefreshToken,
     accessToken: resp.AuthenticationResult?.AccessToken,
     idToken: resp.AuthenticationResult?.IdToken,
     expiresIn: resp.AuthenticationResult?.ExpiresIn,
     client: "otp" as const,
+    sessionId,
   })
 }
 
@@ -107,12 +118,21 @@ export const loginController = async (c: Context) => {
       throw new HTTPException(401, { message: INVALID_PASSWORD_MESSAGE })
     }
 
+    const sessionId = await recordAuthSession({
+      idToken: response.AuthenticationResult?.IdToken,
+      refreshToken: RefreshToken,
+      client: "userpass",
+      deviceName: body.deviceName,
+      platform: body.platform,
+    })
+
     return c.json({
       refreshToken: response.AuthenticationResult?.RefreshToken,
       accessToken: response.AuthenticationResult?.AccessToken,
       idToken: response.AuthenticationResult?.IdToken,
       expiresIn: response.AuthenticationResult?.ExpiresIn,
       client: "userpass" as const,
+      sessionId,
     })
   } catch (error) {
     if (error instanceof HTTPException) throw error
@@ -147,11 +167,52 @@ export const loginController = async (c: Context) => {
 export const refreshController = async (c: Context) => {
   const { body }: RefreshOtpRequest = c.get("valid")
 
-  const resp = await cognitoRefreshCall(body.refreshToken, body.client)
+  let resp: Awaited<ReturnType<typeof cognitoRefreshCall>>
+  try {
+    resp = await cognitoRefreshCall(body.refreshToken, body.client)
+  } catch (error) {
+    const code = cognitoErrorName(error)
+    if (code === "NotAuthorizedException" || code === "InvalidParameterException") {
+      // Revoked/expired refresh token: make the client discard its session.
+      throw new HTTPException(401, { message: "Session expired. Sign in again." })
+    }
+    throw error
+  }
+
+  const userId = subFromToken(
+    resp.AuthenticationResult?.IdToken ?? resp.AuthenticationResult?.AccessToken,
+  )
+
+  if (!userId) {
+    throw new HTTPException(401, { message: "Session expired. Sign in again." })
+  }
+
+  const session = await usersDao.getAuthSession({
+    userId,
+    refreshToken: body.refreshToken,
+  })
+
+  // A missing row means the session was evicted by the 4-session limit (or
+  // predates it); do not let it refresh back into a valid session.
+  if (!session || session.expiresAt <= Math.floor(Date.now() / 1000)) {
+    throw new HTTPException(401, { message: "Session expired. Sign in again." })
+  }
+
+  await usersDao.rotateAuthSession({
+    userId,
+    oldRefreshToken: body.refreshToken,
+    newRefreshToken: resp.AuthenticationResult?.RefreshToken ?? body.refreshToken,
+    client: body.client,
+    deviceName: session.deviceName,
+    platform: session.platform,
+    createdAt: session.createdAt,
+  })
+
   return c.json({
     accessToken: resp.AuthenticationResult?.AccessToken,
     idToken: resp.AuthenticationResult?.IdToken,
     expiresIn: resp.AuthenticationResult?.ExpiresIn,
+    sessionId: session.refreshTokenHash,
   })
 }
 
@@ -161,11 +222,19 @@ export const logOutUserController = async (c: Context) => {
   const userId = claims?.sub
   if (typeof userId !== "string") throw new HTTPException(401, { message: "Unauthorized" })
 
+  const body = await c.req.json().catch(() => null)
+  const sessionId = typeof body?.sessionId === "string" ? body.sessionId : undefined
+
+  // The session id is the refresh-token hash. Current clients send it so only
+  // this device is logged out.
+  if (sessionId && /^[a-f0-9]{64}$/.test(sessionId)) {
+    await revokeAuthSession({ userId, refreshTokenHash: sessionId })
+    return c.json({ message: "Logged out" })
+  }
+
+  // Legacy clients did not send a hash; keep the old global sign-out.
   const accessToken = c.req.header("Authorization")?.split(" ")[1]
   if (!accessToken) throw new HTTPException(400, { message: "Missing access token" })
-
-  const body = await c.req.json().catch(() => null)
-  const expoPushToken = typeof body?.expoToken === "string" ? body.expoToken : undefined
 
   try {
     await cognitoLogout(accessToken)
@@ -173,12 +242,12 @@ export const logOutUserController = async (c: Context) => {
     console.error("[auth] cognito logout failed", { userId, error })
   }
 
-  if (expoPushToken) {
-    try {
-      await usersDao.deleteUserExpoSession({ userId, expoPushToken })
-    } catch (error) {
-      console.error("[auth] failed to delete expo session", { userId, error })
-    }
+  // GlobalSignOut revoked every refresh token for this user, so none of the
+  // stored auth sessions can be refreshed again.
+  try {
+    await usersDao.deleteAllAuthSessions({ userId })
+  } catch (error) {
+    console.error("[auth] failed to delete auth sessions", { userId, error })
   }
 
   return c.json({

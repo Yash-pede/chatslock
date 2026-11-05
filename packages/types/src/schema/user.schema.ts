@@ -1,6 +1,6 @@
 import z from "zod"
 import { ROLE_NAMES } from "./roles"
-import { PREFIXES } from "./keys"
+import { AUTH_SESSION_PREFIX, PREFIXES } from "./keys"
 
 const str = (min = 1, max = 255) => z.string().min(min).max(max)
 const zodTimestamp = z.number().int().nonnegative()
@@ -15,7 +15,7 @@ export const username = str(3, 20)
 export const avatar = z.url("Invalid avatar URL format")
 export const phone = z.string().regex(/^\+\d{10,15}$/, "Invalid phone number")
 
-export const USER_SK = ["PROFILE", "SESSION", "CONNECTION"] as const
+export const USER_SK = ["PROFILE", "CONNECTION"] as const
 
 export type UserSK = (typeof USER_SK)[number]
 
@@ -88,17 +88,27 @@ export const usersk = Object.fromEntries(USER_SK.map((key) => [key, key])) as {
   [K in UserSK]: K
 }
 
-export const userSessionItem = z.strictObject({
+/**
+ * One auth login session: `PK USER#<userId>`, `SK AUTHSESSION#<hash>`.
+ * The refresh token is stored so an evicted session can be revoked in Cognito.
+ * The Expo push token is stored on the same row; one row per session.
+ * This table is access-controlled and rows expire via TTL.
+ */
+export const authSessionItem = z.strictObject({
   PK: userKeys.shape.PK,
-  SK: z.string().regex(new RegExp(`^${usersk.SESSION}#[^#]+$`), "Invalid session SK"),
-  expoPushToken: str(1, 255),
-  updatedAt: zodTimestamp,
+  SK: z.string().regex(new RegExp(`^${AUTH_SESSION_PREFIX}[^#]+$`), "Invalid auth session SK"),
+  refreshToken: str(1, 4096),
+  refreshTokenHash: str(1, 128),
+  client: z.enum(["otp", "userpass"]),
+  expoPushToken: str(1, 255).optional(),
+  deviceName: str(1, 120).optional(),
+  platform: z.enum(["ios", "android", "web"]).optional(),
+  createdAt: zodTimestamp,
+  lastUsedAt: zodTimestamp,
   expiresAt: z.number().int().positive(),
 })
 
-export const userSessionSchema = z.object(userSessionItem.omit({ PK: true, SK: true }).shape)
+export const authSessionSchema = z.object(authSessionItem.omit({ PK: true, SK: true }).shape)
 
-/** A device row exactly as stored in DynamoDB. */
-export type UserSessionItem = z.infer<typeof userSessionItem>
-/** The device fields exposed to callers (keys are storage-only). */
-export type userSession = z.infer<typeof userSessionSchema>
+export type AuthSessionItem = z.infer<typeof authSessionItem>
+export type AuthSession = z.infer<typeof authSessionSchema>

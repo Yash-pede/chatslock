@@ -64,6 +64,19 @@ export default function ConversationScreen() {
   const { listRef, awayFromBottom, onScroll, onScrollBeginDrag, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
 
+  // New messages should follow the newest row only while the user is already
+  // at the bottom. Older-page inserts leave the last id unchanged, so they
+  // never pull the viewport back down.
+  const lastMessageId = messages.at(-1)?.id
+  const lastMessageIdRef = useRef<string | undefined>(lastMessageId)
+  useEffect(() => {
+    const previous = lastMessageIdRef.current
+    lastMessageIdRef.current = lastMessageId
+
+    if (!lastMessageId || previous === undefined || previous === lastMessageId) return
+    if (!awayFromBottom) scrollToBottom(true)
+  }, [lastMessageId, awayFromBottom, scrollToBottom])
+
   const media = useMemo(() => collectMedia(messages), [messages])
 
   const mediaRef = useRef(media)
@@ -116,10 +129,7 @@ export default function ConversationScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             showsVerticalScrollIndicator={false}
-            maintainVisibleContentPosition={{
-              autoscrollToBottomThreshold: 0.2,
-              startRenderingFromBottom: true,
-            }}
+            maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
             onLoad={onLoad}
             onScroll={onScroll}
             onScrollBeginDrag={onScrollBeginDrag}

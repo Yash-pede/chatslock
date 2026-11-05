@@ -1,6 +1,6 @@
 import { apiClient } from "@/api/client"
 import type { getUser } from "@repo/types/schema"
-import type { AvatarContentType, SetPushTokenRequest, UserOnboardingRequest } from "@repo/types/req"
+import type { AvatarContentType, UserOnboardingRequest } from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
@@ -28,8 +28,18 @@ export type OnboardingInput = UserOnboardingRequest["body"]
 /** What the onboarding screen collects; `phone` comes from the session. */
 export type OnboardingForm = Omit<OnboardingInput, "phone">
 
-/** Device id + Expo token sent when the app opens. */
-export type PushTokenInput = SetPushTokenRequest["body"]
+export interface UserSessionSummary {
+  /** Stable public id for this session. */
+  id: string
+  deviceName: string
+  platform: "ios" | "android" | "web" | null
+  createdAt: number
+  lastUsedAt: number
+}
+
+export interface UserSessionsResponse {
+  sessions: UserSessionSummary[]
+}
 
 /**
  * User endpoints. Screens call these instead of `apiClient` directly so URL
@@ -47,9 +57,23 @@ export const usersApi = {
     await apiClient.post("/api/users/onboarding", input)
   },
 
-  /** `POST /api/users/pushtoken` — upserts this device's Expo push token. */
-  setPushToken: async (input: PushTokenInput): Promise<void> => {
-    await apiClient.post("/api/users/pushtoken", input)
+  /** `POST /api/users/sessions` — attaches the Expo token to this auth session. */
+  updateSessionPushToken: async (input: {
+    sessionId: string
+    expoPushToken: string
+  }): Promise<void> => {
+    await apiClient.post("/api/users/sessions", input)
+  },
+
+  /** `GET /api/users/sessions` — active auth sessions for this account. */
+  getSessions: async (): Promise<UserSessionSummary[]> => {
+    const { data } = await apiClient.get("/api/users/sessions")
+    return unwrap<UserSessionsResponse>(data).sessions
+  },
+
+  /** `DELETE /api/users/sessions/:id` — ends one other session. */
+  revokeSession: async (sessionId: string): Promise<void> => {
+    await apiClient.delete(`/api/users/sessions/${encodeURIComponent(sessionId)}`)
   },
 
   /** `PATCH /api/users/me` — rename and/or set the avatar URL; returns the updated profile. */

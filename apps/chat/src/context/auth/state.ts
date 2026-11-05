@@ -8,6 +8,7 @@ import {
   type OtpChallenge,
   type OtpVerifyResult,
 } from "@repo/utils"
+import { sessionDeviceInfo } from "@/lib/device-info"
 
 /**
  * Authentication only: does this device hold a session, and how do we get one.
@@ -56,6 +57,7 @@ export const authApi = {
     otp: string
     username: string
     session: string
-  }): Promise<OtpVerifyResult> => verifyOtpCode(params),
-  signInAsAgent: (params: { username: string; password: string }) => loginAsAgent(params),
+  }): Promise<OtpVerifyResult> => verifyOtpCode({ ...params, ...sessionDeviceInfo() }),
+  signInAsAgent: (params: { username: string; password: string }) =>
+    loginAsAgent({ ...params, ...sessionDeviceInfo() }),
 }

@@ -2,17 +2,20 @@ import type { Context } from "hono"
 import type {
   AvatarImagePresignUrlRequest,
   ConfirmAvatarUploadRequest,
-  SetPushTokenRequest,
+  RevokeSessionRequest,
   UpdateMyProfileRequest,
+  UpdateSessionPushTokenRequest,
   UserOnboardingRequest,
 } from "@repo/types/req"
 import {
   confirmAvatarUpload,
   getAvatarPresignedUrl,
   getUserById,
+  getUserSessions,
   onboardUser,
-  savePushToken,
+  revokeUserSession,
   updateMyProfile,
+  updateSessionPushToken,
 } from "./users.service"
 
 export const onboardingController = async (c: Context) => {
@@ -68,14 +71,29 @@ export const updateMyProfileController = async (c: Context) => {
   return c.json(resp)
 }
 
-/** Registers (or refreshes) the Expo push token for this app launch. */
-export const setPushTokenController = async (c: Context) => {
-  const { body }: SetPushTokenRequest = c.get("valid")
+/** Updates the Expo push token on this device's auth session. */
+export const updateSessionPushTokenController = async (c: Context) => {
+  const { body }: UpdateSessionPushTokenRequest = c.get("valid")
 
-  await savePushToken({
+  await updateSessionPushToken({
     userId: c.get("userId"),
+    sessionId: body.sessionId,
     expoPushToken: body.expoPushToken,
   })
 
-  return c.json({ message: "Push token saved" })
+  return c.json({ message: "Session updated" })
+}
+
+/** Active sessions for the current account. */
+export const getSessionsController = async (c: Context) => {
+  const sessions = await getUserSessions({ userId: c.get("userId") })
+  return c.json({ sessions })
+}
+
+/** Revokes one session by the hash id returned by the sessions list. */
+export const revokeSessionController = async (c: Context) => {
+  const { params }: RevokeSessionRequest = c.get("valid")
+
+  await revokeUserSession({ userId: c.get("userId"), refreshTokenHash: params.id })
+  return c.json({ message: "Session revoked" })
 }

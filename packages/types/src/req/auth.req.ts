@@ -11,6 +11,10 @@ const phonePipe = z
 
 const usernamePipe = z.string().min(1, "Username is required").toLowerCase()
 
+/** Optional client-supplied device metadata for the sessions screen. */
+const deviceName = z.string().trim().min(1).max(120).optional()
+const platform = z.enum(["ios", "android", "web"]).optional()
+
 export const loginSchema = baseSchema.extend({
   body: z.strictObject({
     username: usernamePipe,
@@ -21,6 +25,8 @@ export const loginSchema = baseSchema.extend({
       .regex(/[a-z]/, "Must contain lowercase")
       .regex(/\d/, "Must contain number")
       .regex(/[^A-Za-z\d]/, "Must contain special character"),
+    deviceName,
+    platform,
   }),
 })
 
@@ -29,6 +35,8 @@ export const verifyOtpSchema = baseSchema.extend({
     otp: z.string().length(6, "OTP must be 6 digits"),
     username: usernamePipe,
     session: z.string().min(20, "Session is required and must be valid"),
+    deviceName,
+    platform,
   }),
 })
 

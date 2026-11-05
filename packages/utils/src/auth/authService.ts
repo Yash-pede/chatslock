@@ -28,6 +28,8 @@ export interface AuthTokens {
   refreshToken?: string
   expiresIn: number
   client?: AuthClient
+  /** Server-side auth session id, used by the sessions screen. */
+  sessionId?: string
 }
 
 export interface OtpChallenge {
@@ -111,6 +113,7 @@ async function persist(data: AuthTokens): Promise<AuthTokens> {
     // Remember the issuing client so /refresh can present the same one.
     await secureStorage.storeAuthClient(data.client ?? "otp")
   }
+  if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
   return data
 }
 
@@ -178,6 +181,8 @@ export async function verifyOtp(params: {
   otp: string
   username: string
   session: string
+  deviceName?: string
+  platform?: "ios" | "android" | "web"
 }): Promise<OtpVerifyResult> {
   try {
     const { data } = await http.post<unknown>("/otp/verify", params)
@@ -201,7 +206,12 @@ export async function verifyOtp(params: {
 }
 
 /** Username + password sign-in. */
-export async function login(params: { username: string; password: string }): Promise<AuthTokens> {
+export async function login(params: {
+  username: string
+  password: string
+  deviceName?: string
+  platform?: "ios" | "android" | "web"
+}): Promise<AuthTokens> {
   try {
     const { data } = await http.post<unknown>("/login", params)
     return persist(unwrap<AuthTokens>(data))
@@ -220,10 +230,14 @@ export async function login(params: { username: string; password: string }): Pro
 export async function loginAsAgent(params: {
   username: string
   password: string
+  deviceName?: string
+  platform?: "ios" | "android" | "web"
 }): Promise<AuthTokens> {
   const tokens = await login({
     username: params.username.trim().toLowerCase(),
     password: params.password,
+    deviceName: params.deviceName,
+    platform: params.platform,
   })
   return { ...tokens, client: "userpass" }
 }
@@ -255,6 +269,7 @@ export async function refresh(): Promise<AuthTokens> {
     idToken: data.idToken,
     expiresIn: data.expiresIn,
   })
+  if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
   return { ...data, refreshToken }
 }
 
@@ -269,13 +284,17 @@ export async function discardSession(): Promise<void> {
 }
 
 /** Revoke the session server-side (best effort) and clear local tokens. */
-export async function logout(expoToken?: string | null): Promise<void> {
+export async function logout(): Promise<void> {
   const accessToken = tokenManager.getRawAccessToken()
+  const sessionId = await secureStorage.getSessionId()
+
   try {
     if (accessToken) {
-      await http.post("/logout", expoToken ? { expoToken } : {}, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
+      await http.post(
+        "/logout",
+        sessionId ? { sessionId } : {},
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
     }
   } catch {
     // A failed sign-out shouldn't trap the user in the app.

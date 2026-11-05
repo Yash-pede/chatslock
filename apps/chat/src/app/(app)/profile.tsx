@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { ScrollView } from "react-native"
+import { useRouter } from "expo-router"
 import { AtSign, KeyRound, LogOut, Phone, ShieldCheck, UserRound } from "lucide-react-native"
 import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
@@ -17,6 +18,7 @@ import { SignOutDialog } from "@/components/sign-out-dialog"
 
 export default function ProfileScreen() {
   const colors = useThemeColors()
+  const router = useRouter()
   const { user, reload } = useProfile()
   const { signOut } = useAuth()
 
@@ -146,6 +148,16 @@ export default function ProfileScreen() {
 
         <SettingsGroup title="Privacy">
           <SettingsRow
+            title="Active sessions"
+            description="Devices signed in to your account"
+            onPress={() => router.push("/sessions" as never)}
+            leading={
+              <SettingsIcon tone="neutral">
+                <KeyRound size={16} color={colors.foreground} />
+              </SettingsIcon>
+            }
+          />
+          <SettingsRow
             title="End-to-end encrypted"
             description="Messages stay between you and the team"
             leading={
@@ -154,15 +166,6 @@ export default function ProfileScreen() {
               </SettingsIcon>
             }
             value="On"
-          />
-          <SettingsRow
-            title="Session"
-            description="Signed in on this device"
-            leading={
-              <SettingsIcon tone="neutral">
-                <KeyRound size={16} color={colors.foreground} />
-              </SettingsIcon>
-            }
           />
         </SettingsGroup>
 

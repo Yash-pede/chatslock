@@ -1,6 +1,6 @@
 import { HTTPException } from "hono/http-exception"
 import { authDao, usersDao } from "@repo/api/dao"
-import type { AuthClient, RoleName } from "@repo/types/schema"
+import { MAX_USER_SESSIONS, type AuthClient, type RoleName } from "@repo/types/schema"
 
 export async function sendOtp(phone: string) {
   const username = await getOrCreateUserByPhone(phone)
@@ -129,6 +129,80 @@ export async function cognitoRefreshCall(refreshToken: string, client: AuthClien
 
 export async function cognitoLogout(accessToken: string) {
   return await authDao.globalSignOut({ accessToken })
+}
+
+/** Cognito JWTs are base64url; the payload carries the stable `sub`. */
+export function subFromToken(token: string | undefined): string | undefined {
+  if (!token) return undefined
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+    ) as { sub?: unknown }
+    return typeof payload.sub === "string" ? payload.sub : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Records a login in the auth-session table. When the user already has
+ * MAX_USER_SESSIONS active rows, the oldest session's Cognito refresh token is
+ * revoked and its row removed before the new session is stored.
+ */
+export async function recordAuthSession({
+  idToken,
+  refreshToken,
+  client,
+  deviceName,
+  platform,
+}: {
+  idToken: string | undefined
+  refreshToken: string | undefined
+  client: AuthClient
+  deviceName?: string
+  platform?: "ios" | "android" | "web"
+}): Promise<string | undefined> {
+  if (!refreshToken) return undefined
+
+  const userId = subFromToken(idToken)
+  if (!userId) {
+    console.error("[auth] could not read sub from token; session not recorded")
+    return undefined
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const activeSessions = (await usersDao.getAuthSessions({ userId })).filter(
+    (session) => session.expiresAt > now,
+  )
+
+  if (activeSessions.length >= MAX_USER_SESSIONS) {
+    const oldest = activeSessions.reduce((acc, cur) => (cur.createdAt < acc.createdAt ? cur : acc))
+
+    try {
+      await authDao.revokeToken({
+        refreshToken: oldest.refreshToken,
+        client: oldest.client,
+      })
+    } catch (error) {
+      // Even if Cognito refuses (already expired/revoked), drop our session row
+      // so it stops counting toward the limit.
+      console.error("[auth] failed to revoke oldest refresh token", error)
+    }
+
+    await usersDao.deleteAuthSession({
+      userId,
+      refreshTokenHash: oldest.refreshTokenHash,
+    })
+  }
+
+  return await usersDao.createAuthSession({
+    userId,
+    refreshToken,
+    client,
+    ...(deviceName ? { deviceName } : {}),
+    ...(platform ? { platform } : {}),
+  })
 }
 
 export async function adminCreateUser(

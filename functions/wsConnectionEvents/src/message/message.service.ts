@@ -2,6 +2,7 @@ import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
 import { messagePushNotification, sendPushNotification } from "@repo/api/notifications"
 import { ApiException, parseConversationId, parseOrThrow } from "@repo/api/utils"
 import {
+  MAX_MESSAGE_LENGTH,
   messageCreatedEventSchema,
   messageDeletedEventSchema,
   messageUpdatedEventSchema,
@@ -65,10 +66,14 @@ const notifyPeer = async ({
         console.warn("[ws] could not load sender for notification", error)
         return undefined
       }),
-      usersDao.getUserAllExpoSession({ userId: peerId }),
+      usersDao.getAuthSessions({ userId: peerId }),
     ])
 
-    const tokens = sessions.map((session) => session.expoPushToken)
+    const now = Math.floor(Date.now() / 1000)
+    const tokens = sessions
+      .filter((session) => session.expiresAt > now)
+      .map((session) => session.expoPushToken)
+      .filter((token): token is string => Boolean(token))
     if (tokens.length === 0) return
 
     await sendPushNotification({
@@ -138,6 +143,12 @@ export const sendMessageService = async ({
   try {
     await assertConversationAccess({ userId: senderId, conversationId: message.conversationId })
 
+    if (message.body && message.body.length > MAX_MESSAGE_LENGTH) {
+      throw new ApiException(400, {
+        message: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters)`,
+      })
+    }
+
     const { conversationId, type, body, attachment } = message
     const created = await messagesDao.createMessage({
       conversationId,
@@ -191,6 +202,12 @@ export const editMessageService = async ({
 }): Promise<Message> => {
   try {
     await assertConversationAccess({ userId: editorId, conversationId: edit.conversationId })
+
+    if (edit.body.length > MAX_MESSAGE_LENGTH) {
+      throw new ApiException(400, {
+        message: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters)`,
+      })
+    }
 
     const existing = await messagesDao.getMessageById(edit)
     if (!existing) throw new ApiException(404, { message: "Message not found" })

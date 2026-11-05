@@ -3,8 +3,9 @@ import { handle } from "@hono/aws-lambda"
 import {
   avatarImagePresignUrlSchema,
   confirmAvatarUploadSchema,
-  setPushTokenSchema,
+  revokeSessionSchema,
   updateMyProfileSchema,
+  updateSessionPushTokenSchema,
   userOnboardingSchema,
 } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
@@ -12,9 +13,11 @@ import {
   confirmAvatarUploadController,
   getAvatarPresignedUrlController,
   getUserByIdController,
+  getSessionsController,
   onboardingController,
-  setPushTokenController,
+  revokeSessionController,
   updateMyProfileController,
+  updateSessionPushTokenController,
 } from "./users.controller"
 import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
 import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
@@ -39,7 +42,9 @@ app.post(
   confirmAvatarUploadController,
 )
 app.patch("/me", validateWithZod(updateMyProfileSchema), updateMyProfileController)
-app.post("/pushtoken", validateWithZod(setPushTokenSchema), setPushTokenController)
+app.post("/sessions", validateWithZod(updateSessionPushTokenSchema), updateSessionPushTokenController)
+app.get("/sessions", getSessionsController)
+app.delete("/sessions/:id", validateWithZod(revokeSessionSchema), revokeSessionController)
 
 app.onError(apiErrorHandler)
 

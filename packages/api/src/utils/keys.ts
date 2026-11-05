@@ -80,12 +80,4 @@ export const parseConversationId = (
   return { type: type as ConversationType, conversationId }
 }
 
-/**
- * Session rows are keyed by the value inside the Expo token brackets:
- * `ExpoPushToken[abc123]` -> `abc123`, then `buildKey` makes `SESSION#abc123`.
- */
-export const buildSessionSK = (expoToken: string): string => {
-  const value = /\[([^\]]+)\]/.exec(expoToken)?.[1]
-  if (!value) throw new Error("Invalid Expo push token")
-  return value
-}
+

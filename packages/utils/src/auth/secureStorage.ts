@@ -7,7 +7,7 @@ export interface TokenPair {
 
 const REFRESH_TOKEN_KEY = "refresh_token"
 const AUTH_CLIENT_KEY = "auth_client"
-const EXPO_TOKEN_KEY = "expo_token"
+const SESSION_ID_KEY = "session_id"
 
 class SecureStorageService {
   // Store refresh token securely using Keychain/Keystore
@@ -36,35 +36,6 @@ class SecureStorageService {
   async removeRefreshToken(): Promise<boolean> {
     try {
       await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
-      return true
-    } catch (error) {
-      console.error("Failed to remove refresh token:", error)
-      return false
-    }
-  }
-  async storeExpoToken(token: string): Promise<boolean> {
-    try {
-      await SecureStore.setItemAsync(EXPO_TOKEN_KEY, token)
-      return true
-    } catch (error) {
-      console.error("Failed to store refresh token:", error)
-      return false
-    }
-  }
-
-  async getExpoToken(): Promise<string | null> {
-    try {
-      const credentials = await SecureStore.getItemAsync(EXPO_TOKEN_KEY)
-      return credentials ?? null
-    } catch (error) {
-      console.error("Failed to retrieve refresh token:", error)
-      return null
-    }
-  }
-
-  async removeExpoToken(): Promise<boolean> {
-    try {
-      await SecureStore.deleteItemAsync(EXPO_TOKEN_KEY)
       return true
     } catch (error) {
       console.error("Failed to remove refresh token:", error)
@@ -102,10 +73,37 @@ class SecureStorageService {
     }
   }
 
+  /** Public id of the auth session this device is using. */
+  async storeSessionId(sessionId: string): Promise<void> {
+    try {
+      await SecureStore.setItemAsync(SESSION_ID_KEY, sessionId)
+    } catch (error) {
+      console.error("Failed to store session id:", error)
+    }
+  }
+
+  async getSessionId(): Promise<string | null> {
+    try {
+      return await SecureStore.getItemAsync(SESSION_ID_KEY)
+    } catch (error) {
+      console.error("Failed to retrieve session id:", error)
+      return null
+    }
+  }
+
+  async removeSessionId(): Promise<void> {
+    try {
+      await SecureStore.deleteItemAsync(SESSION_ID_KEY)
+    } catch (error) {
+      console.error("Failed to remove session id:", error)
+    }
+  }
+
   // Clear all authentication data
   async clearAllTokens(): Promise<void> {
     await this.removeRefreshToken()
     await this.removeAuthClient()
+    await this.removeSessionId()
   }
 }
 

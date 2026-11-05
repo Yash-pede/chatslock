@@ -52,6 +52,7 @@ function ProtectedNavigator({ flow }: { flow: Flow }) {
       <Stack.Protected guard={flow === "ready"}>
         <Stack.Screen name="(app)" />
         <Stack.Screen name="conversation/[id]" />
+        <Stack.Screen name="sessions" />
       </Stack.Protected>
     </Stack>
   )

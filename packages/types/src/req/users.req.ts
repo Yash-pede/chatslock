@@ -55,16 +55,23 @@ export const confirmAvatarUploadSchema = baseSchema.extend({
 })
 
 /**
- * Registers (or refreshes) the Expo push token for this installation. Sessions
- * are keyed by the value inside the token brackets, so re-sending the same
- * token updates one row; different tokens become separate sessions.
+ * Updates the Expo push token on the caller's current auth session. One row
+ * per session, so re-sending the same token is an idempotent update.
  */
-export const setPushTokenSchema = baseSchema.extend({
+export const updateSessionPushTokenSchema = baseSchema.extend({
   body: z.strictObject({
+    sessionId: str(1, 64),
     expoPushToken: str(1, 255).regex(
       /^Expo(?:nent)?PushToken\[[^\]]+\]$/,
       "Invalid Expo push token",
     ),
+  }),
+})
+
+/** Session rows are addressed by the SHA-256 hash of their refresh token. */
+export const revokeSessionSchema = baseSchema.extend({
+  params: z.strictObject({
+    id: z.string().regex(/^[a-f0-9]{64}$/, "Invalid session id"),
   }),
 })
 
@@ -75,4 +82,5 @@ export type GetUserProfileImagePresignUrlRequest = z.infer<
 >
 export type UpdateMyProfileRequest = z.infer<typeof updateMyProfileSchema>
 export type ConfirmAvatarUploadRequest = z.infer<typeof confirmAvatarUploadSchema>
-export type SetPushTokenRequest = z.infer<typeof setPushTokenSchema>
+export type UpdateSessionPushTokenRequest = z.infer<typeof updateSessionPushTokenSchema>
+export type RevokeSessionRequest = z.infer<typeof revokeSessionSchema>
