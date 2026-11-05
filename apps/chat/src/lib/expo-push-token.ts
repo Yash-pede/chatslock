@@ -8,9 +8,7 @@ import { Platform } from "react-native"
  * the user (used on app open); sign-out just reads an already-granted token and
  * never prompts.
  */
-export async function getExpoPushToken({
-  requestPermission = false,
-} = {}): Promise<string | null> {
+export async function getExpoPushToken({ requestPermission = false } = {}): Promise<string | null> {
   if (Platform.OS === "web") return null
 
   if (requestPermission && Platform.OS === "android") {

@@ -1,11 +1,4 @@
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import {
   authEvents,
   logout as revokeSession,
@@ -35,7 +28,11 @@ interface AuthContextValue {
    * Resolves with the tokens (session adopted), or with a retry result when the
    * code was wrong but can be retried against the returned session.
    */
-  verifyCode: (params: { otp: string; username: string; session: string }) => Promise<OtpVerifyResult>
+  verifyCode: (params: {
+    otp: string
+    username: string
+    session: string
+  }) => Promise<OtpVerifyResult>
   /** Phone number the session belongs to (needed by onboarding). */
   phone: string | null
   signInAsAgent: (params: { username: string; password: string }) => Promise<void>

@@ -273,11 +273,9 @@ export async function logout(expoToken?: string | null): Promise<void> {
   const accessToken = tokenManager.getRawAccessToken()
   try {
     if (accessToken) {
-      await http.post(
-        "/logout",
-        expoToken ? { expoToken } : {},
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      )
+      await http.post("/logout", expoToken ? { expoToken } : {}, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
     }
   } catch {
     // A failed sign-out shouldn't trap the user in the app.
