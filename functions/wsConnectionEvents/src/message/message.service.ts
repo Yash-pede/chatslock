@@ -60,15 +60,15 @@ const notifyPeer = async ({
   message: Message
 }): Promise<void> => {
   try {
-    const [sender, devices] = await Promise.all([
+    const [sender, sessions] = await Promise.all([
       usersDao.getUserById({ userId: senderId }).catch((error) => {
         console.warn("[ws] could not load sender for notification", error)
         return undefined
       }),
-      usersDao.getUserAllPushToken({ userId: peerId }),
+      usersDao.getUserAllExpoSession({ userId: peerId }),
     ])
 
-    const tokens = devices.map((device) => device.expoPushToken)
+    const tokens = sessions.map((session) => session.expoPushToken)
     if (tokens.length === 0) return
 
     await sendPushNotification({

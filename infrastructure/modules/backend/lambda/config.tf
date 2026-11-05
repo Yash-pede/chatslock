@@ -73,6 +73,7 @@ resource "aws_iam_role_policy" "api_lambda_policy" {
           "cognito-idp:AdminUpdateUserAttributes",
           "cognito-idp:AdminDeleteUserAttributes",
           "cognito-idp:AdminUserGlobalSignOut",
+          "cognito-idp:GlobalSignOut",
           "cognito-idp:RevokeToken"
         ]
         Resource = ["*"]
@@ -116,7 +117,7 @@ resource "aws_lambda_permission" "api_gateway" {
 
   principal = "apigateway.amazonaws.com"
 
-  source_arn = "${var.api_gateway_execution_arn}/*/*/api/${each.value.name}/{proxy+}"
+  source_arn = "${var.api_gateway_execution_arn}/*/*/api/${each.value.name}/*"
 }
 
 resource "aws_lambda_permission" "ws_api_gateway" {

@@ -11,7 +11,7 @@ import type { ConversationType } from "@repo/types/schema"
  * cannot be double-prefixed (`USER#USER#123`) or silently blank (`USER#`).
  */
 export const buildKey = (prefix: string, ...parts: readonly (string | number)[]): string => {
-  const key = `${prefix}${parts.join("#")}`
+  const key = `${prefix}${prefix.slice(-1) != "#" && parts.length != 0 ? "#" : ""}${parts.join("#")}`
 
   if (parts.length === 0 || parts.some((part) => part === "")) {
     throw new Error(`Cannot build key "${key}": id parts must not be empty`)
@@ -78,4 +78,14 @@ export const parseConversationId = (
   const conversationId = id.slice(separator + 1)
 
   return { type: type as ConversationType, conversationId }
+}
+
+/**
+ * Session rows are keyed by the value inside the Expo token brackets:
+ * `ExpoPushToken[abc123]` -> `abc123`, then `buildKey` makes `SESSION#abc123`.
+ */
+export const buildSessionSK = (expoToken: string): string => {
+  const value = /\[([^\]]+)\]/.exec(expoToken)?.[1]
+  if (!value) throw new Error("Invalid Expo push token")
+  return value
 }

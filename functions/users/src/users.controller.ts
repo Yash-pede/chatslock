@@ -68,13 +68,12 @@ export const updateMyProfileController = async (c: Context) => {
   return c.json(resp)
 }
 
-/** Registers (or refreshes) the Expo push token for the calling device. */
+/** Registers (or refreshes) the Expo push token for this app launch. */
 export const setPushTokenController = async (c: Context) => {
   const { body }: SetPushTokenRequest = c.get("valid")
 
   await savePushToken({
     userId: c.get("userId"),
-    deviceId: body.deviceId,
     expoPushToken: body.expoPushToken,
   })
 

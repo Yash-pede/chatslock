@@ -6,3 +6,5 @@ export const PREFIXES = {
 } as const
 
 export type PrefixName = keyof typeof PREFIXES
+
+export const MAX_USER_SESSIONS = 4

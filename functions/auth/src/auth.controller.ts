@@ -20,6 +20,7 @@ import {
 import { AWSManager } from "@repo/api/utils"
 import { HTTPException } from "hono/http-exception"
 import { cognitoErrorName } from "./auth.service"
+import { usersDao } from "@repo/api/dao"
 
 export const otpController = async (c: Context) => {
   const { body }: InitiateOtpRequest = c.get("valid")
@@ -155,10 +156,31 @@ export const refreshController = async (c: Context) => {
 }
 
 export const logOutUserController = async (c: Context) => {
+  const claims = c.env.requestContext?.authorizer?.jwt?.claims
+
+  const userId = claims?.sub
+  if (typeof userId !== "string") throw new HTTPException(401, { message: "Unauthorized" })
+
   const accessToken = c.req.header("Authorization")?.split(" ")[1]
-  if (accessToken) {
+  if (!accessToken) throw new HTTPException(400, { message: "Missing access token" })
+
+  const body = await c.req.json().catch(() => null)
+  const expoPushToken = typeof body?.expoToken === "string" ? body.expoToken : undefined
+
+  try {
     await cognitoLogout(accessToken)
+  } catch (error) {
+    console.error("[auth] cognito logout failed", { userId, error })
   }
+
+  if (expoPushToken) {
+    try {
+      await usersDao.deleteUserExpoSession({ userId, expoPushToken })
+    } catch (error) {
+      console.error("[auth] failed to delete expo session", { userId, error })
+    }
+  }
+
   return c.json({
     message: "Logged out",
   })

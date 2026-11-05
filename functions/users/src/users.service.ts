@@ -3,7 +3,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { usersDao, authDao, conversationsDao } from "@repo/api/dao"
 import { ApiException, AWSManager } from "@repo/api/utils"
 import { AVATAR_CONTENT_TYPES, avatarFileExtension, type AvatarContentType } from "@repo/types/req"
-import type { DeviceId } from "@repo/types/schema"
 import { HTTPException } from "hono/http-exception"
 
 export const onboardUser = async ({
@@ -159,20 +158,19 @@ export const updateMyProfile = async ({
 }
 
 /**
- * Stores this device's Expo push token under `USER#<userId>` / `DEVICE#<deviceId>`.
- * Re-registering the same device replaces the token and extends the TTL.
+ * Stores this installation's Expo push token under
+ * `USER#<userId>` / `SESSION#<tokenValue>`. Re-registering the same token
+ * refreshes its TTL; at most `MAX_USER_SESSIONS` sessions are kept.
  */
 export const savePushToken = async ({
   userId,
-  deviceId,
   expoPushToken,
 }: {
   userId: string
-  deviceId: DeviceId
   expoPushToken: string
 }): Promise<void> => {
   try {
-    await usersDao.setUserDevicePushToken({ userId, deviceId, expoPushToken })
+    await usersDao.setUserExpoSession({ userId, expoPushToken })
   } catch (err) {
     console.error("Failed to save push token", err)
     throw new HTTPException(500, { message: "Failed to save push token" })

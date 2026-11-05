@@ -7,6 +7,7 @@ export interface TokenPair {
 
 const REFRESH_TOKEN_KEY = "refresh_token"
 const AUTH_CLIENT_KEY = "auth_client"
+const EXPO_TOKEN_KEY = "expo_token"
 
 class SecureStorageService {
   // Store refresh token securely using Keychain/Keystore
@@ -35,6 +36,35 @@ class SecureStorageService {
   async removeRefreshToken(): Promise<boolean> {
     try {
       await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
+      return true
+    } catch (error) {
+      console.error("Failed to remove refresh token:", error)
+      return false
+    }
+  }
+  async storeExpoToken(token: string): Promise<boolean> {
+    try {
+      await SecureStore.setItemAsync(EXPO_TOKEN_KEY, token)
+      return true
+    } catch (error) {
+      console.error("Failed to store refresh token:", error)
+      return false
+    }
+  }
+
+  async getExpoToken(): Promise<string | null> {
+    try {
+      const credentials = await SecureStore.getItemAsync(EXPO_TOKEN_KEY)
+      return credentials ?? null
+    } catch (error) {
+      console.error("Failed to retrieve refresh token:", error)
+      return null
+    }
+  }
+
+  async removeExpoToken(): Promise<boolean> {
+    try {
+      await SecureStore.deleteItemAsync(EXPO_TOKEN_KEY)
       return true
     } catch (error) {
       console.error("Failed to remove refresh token:", error)

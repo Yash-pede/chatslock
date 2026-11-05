@@ -15,6 +15,7 @@ import {
   type OtpChallenge,
   type OtpVerifyResult,
 } from "@repo/utils"
+import { getExpoPushToken } from "@/lib/expo-push-token"
 import {
   authApi,
   phoneFor,
@@ -116,7 +117,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = useCallback(async () => {
     rememberPhone(null)
-    await revokeSession()
+    const expoPushToken = await getExpoPushToken()
+    await revokeSession(expoPushToken)
     signOutLocally(null)
   }, [signOutLocally])
 

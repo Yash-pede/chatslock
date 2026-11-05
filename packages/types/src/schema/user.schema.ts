@@ -15,7 +15,7 @@ export const username = str(3, 20)
 export const avatar = z.url("Invalid avatar URL format")
 export const phone = z.string().regex(/^\+\d{10,15}$/, "Invalid phone number")
 
-export const USER_SK = ["PROFILE", "DEVICE", "CONNECTION"] as const
+export const USER_SK = ["PROFILE", "SESSION", "CONNECTION"] as const
 
 export type UserSK = (typeof USER_SK)[number]
 
@@ -88,29 +88,17 @@ export const usersk = Object.fromEntries(USER_SK.map((key) => [key, key])) as {
   [K in UserSK]: K
 }
 
-/** Client-generated installation id (UUID v4), stable for the life of the install. */
-export const deviceIdRegex =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-export const deviceId = z.string().regex(deviceIdRegex, "Invalid device id")
-export type DeviceId = z.infer<typeof deviceId>
-
-/**
- * A device's push registration: `PK USER#<userId>`, `SK DEVICE#<deviceId>`.
- * `expiresAt` is a DynamoDB TTL (epoch seconds) refreshed on every write, so a
- * device that stops opening the app is dropped automatically.
- */
-export const userDeviceItem = z.strictObject({
+export const userSessionItem = z.strictObject({
   PK: userKeys.shape.PK,
-  SK: z.string().regex(new RegExp(`^${usersk.DEVICE}[^#]+$`), "Invalid device SK"),
-  deviceId,
+  SK: z.string().regex(new RegExp(`^${usersk.SESSION}#[^#]+$`), "Invalid session SK"),
   expoPushToken: str(1, 255),
   updatedAt: zodTimestamp,
   expiresAt: z.number().int().positive(),
 })
 
-export const userDeviceSchema = z.object(userDeviceItem.omit({ PK: true, SK: true }).shape)
+export const userSessionSchema = z.object(userSessionItem.omit({ PK: true, SK: true }).shape)
 
 /** A device row exactly as stored in DynamoDB. */
-export type UserDeviceItem = z.infer<typeof userDeviceItem>
+export type UserSessionItem = z.infer<typeof userSessionItem>
 /** The device fields exposed to callers (keys are storage-only). */
-export type UserDevice = z.infer<typeof userDeviceSchema>
+export type userSession = z.infer<typeof userSessionSchema>

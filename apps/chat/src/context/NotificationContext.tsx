@@ -1,11 +1,8 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import * as Notifications from "expo-notifications"
-import { AndroidImportance } from "expo-notifications"
 import { useRootNavigationState, useRouter } from "expo-router"
-import { AppState, Platform } from "react-native"
-import Constants from "expo-constants"
 import { usersApi } from "@/api/users.api"
-import { getDeviceId } from "@/lib/device"
+import { getExpoPushToken } from "@/lib/expo-push-token"
 import { useProfile } from "@/context/profile/ProfileContext"
 
 interface NotificationContextValue {
@@ -23,35 +20,6 @@ Notifications.setNotificationHandler({
   }),
 })
 
-async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (Platform.OS === "web") return null
-
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#FF231F7C",
-    })
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync()
-  const finalStatus =
-    existingStatus === "granted"
-      ? existingStatus
-      : (await Notifications.requestPermissionsAsync()).status
-  if (finalStatus !== "granted") return null
-
-  const projectId = Constants?.expoConfig?.extra?.eas?.projectId ?? Constants?.easConfig?.projectId
-  if (!projectId) return null
-
-  try {
-    return (await Notifications.getExpoPushTokenAsync({ projectId })).data
-  } catch {
-    return null
-  }
-}
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { flow } = useProfile()
   const ready = flow === "ready"
@@ -66,28 +34,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const syncPushToken = useCallback(async () => {
     if (!ready) return
-    const expoPushToken = await registerForPushNotificationsAsync()
+    const expoPushToken = await getExpoPushToken({ requestPermission: true })
     if (!expoPushToken) return
 
     try {
-      const deviceId = await getDeviceId()
-      await usersApi.setPushToken({ expoPushToken, deviceId })
+      await usersApi.setPushToken({ expoPushToken })
     } catch (error) {
       console.warn("[notifications] failed to save push token", error)
     }
   }, [ready])
 
+  // Register the token once per app launch, when the profile is ready.
   useEffect(() => {
     if (!ready) return
     void syncPushToken()
-  }, [ready, syncPushToken])
-
-  useEffect(() => {
-    if (!ready) return
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void syncPushToken()
-    })
-    return () => subscription.remove()
   }, [ready, syncPushToken])
 
   const openConversationFromResponse = useCallback(

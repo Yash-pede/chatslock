@@ -1,4 +1,10 @@
-import { BatchGetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
+import {
+  BatchGetCommand,
+  PutCommand,
+  QueryCommand,
+  UpdateCommand,
+  DeleteCommand,
+} from "@aws-sdk/lib-dynamodb"
 import {
   createUserSchema,
   PREFIXES,
@@ -10,18 +16,19 @@ import {
   USERNAME_GSI,
   getUserSchema,
   type CreateUserInput,
-  type DeviceId,
   type UpdateUserInput,
   type ConversationUserProfile,
   type UserId,
   usersk,
   UserSK,
-  userDeviceSchema,
-  type UserDevice,
+  MAX_USER_SESSIONS,
+  userSessionItem,
+  userSession,
+  userSessionSchema,
 } from "@repo/types/schema"
 import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
 import z from "zod"
-import { AWSManager, buildKey, definedEntries, parseOrThrow } from "../utils"
+import { AWSManager, buildKey, buildSessionSK, definedEntries, parseOrThrow } from "../utils"
 
 const userKey = (userId: UserId, sk?: UserSK) => ({
   PK: buildKey(PREFIXES.USER, userId),
@@ -162,35 +169,69 @@ export const usersDao = {
       input.connectionId,
     )
   },
-  setUserDevicePushToken: async (input: {
-    userId: UserId
-    deviceId: DeviceId
-    expoPushToken: string
-  }): Promise<void> => {
+  setUserExpoSession: async (input: { userId: UserId; expoPushToken: string }) => {
+    const currentUserSessions = await usersDao.getUserAllExpoSession({ userId: input.userId })
+    const existingSession = currentUserSessions.find(
+      (session) => session.expoPushToken === input.expoPushToken,
+    )
+
+    // Re-opening the app re-sends the same token; refresh its TTL instead of
+    // creating a duplicate row.
+    if (existingSession) {
+      const now = Date.now()
+      await AWSManager.dbClient.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: {
+            PK: buildKey(PREFIXES.USER, input.userId),
+            SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
+          },
+          UpdateExpression: "SET #updatedAt = :updatedAt, expiresAt = :expiresAt",
+          ExpressionAttributeNames: { "#updatedAt": "updatedAt" },
+          ExpressionAttributeValues: {
+            ":updatedAt": now,
+            ":expiresAt": Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
+          },
+        }),
+      )
+      return "session updated"
+    }
+
+    if (currentUserSessions.length >= MAX_USER_SESSIONS) {
+      const { expiresAt, ...toDelSession } = currentUserSessions.reduce((acc, cur) =>
+        cur.updatedAt < acc.updatedAt ? cur : acc,
+      )
+      await usersDao.deleteUserExpoSession({ ...toDelSession, userId: input.userId })
+    }
+
     const now = Date.now()
+    const items = parseOrThrow(userSessionItem, {
+      PK: buildKey(PREFIXES.USER, input.userId),
+      SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
+      expoPushToken: input.expoPushToken,
+      updatedAt: now,
+      expiresAt: Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
+    })
 
     await AWSManager.dbClient.send(
-      new UpdateCommand({
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: items,
+      }),
+    )
+  },
+  deleteUserExpoSession: async (input: { userId: UserId; expoPushToken: string }) => {
+    return await AWSManager.dbClient.send(
+      new DeleteCommand({
         TableName: TABLE_NAME,
         Key: {
           PK: buildKey(PREFIXES.USER, input.userId),
-          SK: buildKey(usersk.DEVICE, input.deviceId),
-        },
-        UpdateExpression:
-          "SET deviceId = :deviceId, expoPushToken = :expoPushToken, #updatedAt = :updatedAt, expiresAt = :expiresAt",
-        ExpressionAttributeNames: {
-          "#updatedAt": "updatedAt",
-        },
-        ExpressionAttributeValues: {
-          ":deviceId": input.deviceId,
-          ":expoPushToken": input.expoPushToken,
-          ":updatedAt": now,
-          ":expiresAt": Math.floor(now / 1000) + PUSH_TOKEN_TTL_SECONDS,
+          SK: buildKey(usersk.SESSION, buildSessionSK(input.expoPushToken)),
         },
       }),
     )
   },
-  getUserAllPushToken: async (input: { userId: UserId }): Promise<UserDevice[]> => {
+  getUserAllExpoSession: async (input: { userId: UserId }): Promise<userSession[]> => {
     const resp = await AWSManager.dbClient.send(
       new QueryCommand({
         TableName: TABLE_NAME,
@@ -198,10 +239,10 @@ export const usersDao = {
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": buildKey(PREFIXES.USER, input.userId),
-          ":sk": usersk.DEVICE,
+          ":sk": `${usersk.SESSION}#`,
         },
       }),
     )
-    return (resp.Items ?? []).map((item) => parseOrThrow(userDeviceSchema, item))
+    return (resp.Items ?? []).map((item) => parseOrThrow(userSessionSchema, item))
   },
 }

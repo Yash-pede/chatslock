@@ -169,6 +169,8 @@ export const authDao = {
   globalSignOut: async ({ accessToken }: { accessToken: string }) => {
     return await AWSManager.cognitoClient.send(
       new GlobalSignOutCommand({ AccessToken: accessToken }),
+      // Logout must not sit on a broken VPC route until API Gateway times out.
+      { abortSignal: AbortSignal.timeout(5_000) },
     )
   },
 }
