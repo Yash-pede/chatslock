@@ -10,6 +10,6 @@ export const userConversationController = async (c: WsContext) => {
     userId: c.userId,
     conversationId: data.conversationId,
     status: data.status,
-    push: c.push
+    push: c.push,
   })
 }
