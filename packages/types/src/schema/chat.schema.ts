@@ -11,6 +11,7 @@ export const conversationUserProfileSchema = z.object({
   userId,
   username,
   fullName,
+  lastActiveAt: z.number(),
   avatar: z.url().optional(),
 })
 

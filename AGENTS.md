@@ -46,6 +46,7 @@ Understand these product roles before changing chat, account, or authorization b
 | `apps/chat`                                            | `chat`          | Expo / React Native app (Expo Router, iOS + Android + web)                                                  |
 | `apps/main-site`                                       | `main-site`     | Vite + React marketing site                                                                                 |
 | `packages/api`                                         | `@repo/api`     | Server-side shared core: data-access code, Zod schemas, auth/response middleware, and domain types          |
+| `packages/types`                                       | `@repo/types`   | Shared Zod schemas/types for requests, storage items, and the WebSocket protocol                            |
 | `packages/utils`                                       | `@repo/utils`   | Client-side shared core: axios client, token manager, auth services, JWT helpers                            |
 | `packages/ui`                                          | `@repo/ui`      | Design tokens and shared React Native components                                                            |
 | `packages/eslint-config`, `packages/typescript-config` |                 | Shared lint/TypeScript configurations                                                                       |
@@ -103,7 +104,7 @@ Read `apps/chat/AGENTS.md` before changing the mobile app. Expo APIs vary by SDK
 - Backend APIs use Hono on AWS Lambda and are mounted through API Gateway. Follow the existing route and deployment configuration rather than assuming every function uses an identical route pattern.
 - Keep layering strict: `index.ts` defines routes; `*.controller.ts` reads validated input and request context, calls the service, and formats the result; `*.service.ts` implements business logic and error mapping; shared data-access code is used for persistence.
 - Controllers must not access the data-access layer directly. Services must not construct HTTP responses.
-- Zod schemas live in `packages/api/src/schema`, extend the existing base schema conventions, and are exported through the package's supported subpaths. Validation middleware places parsed input in the established Hono context key. Follow nearby implementations.
+- Zod schemas live in `packages/types/src/schema` (domain/storage) and `packages/types/src/req` (request envelopes), are exported through `@repo/types/schema` / `@repo/types/req`, and extend the existing base schema conventions. Validation middleware places parsed input in the established Hono context key. Follow nearby implementations.
 - Successful responses use the established response middleware and response envelope. Use the project's `ApiException` convention for errors clients need to handle explicitly; use generic HTTP exceptions only where appropriate.
 - The existing `withAuth` middleware reads Cognito claims from the API Gateway request context and sets `userId` (`sub`) and `cognitoUsername`. Reuse this context instead of reparsing the token in each controller.
 - Do not assume a context key, adapter API, middleware order, or response shape; inspect the installed code and nearby functions.
@@ -119,6 +120,10 @@ pnpm turbo run build --filter=@repo/api
 
 A targeted function build should include its dependencies where the Turbo configuration supports it. The package exports subpaths (currently including schema, utilities, types, and data-access modules); inspect `package.json` and `tsup.config.ts` before adding a new public entry point.
 
+### Lambda layer build
+
+`scripts/build-layer.sh` is run by `pnpm layer:build`. It resolves `@repo/api` production dependencies with `pnpm list --prod --json` (so `catalog:` and `workspace:` specs become concrete versions), then installs real files with npm using `--legacy-peer-deps`. Do not change that install back to raw `package.json` specs or pnpm symlinks: the layer is zipped and Lambda cannot follow pnpm store links.
+
 ## Conversation and messaging behavior
 
 - Users and agents communicate through conversations. Preserve the product's existing rules for conversation creation, participation, assignment, visibility, and closure.
@@ -129,6 +134,40 @@ A targeted function build should include its dependencies where the Turbo config
 - For message edits/deletions, check the actor's role and the message/conversation policy. Ownership alone does not override moderator/admin policy, and a privileged role should not bypass unrelated business constraints unless the product rules explicitly allow it.
 - Treat retries, duplicate requests, concurrent sends, ordering, read receipts, unread counts, and conversation previews as correctness concerns. Follow the existing implementation and avoid introducing incompatible semantics.
 - Keep realtime delivery and durable message persistence conceptually separate. Do not assume that publishing an event proves that it was persisted or delivered.
+
+### WebSocket protocol
+
+- All WebSocket schemas and types live in `packages/types/src/schema/ws/`. `envelope.ts` holds the generic `{ action, op, data }` frame, `wsFrame`, `defineWsGroup`, and shared event/error schemas. Each group has its own file (for example `message.ts`), and `registry.ts` is the single list of groups.
+- To add a group: create `schema/ws/<name>.ts` exporting `defineWsGroup({ action, ops })`, add it to `WS_GROUPS` in `registry.ts`, export it from `ws/index.ts`, then register handlers with `app.group(...)` in `functions/wsConnectionEvents/src/index.ts`. Do not duplicate action/op lists elsewhere.
+- `wsFrameSchema` and `WS_ACTIONS` derive from `WS_GROUPS`, so registering a group automatically updates validation.
+- `message.list` is the only message-history path. The REST history endpoint and client method were removed. The initial page and older pages both come from `message.list`; the cursor is the oldest loaded message id.
+- The `user.conversation` group carries `OPENED`/`CLOSED` presence. Push delivery uses that presence: a peer viewing the same conversation gets the WS event, not a push.
+
+## Auth sessions
+
+- One DynamoDB row per login: `PK USER#<userId>`, `SK AUTHSESSION#<sha256(refreshToken)>`. There is no separate `sessionId` attribute; the SHA-256 hash is the public session id used by the client and APIs.
+- Rows store `refreshToken` (needed for Cognito `RevokeToken`), `refreshTokenHash`, `client` (`otp` / `userpass`), `deviceName`, `platform`, `expoPushToken`, `createdAt`, `lastUsedAt`, and `expiresAt`.
+- Login and OTP verify create the row. The cap is 4 active sessions. Before writing a fifth, the oldest by `createdAt` is revoked with Cognito `RevokeToken` and its row deleted. The check is not atomic; do not add a fifth path without handling the race.
+- Refresh requires a live `AUTHSESSION#<hash>` row. Missing/expired rows and revoked/expired Cognito tokens return 401 and must not be allowed to refresh.
+- Logout revokes only the current session: the request body `sessionId` is the hash. Legacy clients without a hash fall back to `GlobalSignOut` plus deleting all rows.
+- Session APIs live in the users Lambda: `GET /api/users/sessions`, `POST /api/users/sessions` (attach the Expo token to the current row), and `DELETE /api/users/sessions/:id` (hash). The current device cannot be logged out from the Sessions screen; it signs out from the profile page.
+- The frontend stores the current hash from login/refresh in secure storage. The Sessions screen compares it to `session.id` for “This device”.
+- Do not reintroduce a separate `sessionId` column or id generator.
+
+## Push notifications
+
+- `@repo/api/notifications` owns `sendPushNotification` (Expo Server SDK) and `messagePushNotification`. Android pushes use `priority: "high"` and a one-hour TTL.
+- The Expo token is stored on the auth session row (`expoPushToken`). The old `SESSION#<token>` rows, `setUserExpoSession`, `getUserAllExpoSession`, and `/api/users/pushtoken` were removed.
+- `POST /api/users/sessions` updates only the current row’s `expoPushToken`. The app calls it once per launch when the profile is ready; do not add foreground/token-listener resends unless the product requirement changes.
+- The WS message service sends a push only when the peer is not viewing that conversation. It reads tokens from auth sessions and ignores expired rows.
+- Expo/FCM “sent” is not delivery. The Expo/EAS FCM credentials must match the app’s `google-services.json` project; check Expo receipts for `DeviceNotRegistered`, `MessageRateExceeded`, or `MismatchSenderId`.
+
+## Invite links
+
+- Public links use the username, not the user id: `/u/<username>`.
+- The main site’s Android Play URL carries `referrer=agentId=<username>`. The app reads the Play Install Referrer once per install with `expo-application` and persists the pending username until onboarding.
+- Login/verify accept optional `deviceName`/`platform`; onboarding sends `agentUsername`. The users service resolves the username to a userId before creating the direct conversation and stores the resolved `agentId`.
+- The frontend persists a pending invite in secure storage and clears it after onboarding or when the profile is already ready.
 
 ## Client-side shared package (`packages/utils`)
 
@@ -149,6 +188,16 @@ The shared client package includes the existing API client, token manager, authe
 - Keep concise doc comments above exported components/hooks when they explain why the abstraction exists.
 - Do not change unrelated app screens while implementing a backend-only task.
 
+### Messaging UI
+
+- `useConversationMessages` keeps messages ascending (oldest → newest) and merges older pages by prepending the reversed page; it does not re-sort the whole list.
+- The conversation `FlashList` is non-inverted. Keep `maintainVisibleContentPosition` for anchoring, but do not add `autoscrollToBottomThreshold`; it makes long messages/older pages snap to the bottom. New messages auto-scroll only when the last message id changes and the user is already at the bottom.
+- The older-page list header keeps a fixed height while `hasOlder` is true; changing its height breaks the scroll anchor.
+- Paging is gated per drag (`onScrollBeginDrag` re-arms it) so one gesture can load at most one page.
+- `MAX_MESSAGE_LENGTH = 4000 as const` in `packages/types/src/schema/message.schema.ts` is enforced in the composer and in the WS schemas/services. Do not hardcode another limit.
+- Plain text and image captions render through `LinkifiedText`; it linkifies `http`/`https`/`www` links and opens the browser. Sent bubbles use a light link colour, received bubbles use primary blue.
+- The chat list no longer carries `lastMessageId`, `lastMessagePreview`, or `lastMessageAt`. Do not add previews, activity sorting, or message-event row bumping unless the conversation schema and backend storage are deliberately changed first.
+
 ## Infrastructure conventions
 
 - Terraform lives under `infrastructure/`, with modules organized by service. Inspect the current layout before changing resources.
@@ -159,6 +208,9 @@ The shared client package includes the existing API client, token manager, authe
 - Treat Terraform plans as potentially destructive. Review replacements, deletions, policy changes, and data-loss risks before applying.
 - Never run production applies, destructive operations, or deployments without explicit authorization.
 - Never commit secrets, `.env` files, Terraform state (`*.tfstate*`), credentials, or generated `layers/` output.
+- Exact JWT routes (for example `POST /api/auth/logout`) need a matching Lambda invoke permission. The backend Lambda permission uses `/*/*/api/<name>/*` rather than `/{proxy+}}` so exact routes are covered.
+- The auth Lambda needs `cognito-idp:GlobalSignOut` and `cognito-idp:RevokeToken`; per-session logout and session eviction depend on them.
+- Lambdas in private subnets need NAT or VPC endpoints for Cognito/Expo. ElastiCache Serverless requires TLS; the cache client sends `tls`.
 
 ## Dependencies, validation, and code changes
 

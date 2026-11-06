@@ -82,7 +82,7 @@ export const usersDao = {
         RequestItems: {
           [TABLE_NAME]: {
             Keys: ids.map((id) => userKey(id)),
-            ProjectionExpression: "userId, username, fullName, avatar",
+            ProjectionExpression: "userId, username, fullName, avatar, lastActiveAt",
           },
         },
       }),

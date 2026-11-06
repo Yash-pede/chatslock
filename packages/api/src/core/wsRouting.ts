@@ -24,6 +24,9 @@ export interface WsRequestContext {
   }
 }
 
+export type PostToConnection = (connectionId: string, body: unknown) => Promise<void>
+export type Push = (body: unknown) => Promise<unknown>
+
 export interface WsEvent {
   requestContext: WsRequestContext
   body?: string | null
