@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import type { Message } from "@repo/types/schema"
 import { extractErrorMessage } from "@repo/utils"
 import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api"
-import { useMessagesApi } from "@/api/messages.api"
 import {
-  activityTime,
   buildChatList,
   collectPeerIds,
   fetchPeerProfiles,
@@ -20,16 +17,12 @@ export interface UseChatListResult {
 }
 
 /**
- * The chats list: fetches the caller's conversations, resolves peer profiles,
- * and joins them into rows sorted by last activity. Realtime message events
- * bump the affected row to the top of the already-loaded list.
+ * The chats list: fetches the caller's conversations and resolves peer profiles.
  */
 export function useChatList(currentUserId: string | null): UseChatListResult {
   const [items, setItems] = useState<ChatListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  const { onMessageCreated, onMessageUpdated } = useMessagesApi()
 
   const load = useCallback(async () => {
     try {
@@ -52,27 +45,6 @@ export function useChatList(currentUserId: string | null): UseChatListResult {
     if (currentUserId === null) return
     void Promise.resolve().then(load)
   }, [currentUserId, load])
-
-  /** Moves the conversation with the newest activity to its sorted position. */
-  useEffect(() => {
-    const bump = (message: Message) => {
-      if (!message.conversationId || !message.createdAt) return
-      setItems((current) => {
-        const index = current.findIndex((item) => item.conversationId === message.conversationId)
-        if (index === -1) return current
-        const updated = { ...current[index]!, lastMessageAt: message.createdAt }
-        const rest = current.filter((_, i) => i !== index)
-        return [...rest, updated].sort((a, b) => activityTime(b) - activityTime(a))
-      })
-    }
-
-    const offCreated = onMessageCreated(bump)
-    const offUpdated = onMessageUpdated(bump)
-    return () => {
-      offCreated()
-      offUpdated()
-    }
-  }, [onMessageCreated, onMessageUpdated])
 
   return useMemo(() => ({ items, loading, error, refresh: load }), [items, loading, error, load])
 }

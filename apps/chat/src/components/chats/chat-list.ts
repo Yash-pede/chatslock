@@ -10,9 +10,6 @@ export interface ChatListItem {
   conversationId: string
   conversationType: UserMemberConversation["conversationType"]
   unreadCount: number
-  lastMessagePreview?: string
-  lastMessageAt?: number
-  lastMessageId?: string
   peer: ConversationUserProfile | null
 }
 
@@ -66,55 +63,35 @@ export async function fetchPeerProfiles(
   return map
 }
 
-/**
- * Join conversations with their peers and order them newest-activity first.
- * The membership row carries no conversation timestamp, so conversations that
- * never received a message sort last (their rows read "Get started").
- */
 export function buildChatList(
   conversations: UserMemberConversation[],
   profiles: Map<string, ConversationUserProfile>,
   currentUserId: string | null,
 ): ChatListItem[] {
-  return conversations
-    .map<ChatListItem>((conversation) => {
-      const peerId = getPeerUserId(conversation.conversationId, currentUserId)
+  return conversations.map<ChatListItem>((conversation) => {
+    const peerId = getPeerUserId(conversation.conversationId, currentUserId)
 
-      return {
-        conversationId: conversation.conversationId,
-        conversationType: conversation.conversationType,
-        unreadCount: conversation.unreadCount,
-        lastMessagePreview: conversation.lastMessagePreview,
-        lastMessageAt: conversation.lastMessageAt,
-        lastMessageId: conversation.lastMessageId,
-        peer: peerId ? (profiles.get(peerId) ?? null) : null,
-      }
-    })
-    .sort((a, b) => activityTime(b) - activityTime(a))
-}
-
-/** Sort key: last message time when present; message-less conversations go last. */
-export function activityTime(item: ChatListItem): number {
-  return item.lastMessageAt ?? 0
+    return {
+      conversationId: conversation.conversationId,
+      conversationType: conversation.conversationType,
+      unreadCount: conversation.unreadCount,
+      peer: peerId ? (profiles.get(peerId) ?? null) : null,
+    }
+  })
 }
 
 /** The chats screen filter. */
-export type ChatFilter = "all" | "unread" | "empty"
-
-/** True when a conversation has never received a message. */
-export const isEmptyChat = (item: ChatListItem) => !item.lastMessageAt && !item.lastMessagePreview
+export type ChatFilter = "all" | "unread"
 
 /** Counts shown on the filter tabs. */
 export const countChats = (items: ChatListItem[]): Record<ChatFilter, number> => ({
   all: items.length,
   unread: items.filter((item) => item.unreadCount > 0).length,
-  empty: items.filter(isEmptyChat).length,
 })
 
 /** The single section the active filter shows. */
 export function sectionsFor(items: ChatListItem[], filter: ChatFilter) {
   if (filter === "unread")
     return [{ title: "Unread", data: items.filter((i) => i.unreadCount > 0) }]
-  if (filter === "empty") return [{ title: "Get started", data: items.filter(isEmptyChat) }]
   return [{ title: "All chats", data: items }]
 }

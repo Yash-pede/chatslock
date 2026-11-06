@@ -7,7 +7,6 @@ import type { ChatFilter } from "@/components/chats/chat-list"
 const FILTERS: { key: ChatFilter; label: string }[] = [
   { key: "all", label: "All" },
   { key: "unread", label: "Unread" },
-  { key: "empty", label: "Get started" },
 ]
 
 /** Title row with the unread/total summary and a search affordance. */

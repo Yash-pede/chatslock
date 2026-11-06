@@ -61,9 +61,6 @@ export const userMember_conversationItem = z.strictObject({
   SK: conversationKey,
   userMember: z.string(),
   unreadCount: z.int().default(0),
-  lastMessageId: z.uuid().optional(),
-  lastMessagePreview: z.string().optional(),
-  lastMessageAt: z.int().optional(),
 })
 
 /**
