@@ -26,8 +26,7 @@ export function ConversationHeader({
       : peerStatus === "OFFLINE"
         ? "Offline"
         : "Direct message"
-  const statusClass =
-    typing || peerStatus === "ONLINE" ? "text-green-600" : "text-muted-foreground"
+  const statusClass = typing || peerStatus === "ONLINE" ? "text-green-600" : "text-muted-foreground"
 
   return (
     <View className="flex-row items-center gap-2 border-b border-border px-2 py-2">

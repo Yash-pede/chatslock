@@ -10,18 +10,16 @@ import type {
  * instead of re-declaring the whole event.
  */
 export const identityOf = (event: AppSyncEventsPublishEvent | AppSyncEventsSubscribeEvent) => {
-  const identity = event.identity as
-    | {
-        sub?: string
-        username?: string
-        groups?: string[]
-        claims?: {
-          sub?: string
-          username?: string
-          "cognito:groups"?: string[]
-        }
-      }
-    | null
+  const identity = event.identity as {
+    sub?: string
+    username?: string
+    groups?: string[]
+    claims?: {
+      sub?: string
+      username?: string
+      "cognito:groups"?: string[]
+    }
+  } | null
 
   const userId = identity?.claims?.sub ?? identity?.sub
   if (!userId) {

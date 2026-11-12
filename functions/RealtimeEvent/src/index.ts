@@ -8,17 +8,17 @@ import type {
   AppSyncEventsSubscribeEvent,
 } from "@aws-lambda-powertools/event-handler/types"
 import { AWSManager } from "@repo/api/utils"
-import { messagePublishEnvelopeSchema, MESSAGE_EVENT, userPublishEnvelopeSchema } from "@repo/types/req"
+import {
+  messagePublishEnvelopeSchema,
+  MESSAGE_EVENT,
+  userPublishEnvelopeSchema,
+} from "@repo/types/req"
 import type { ConversationId, UserId } from "@repo/types/schema"
 import type { Context } from "aws-lambda"
 import type { z } from "zod"
 import { assertConversationMember, conversationIdFromChannel } from "./conversation"
 import { identityOf } from "./identity"
-import {
-  assertCanSubscribeToUser,
-  assertOwnUserChannel,
-  userIdFromChannel,
-} from "./user-channel"
+import { assertCanSubscribeToUser, assertOwnUserChannel, userIdFromChannel } from "./user-channel"
 import {
   deleteMessageController,
   editMessageController,

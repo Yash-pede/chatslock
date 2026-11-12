@@ -29,11 +29,7 @@ app.use(withAuth)
 
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 
-app.get(
-  "/messages",
-  validateWithZod(getConversationMessagesSchema),
-  listMessagesController,
-)
+app.get("/messages", validateWithZod(getConversationMessagesSchema), listMessagesController)
 
 app.post(
   "/profiles",

@@ -67,8 +67,6 @@ export const messageTypingData = z.strictObject({
 })
 export type MessageTypingData = z.infer<typeof messageTypingData>
 
-
-
 export const sendMessageReq = z
   .strictObject({ conversationId: compositeConversationId, ...sendMessageFields })
   .superRefine(refineMessageContent)

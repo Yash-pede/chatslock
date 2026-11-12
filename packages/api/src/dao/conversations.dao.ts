@@ -86,10 +86,7 @@ export const conversationsDao = {
    * conversation does not exist or the caller is not a participant. This is the
    * authorization source for realtime channels.
    */
-  getUserConversationMember: async (input: {
-    userId: UserId
-    conversationId: ConversationId
-  }) => {
+  getUserConversationMember: async (input: { userId: UserId; conversationId: ConversationId }) => {
     parseConversationId(input.conversationId)
 
     const resp = await AWSManager.dbClient.send(

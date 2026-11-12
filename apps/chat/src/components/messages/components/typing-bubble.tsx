@@ -32,10 +32,7 @@ function TypingDot({ delay, color }: { delay: number; color: string }) {
 
   return (
     <Animated.View
-      style={[
-        { width: 6, height: 6, borderRadius: 3, backgroundColor: color },
-        animatedStyle,
-      ]}
+      style={[{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }, animatedStyle]}
     />
   )
 }

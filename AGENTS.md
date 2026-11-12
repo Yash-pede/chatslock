@@ -46,7 +46,7 @@ Understand these product roles before changing chat, account, or authorization b
 | `apps/chat`                                            | `chat`          | Expo / React Native app (Expo Router, iOS + Android + web)                                                  |
 | `apps/main-site`                                       | `main-site`     | Vite + React marketing site                                                                                 |
 | `packages/api`                                         | `@repo/api`     | Server-side shared core: data-access code, Zod schemas, auth/response middleware, and domain types          |
-| `packages/types`                                       | `@repo/types`   | Shared Zod schemas/types for requests, storage items, and realtime events                            |
+| `packages/types`                                       | `@repo/types`   | Shared Zod schemas/types for requests, storage items, and realtime events                                   |
 | `packages/utils`                                       | `@repo/utils`   | Client-side shared core: axios client, token manager, auth services, JWT helpers                            |
 | `packages/ui`                                          | `@repo/ui`      | Design tokens and shared React Native components                                                            |
 | `packages/eslint-config`, `packages/typescript-config` |                 | Shared lint/TypeScript configurations                                                                       |
