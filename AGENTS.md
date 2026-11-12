@@ -46,7 +46,7 @@ Understand these product roles before changing chat, account, or authorization b
 | `apps/chat`                                            | `chat`          | Expo / React Native app (Expo Router, iOS + Android + web)                                                  |
 | `apps/main-site`                                       | `main-site`     | Vite + React marketing site                                                                                 |
 | `packages/api`                                         | `@repo/api`     | Server-side shared core: data-access code, Zod schemas, auth/response middleware, and domain types          |
-| `packages/types`                                       | `@repo/types`   | Shared Zod schemas/types for requests, storage items, and the WebSocket protocol                            |
+| `packages/types`                                       | `@repo/types`   | Shared Zod schemas/types for requests, storage items, and realtime events                            |
 | `packages/utils`                                       | `@repo/utils`   | Client-side shared core: axios client, token manager, auth services, JWT helpers                            |
 | `packages/ui`                                          | `@repo/ui`      | Design tokens and shared React Native components                                                            |
 | `packages/eslint-config`, `packages/typescript-config` |                 | Shared lint/TypeScript configurations                                                                       |
@@ -135,13 +135,14 @@ A targeted function build should include its dependencies where the Turbo config
 - Treat retries, duplicate requests, concurrent sends, ordering, read receipts, unread counts, and conversation previews as correctness concerns. Follow the existing implementation and avoid introducing incompatible semantics.
 - Keep realtime delivery and durable message persistence conceptually separate. Do not assume that publishing an event proves that it was persisted or delivered.
 
-### WebSocket protocol
+### Realtime (AppSync Events)
 
-- All WebSocket schemas and types live in `packages/types/src/schema/ws/`. `envelope.ts` holds the generic `{ action, op, data }` frame, `wsFrame`, `defineWsGroup`, and shared event/error schemas. Each group has its own file (for example `message.ts`), and `registry.ts` is the single list of groups.
-- To add a group: create `schema/ws/<name>.ts` exporting `defineWsGroup({ action, ops })`, add it to `WS_GROUPS` in `registry.ts`, export it from `ws/index.ts`, then register handlers with `app.group(...)` in `functions/wsConnectionEvents/src/index.ts`. Do not duplicate action/op lists elsewhere.
-- `wsFrameSchema` and `WS_ACTIONS` derive from `WS_GROUPS`, so registering a group automatically updates validation.
-- `message.list` is the only message-history path. The REST history endpoint and client method were removed. The initial page and older pages both come from `message.list`; the cursor is the oldest loaded message id.
-- The `user.conversation` group carries `OPENED`/`CLOSED` presence. Push delivery uses that presence: a peer viewing the same conversation gets the WS event, not a push.
+- Realtime uses an AppSync Events API (`infrastructure/modules/backend/appsync`). Handlers are registered with `AppSyncEventsResolver` in `functions/RealtimeEvent/src/index.ts`; a publish handler's return value is the payload AppSync fans out to that channel and returns to the publisher.
+- Request and event schemas live in `packages/types/src/req/message.req.ts` and `packages/types/src/req/user.req.ts`. Controllers validate the publish payload with `parseOrThrow` and return the wire event; they do not write responses or push to sockets.
+- `AppSyncEventsPublishEvent.identity` is typed as `Record<string, unknown> | null` because the shape depends on the auth type. Use `identityOf(event)` in `functions/RealtimeEvent/src/identity.ts` to read the Cognito `sub`/username/groups; do not redeclare the event shape.
+- Message operations are `message.send`, `message.edit`, `message.delete`, `message.list`, `message.read`; `user.conversation` carries `OPENED`/`CLOSED` presence. `message.list` is the only message-history path; the cursor is the oldest loaded message id.
+- There is no API Gateway WebSocket, authorizer lambda, or connection registry. Presence and push suppression use the user's active conversation row/cache value, so a peer viewing the same conversation does not get a push.
+- Keep realtime delivery and durable persistence separate: a returned or published event does not prove it was delivered.
 
 ## Auth sessions
 
@@ -159,7 +160,7 @@ A targeted function build should include its dependencies where the Turbo config
 - `@repo/api/notifications` owns `sendPushNotification` (Expo Server SDK) and `messagePushNotification`. Android pushes use `priority: "high"` and a one-hour TTL.
 - The Expo token is stored on the auth session row (`expoPushToken`). The old `SESSION#<token>` rows, `setUserExpoSession`, `getUserAllExpoSession`, and `/api/users/pushtoken` were removed.
 - `POST /api/users/sessions` updates only the current row’s `expoPushToken`. The app calls it once per launch when the profile is ready; do not add foreground/token-listener resends unless the product requirement changes.
-- The WS message service sends a push only when the peer is not viewing that conversation. It reads tokens from auth sessions and ignores expired rows.
+- The message service sends a push only when the peer is not viewing that conversation. It reads tokens from auth sessions and ignores expired rows.
 - Expo/FCM “sent” is not delivery. The Expo/EAS FCM credentials must match the app’s `google-services.json` project; check Expo receipts for `DeviceNotRegistered`, `MessageRateExceeded`, or `MismatchSenderId`.
 
 ## Invite links

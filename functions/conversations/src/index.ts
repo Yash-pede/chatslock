@@ -3,8 +3,8 @@ import { handle } from "@hono/aws-lambda"
 import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
 import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
 import {
-  confirmAvatarUploadSchema,
   getChatPageConversationSchema,
+  getConversationMessagesSchema,
   getConversationProfilesSchema,
   mediaUploadPresignUrlSchema,
 } from "@repo/types/req"
@@ -13,6 +13,7 @@ import {
   chatPageConversationsController,
   conversationProfilesController,
   getMediaUploadPresignedUrlController,
+  listMessagesController,
 } from "./conversatinos.controller"
 
 type Bindings = {
@@ -27,6 +28,12 @@ app.use(withResponse)
 app.use(withAuth)
 
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
+
+app.get(
+  "/messages",
+  validateWithZod(getConversationMessagesSchema),
+  listMessagesController,
+)
 
 app.post(
   "/profiles",

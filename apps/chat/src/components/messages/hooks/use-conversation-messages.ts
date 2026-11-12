@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Message } from "@repo/types/schema"
-import { MEDIA_CONTENT_TYPES, type MediaContentType } from "@repo/types/req"
+import {
+  MEDIA_CONTENT_TYPES,
+  type MediaContentType,
+  type MessageTypingData,
+  type TypingStatus,
+} from "@repo/types/req"
 import { useToast } from "@repo/ui"
 import { conversationsApi, uploadMediaToBucket } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
@@ -20,9 +25,20 @@ export interface UseConversationMessagesResult {
   sendMedia: (media: PickedMedia) => void
   sendAudio: (audio: RecordedAudio & { fileName: string; mimeType: string }) => void
   retry: (message: ChatMessage) => void
+  /** The peer is typing on this conversation. */
+  peerTyping: boolean
+  /** Call on every non-empty composer change; throttles START/STOP for us. */
+  notifyTyping: () => void
 }
 
 const PAGE_SIZE = 25
+
+/**
+ * AppSync resolves `channel.publish` even when the Lambda rejects the event
+ * (the error is only listed in `publish_success.failed`), so a row that never
+ * receives its broadcast is marked failed after this timeout.
+ */
+const DELIVERY_TIMEOUT_MS = 10_000
 
 /** Unique per request; the server echoes it so replies stay correlated. */
 const newClientId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -45,8 +61,8 @@ export interface UseConversationMessagesOptions {
 }
 
 /**
- * Owns one conversation's messages: the latest history page from the REST
- * endpoint, cursor-based paging for older history over the WS, live WS events,
+ * Owns one conversation's messages: the latest history page and older pages
+ * from the REST endpoint, live events from the AppSync conversation channel,
  * and optimistic sends with retry.
  */
 export function useConversationMessages(
@@ -54,7 +70,7 @@ export function useConversationMessages(
   currentUserId: string | null,
   { unreadCount = 0 }: UseConversationMessagesOptions = {},
 ): UseConversationMessagesResult {
-  const { api, onMessageCreated, onMessageUpdated, onMessageDeleted } = useMessagesApi()
+  const { api, subscribeToMessages } = useMessagesApi(conversationId, currentUserId)
   const { toast } = useToast()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -66,6 +82,10 @@ export function useConversationMessages(
   const loadingOlderRef = useRef(false)
   const unreadRemainingRef = useRef(0)
   const readSentRef = useRef(false)
+  const [peerTyping, setPeerTyping] = useState(false)
+  const typingSentRef = useRef(false)
+  const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const peerTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Reset to the loading state during render when the conversation changes, so
   // the load effect below never has to setState synchronously in its body.
@@ -82,6 +102,19 @@ export function useConversationMessages(
     setMessages((current) =>
       current.map((item) => (item.id === id ? { ...item, status: next } : item)),
     )
+  }, [])
+
+  /** Fails the optimistic row if its `clientId` never comes back from the channel. */
+  const watchDelivery = useCallback((clientId: string) => {
+    setTimeout(() => {
+      setMessages((current) =>
+        current.map((item) =>
+          item.pendingId === clientId && item.status === "sending"
+            ? { ...item, status: "failed" }
+            : item,
+        ),
+      )
+    }, DELIVERY_TIMEOUT_MS)
   }, [])
 
   /**
@@ -160,6 +193,59 @@ export function useConversationMessages(
     [currentUserId],
   )
 
+  const setTyping = useCallback(
+    (status: TypingStatus) => {
+      void api.typing(status).catch(() => undefined)
+    },
+    [api],
+  )
+
+  /** START once, then a STOP after 2s without a keystroke. */
+  const notifyTyping = useCallback(() => {
+    if (!typingSentRef.current) {
+      typingSentRef.current = true
+      setTyping("START")
+    }
+
+    if (typingStopTimer.current) clearTimeout(typingStopTimer.current)
+    typingStopTimer.current = setTimeout(() => {
+      typingSentRef.current = false
+      setTyping("STOP")
+    }, 2_000)
+  }, [setTyping])
+
+  const stopTyping = useCallback(() => {
+    if (typingStopTimer.current) {
+      clearTimeout(typingStopTimer.current)
+      typingStopTimer.current = null
+    }
+    if (typingSentRef.current) {
+      typingSentRef.current = false
+      setTyping("STOP")
+    }
+  }, [setTyping])
+
+  /** Peer typing auto-clears in case the STOP frame is lost. */
+  const handlePeerTyping = useCallback(
+    (event: MessageTypingData) => {
+      if (event.userId === currentUserId) return
+
+      if (peerTypingTimer.current) {
+        clearTimeout(peerTypingTimer.current)
+        peerTypingTimer.current = null
+      }
+
+      if (event.status === "STOP") {
+        setPeerTyping(false)
+        return
+      }
+
+      setPeerTyping(true)
+      peerTypingTimer.current = setTimeout(() => setPeerTyping(false), 4_000)
+    },
+    [currentUserId],
+  )
+
   const markRead = useCallback(() => {
     if (readSentRef.current) return
     readSentRef.current = true
@@ -189,10 +275,7 @@ export function useConversationMessages(
       })
   }, [applyPage, fetchPage, hasOlder])
 
-  /**
-   * The socket is the only path for history: the initial page waits for the
-   * connection to open, and scroll-up pages use `message.list` from there.
-   */
+  /** Initial history page from REST; scroll-up pages use the same endpoint. */
   useEffect(() => {
     if (!conversationId) return
 
@@ -223,22 +306,22 @@ export function useConversationMessages(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUserId])
 
-  // Unsolicited events: the peer's new/edited/deleted messages.
-  useEffect(() => {
-    const offCreated = onMessageCreated(upsertServerMessage)
-    const offUpdated = onMessageUpdated(upsertServerMessage)
+  useEffect(
+    () =>
+      subscribeToMessages({
+        onCreated: upsertServerMessage,
+        onUpdated: upsertServerMessage,
+        onDeleted: (event) => {
+          if (event.conversationId !== conversationId) return
+          setMessages((current) => current.filter((item) => item.id !== event.messageId))
+        },
+        onTyping: handlePeerTyping,
+      }),
+    [conversationId, handlePeerTyping, subscribeToMessages, upsertServerMessage],
+  )
 
-    const offDeleted = onMessageDeleted((event) => {
-      if (event.conversationId !== conversationId) return
-      setMessages((current) => current.filter((item) => item.id !== event.messageId))
-    })
-
-    return () => {
-      offCreated()
-      offUpdated()
-      offDeleted()
-    }
-  }, [conversationId, onMessageCreated, onMessageUpdated, onMessageDeleted, upsertServerMessage])
+  // Leaving the screen must not leave the peer stuck on "typing…".
+  useEffect(() => stopTyping, [stopTyping])
 
   const send = useCallback(
     (text: string) => {
@@ -257,21 +340,22 @@ export function useConversationMessages(
         pendingId: clientId,
       }
       setMessages((current) => [...current, optimistic])
+      stopTyping()
 
-      // The server echoes this row's `clientId` on the ack, so the reply can
-      // never be confused with another send.
-      api
+      // The broadcast echoes this row's `clientId`, so the event can never be
+      // confused with another send; it replaces the optimistic row.
+      void api
         .send({ conversationId, type: "TEXT", body: text, clientId })
-        .then((message) => upsertServerMessage(message, clientId))
+        .then(() => watchDelivery(clientId))
         .catch(() => setMessageStatus(optimistic.id, "failed"))
     },
-    [api, conversationId, currentUserId, setMessageStatus, upsertServerMessage],
+    [api, conversationId, currentUserId, setMessageStatus, stopTyping, watchDelivery],
   )
 
   /**
    * Sends a media message. The picked file is shown immediately (local uri for
    * images, so there is no blank bubble or layout jump), then uploaded to S3 and
-   * sent over the socket. Any failure marks the row as failed so it is not shown
+   * sent over the conversation channel. Any failure marks the row as failed so it is not shown
    * as sent.
    */
   const sendMedia = useCallback(
@@ -330,7 +414,7 @@ export function useConversationMessages(
           })
 
           const url = mediaObjectUrl(new URL(presign.uploadUrl).origin, presign.key)
-          const message = await api.send({
+          await api.send({
             conversationId,
             type: isImage ? "IMAGE" : "DOC",
             attachment: {
@@ -341,14 +425,14 @@ export function useConversationMessages(
             },
             clientId,
           })
-          upsertServerMessage(message, clientId)
+          watchDelivery(clientId)
         } catch {
           toast({ title: "Could not send the file", variant: "destructive" })
           setMessageStatus(optimisticId, "failed")
         }
       })()
     },
-    [api, conversationId, currentUserId, setMessageStatus, toast, upsertServerMessage],
+    [api, conversationId, currentUserId, setMessageStatus, toast, watchDelivery],
   )
 
   /**
@@ -393,7 +477,7 @@ export function useConversationMessages(
           })
 
           const url = mediaObjectUrl(new URL(presign.uploadUrl).origin, presign.key)
-          const message = await api.send({
+          await api.send({
             conversationId,
             type: "AUDIO",
             attachment: {
@@ -405,14 +489,14 @@ export function useConversationMessages(
             },
             clientId,
           })
-          upsertServerMessage(message, clientId)
+          watchDelivery(clientId)
         } catch {
           toast({ title: "Could not send the audio", variant: "destructive" })
           setMessageStatus(optimisticId, "failed")
         }
       })()
     },
-    [api, conversationId, currentUserId, setMessageStatus, toast, upsertServerMessage],
+    [api, conversationId, currentUserId, setMessageStatus, toast, watchDelivery],
   )
 
   const retry = useCallback(
@@ -430,12 +514,12 @@ export function useConversationMessages(
         ),
       )
 
-      api
+      void api
         .send({ conversationId, type: "TEXT", body: message.text ?? "", clientId })
-        .then((created) => upsertServerMessage(created, clientId))
+        .then(() => watchDelivery(clientId))
         .catch(() => setMessageStatus(`optimistic-${clientId}`, "failed"))
     },
-    [api, conversationId, setMessageStatus, upsertServerMessage],
+    [api, conversationId, setMessageStatus, watchDelivery],
   )
 
   return useMemo(
@@ -449,7 +533,21 @@ export function useConversationMessages(
       sendMedia,
       sendAudio,
       retry,
+      peerTyping,
+      notifyTyping,
     }),
-    [messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, sendAudio, retry],
+    [
+      messages,
+      status,
+      hasOlder,
+      loadingOlder,
+      loadOlder,
+      send,
+      sendMedia,
+      sendAudio,
+      retry,
+      peerTyping,
+      notifyTyping,
+    ],
   )
 }

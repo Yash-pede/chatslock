@@ -6,6 +6,7 @@ import {
   revokeSessionSchema,
   updateMyProfileSchema,
   updateSessionPushTokenSchema,
+  userActiveConversationReq,
   userOnboardingSchema,
 } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
@@ -18,6 +19,7 @@ import {
   revokeSessionController,
   updateMyProfileController,
   updateSessionPushTokenController,
+  userConversationController,
 } from "./users.controller"
 import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
 import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
@@ -49,7 +51,11 @@ app.post(
 )
 app.get("/sessions", getSessionsController)
 app.delete("/sessions/:id", validateWithZod(revokeSessionSchema), revokeSessionController)
-
+app.post(
+  "/conversationMeta",
+  validateWithZod(userActiveConversationReq),
+  userConversationController,
+)
 app.onError(apiErrorHandler)
 
 export const handler = handle(app)

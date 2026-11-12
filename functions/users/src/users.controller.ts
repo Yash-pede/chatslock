@@ -5,6 +5,7 @@ import type {
   RevokeSessionRequest,
   UpdateMyProfileRequest,
   UpdateSessionPushTokenRequest,
+  UserActiveConversationReq,
   UserOnboardingRequest,
 } from "@repo/types/req"
 import {
@@ -16,6 +17,7 @@ import {
   revokeUserSession,
   updateMyProfile,
   updateSessionPushToken,
+  userActiveConversationService,
 } from "./users.service"
 
 export const onboardingController = async (c: Context) => {
@@ -96,4 +98,17 @@ export const revokeSessionController = async (c: Context) => {
 
   await revokeUserSession({ userId: c.get("userId"), refreshTokenHash: params.id })
   return c.json({ message: "Session revoked" })
+}
+
+export const userConversationController = async (c: Context) => {
+  const { body }: UserActiveConversationReq = c.get("valid")
+  const userId = c.get("userId")
+  const status = await userActiveConversationService({
+    userId,
+    conversationId: body.conversationId,
+    status: body.status,
+  })
+  return c.json({
+    peerStatus: status,
+  })
 }

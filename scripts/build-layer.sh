@@ -104,7 +104,7 @@ done
 # --- 4. zip with the required nodejs/node_modules/ layout ---------------------
 echo "==> Zipping layer"
 mkdir -p "$(dirname "$OUT_ZIP")"
-#rm -f "$OUT_ZIP"
+rm -f "$OUT_ZIP"
 ( cd "$BUILD_DIR" && zip -rq "$OUT_ZIP" nodejs )
 echo "    built $OUT_ZIP ($(du -h "$OUT_ZIP" | cut -f1))"
 

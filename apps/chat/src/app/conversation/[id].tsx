@@ -23,6 +23,7 @@ import {
   MediaViewer,
   MessageBubble,
   MessageComposer,
+  TypingBubble,
   useActiveConversation,
   useConversationMessages,
   useMessageListScroll,
@@ -54,12 +55,23 @@ export default function ConversationScreen() {
   const name = params.name ?? "Conversation"
   const avatar = params.avatar
 
-  useActiveConversation(conversationId)
+  const { peerStatus } = useActiveConversation(conversationId, user?.userId ?? null)
 
-  const { messages, status, hasOlder, loadingOlder, loadOlder, send, sendMedia, sendAudio, retry } =
-    useConversationMessages(conversationId, user?.userId ?? null, {
-      unreadCount: Number(params.unread) || 0,
-    })
+  const {
+    messages,
+    status,
+    hasOlder,
+    loadingOlder,
+    loadOlder,
+    send,
+    sendMedia,
+    sendAudio,
+    retry,
+    peerTyping,
+    notifyTyping,
+  } = useConversationMessages(conversationId, user?.userId ?? null, {
+    unreadCount: Number(params.unread) || 0,
+  })
 
   const { listRef, awayFromBottom, onScroll, onScrollBeginDrag, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
@@ -76,6 +88,11 @@ export default function ConversationScreen() {
     if (!lastMessageId || previous === undefined || previous === lastMessageId) return
     if (!awayFromBottom) scrollToBottom(true)
   }, [lastMessageId, awayFromBottom, scrollToBottom])
+
+  // Follow the typing bubble only when the user is already at the bottom.
+  useEffect(() => {
+    if (peerTyping && !awayFromBottom) scrollToBottom(true)
+  }, [peerTyping, awayFromBottom, scrollToBottom])
 
   const media = useMemo(() => collectMedia(messages), [messages])
 
@@ -118,7 +135,12 @@ export default function ConversationScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} disabled={!Keyboard.isVisible()}>
         <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-          <ConversationHeader name={name} avatar={avatar} />
+          <ConversationHeader
+            name={name}
+            avatar={avatar}
+            peerStatus={peerStatus}
+            typing={peerTyping}
+          />
 
           <FlashList
             ref={listRef}
@@ -145,6 +167,7 @@ export default function ConversationScreen() {
               ) : null
             }
             ListEmptyComponent={emptyState}
+            ListFooterComponent={peerTyping ? <TypingBubble visible /> : null}
           />
 
           {awayFromBottom ? (
@@ -158,7 +181,12 @@ export default function ConversationScreen() {
             </Pressable>
           ) : null}
 
-          <MessageComposer onSend={send} onSendMedia={sendMedia} onSendAudio={sendAudio} />
+          <MessageComposer
+            onSend={send}
+            onSendMedia={sendMedia}
+            onSendAudio={sendAudio}
+            onTyping={notifyTyping}
+          />
 
           <MediaViewer
             items={media}

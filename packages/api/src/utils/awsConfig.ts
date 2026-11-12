@@ -1,3 +1,6 @@
+import { Logger } from "@aws-lambda-powertools/logger"
+import { Metrics } from "@aws-lambda-powertools/metrics"
+import { Tracer } from "@aws-lambda-powertools/tracer"
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider"
 import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager"
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
@@ -6,6 +9,14 @@ import { S3Client } from "@aws-sdk/client-s3"
 import Redis from "ioredis"
 
 type Secret = { id?: string; values?: Record<string, string> }
+
+/**
+ * Powertools reads `POWERTOOLS_SERVICE_NAME`, `POWERTOOLS_METRICS_NAMESPACE`,
+ * `POWERTOOLS_LOG_LEVEL` and `POWERTOOLS_TRACE_ENABLED` from the environment;
+ * these fallbacks keep local invocations consistent with the deployed ones.
+ */
+const SERVICE_NAME = process.env.POWERTOOLS_SERVICE_NAME ?? "chat"
+const METRICS_NAMESPACE = process.env.POWERTOOLS_METRICS_NAMESPACE ?? "chat"
 
 /**
  * Lambda-only AWS access. Everything is created on first use so that importing
@@ -20,6 +31,24 @@ export class AWSManager {
   private static secretsCache?: Secret
   private static secretsInFlight?: Promise<Secret>
   private static cache: Redis
+
+  public static readonly logger = new Logger({
+    serviceName: SERVICE_NAME,
+  })
+
+  public static readonly tracer = new Tracer({
+    serviceName: SERVICE_NAME,
+  })
+
+  public static readonly metrics = new Metrics({
+    namespace: METRICS_NAMESPACE,
+    serviceName: SERVICE_NAME,
+    defaultDimensions: { service: SERVICE_NAME },
+  })
+
+  public static flushMetrics(): void {
+    AWSManager.metrics.publishStoredMetrics()
+  }
 
   static get cognitoClient() {
     return (AWSManager.cognito ??= new CognitoIdentityProviderClient())

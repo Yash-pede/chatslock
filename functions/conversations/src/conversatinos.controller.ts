@@ -1,6 +1,7 @@
 import type { Context } from "hono"
 import type {
   GetChatPageConversationRequest,
+  GetConversationMessagesRequest,
   GetConversationProfilesRequest,
   MediaUploadPresignUrlRequest,
 } from "@repo/types/req"
@@ -8,6 +9,7 @@ import {
   chatPageConversationsService,
   conversationProfilesService,
   getMediaUploadPresignedUrl,
+  listMessagesService,
 } from "./conversatinos.service"
 
 export const chatPageConversationsController = async (c: Context) => {
@@ -16,6 +18,19 @@ export const chatPageConversationsController = async (c: Context) => {
     userId: c.get("userId"),
     pageSize: query.pageSize,
     startKey: query.startKey,
+  })
+
+  return c.json(resp)
+}
+
+export const listMessagesController = async (c: Context) => {
+  const { query }: GetConversationMessagesRequest = c.get("valid")
+
+  const resp = await listMessagesService({
+    userId: c.get("userId"),
+    conversationId: query.conversationId,
+    cursor: query.cursor,
+    limit: query.limit,
   })
 
   return c.json(resp)

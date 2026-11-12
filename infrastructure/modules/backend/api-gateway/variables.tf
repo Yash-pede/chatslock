@@ -9,14 +9,6 @@ variable "cognito_admin_client" {
   type = string
 }
 
-variable "ws_authorizer_lambda_invoke_arn" {
-  type = string
-}
-
-variable "ws_events_lambda_invoke_arn" {
-  type = string
-}
-
 variable "cognito_issuer" {
   type = string
 }

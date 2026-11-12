@@ -1,8 +1,14 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
-import { ApiException, AWSManager } from "@repo/api/utils"
-import { AVATAR_CONTENT_TYPES, avatarFileExtension, type AvatarContentType } from "@repo/types/req"
+import { ApiException, AWSManager, parseOrThrow } from "@repo/api/utils"
+import { getPeerUserId, UserId } from "@repo/types"
+import {
+  AVATAR_CONTENT_TYPES,
+  avatarFileExtension,
+  ClientConversationStatus,
+  type AvatarContentType,
+} from "@repo/types/req"
 import { HTTPException } from "hono/http-exception"
 
 export const onboardUser = async ({
@@ -242,4 +248,36 @@ export const revokeUserSession = async ({
 }): Promise<void> => {
   const revoked = await revokeAuthSession({ userId, refreshTokenHash })
   if (!revoked) throw new HTTPException(404, { message: "Session not found" })
+}
+
+export const userActiveConversationService = async ({
+  userId,
+  conversationId,
+  status,
+}: {
+  userId: UserId
+  conversationId: string
+  status: ClientConversationStatus
+}) => {
+  switch (status) {
+    case "OPENED": {
+      await Promise.allSettled([
+        conversationsDao.setUserActiveConversation({ userId, conversationId }),
+        usersDao.updateUser({
+          userId,
+          lastActiveAt: Date.now(),
+        }),
+      ])
+
+      const peerId = getPeerUserId(conversationId, userId)
+      const peerActiveConversation = peerId
+        ? await conversationsDao.getUserActiveConversation({ userId: peerId })
+        : null
+
+      return peerActiveConversation ? "ONLINE" : "OFFLINE"
+    }
+    case "CLOSED":
+      await conversationsDao.deleteUserActiveConversation({ userId })
+      return undefined
+  }
 }

@@ -1,6 +1,11 @@
 import { apiClient } from "@/api/client"
 import type { getUser } from "@repo/types/schema"
-import type { AvatarContentType, UserOnboardingRequest } from "@repo/types/req"
+import type {
+  AvatarContentType,
+  ClientConversationStatus,
+  PeerUserStatus,
+  UserOnboardingRequest,
+} from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
@@ -63,6 +68,18 @@ export const usersApi = {
     expoPushToken: string
   }): Promise<void> => {
     await apiClient.post("/api/users/sessions", input)
+  },
+
+  /**
+   * `POST /api/users/conversationMeta` — reports the conversation currently on
+   * screen. Returns the peer's presence (`undefined` when closing).
+   */
+  setConversationMeta: async (input: {
+    conversationId: string
+    status: ClientConversationStatus
+  }): Promise<PeerUserStatus | undefined> => {
+    const { data } = await apiClient.post("/api/users/conversationMeta", input)
+    return unwrap<{ peerStatus?: PeerUserStatus }>(data).peerStatus
   },
 
   /** `GET /api/users/sessions` — active auth sessions for this account. */

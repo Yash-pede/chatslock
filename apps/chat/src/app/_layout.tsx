@@ -5,7 +5,7 @@ import { BrandMark, Button, SafeArea, Spinner, Text, ThemeProvider, ToastProvide
 import { AuthProvider } from "@/context/AuthContext"
 import { ProfileProvider, useProfile } from "@/context/profile/ProfileContext"
 import { SettingsProvider } from "@/context/SettingsContext"
-import { WsGate } from "@/context/WebSocketContext"
+import { RealtimeGate } from "@/context/RealtimeContext"
 import { UnverifiedGate } from "@/components/unverified-gate"
 import type { Flow } from "@/context/profile/profile"
 import "../../global.css"
@@ -66,10 +66,10 @@ export default function RootLayout() {
           <ProfileProvider>
             <NotificationProvider>
               <SettingsProvider>
-                <WsGate>
+                <RealtimeGate>
                   <StatusBar style="auto" />
                   <RootNavigator />
-                </WsGate>
+                </RealtimeGate>
               </SettingsProvider>
             </NotificationProvider>
           </ProfileProvider>

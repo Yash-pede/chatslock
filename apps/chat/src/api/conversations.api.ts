@@ -1,6 +1,6 @@
 import { File as ExpoFile } from "expo-file-system"
 import { apiClient } from "@/api/client"
-import type { ConversationUserProfile, UserMemberConversation } from "@repo/types/schema"
+import type { ConversationUserProfile, Message, UserMemberConversation } from "@repo/types/schema"
 import type { MediaContentType } from "@repo/types/req"
 
 /** A media upload target returned by `POST /api/conversations/media` (presigned POST). */
@@ -17,6 +17,12 @@ export type { ConversationUserProfile, UserMemberConversation }
 /** `GET /api/conversations/chat` — one page of the caller's conversations. */
 export interface ChatPage {
   conversations: UserMemberConversation[]
+}
+
+/** One page of message history, newest first; `nextCursor` pages older. */
+export interface MessagePage {
+  messages: Message[]
+  nextCursor?: string
 }
 
 /** `POST /api/conversations/profiles` — public profiles for up to 25 user ids. */
@@ -51,6 +57,26 @@ export const conversationsApi = {
       params: { pageSize: input.pageSize ?? MAX_PROFILE_LOOKUP },
     })
     return unwrap<ChatPage>(data)
+  },
+
+  /**
+   * `GET /api/conversations/messages?conversationId=&cursor=&limit=`.
+   * The composite id stays in the query string because `#` in a path breaks
+   * at the URL/proxy layer.
+   */
+  getMessages: async (input: {
+    conversationId: string
+    cursor?: string
+    limit?: number
+  }): Promise<MessagePage> => {
+    const { data } = await apiClient.get("/api/conversations/messages", {
+      params: {
+        conversationId: input.conversationId,
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        limit: input.limit ?? 25,
+      },
+    })
+    return unwrap<MessagePage>(data)
   },
 
   /** `POST /api/conversations/profiles` — peer profiles by id (batched). */

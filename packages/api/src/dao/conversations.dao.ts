@@ -1,4 +1,4 @@
-import { BatchWriteCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
+import { BatchWriteCommand, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
 import {
   CONVERSATION_SK,
   conversationItem,
@@ -26,9 +26,6 @@ export const conversationsDao = {
     const sorted = [...userIds].sort()
     const first = sorted[0]!
     const second = sorted[1]!
-    // Stored as `TYPE#id` (e.g. `DIRECT#u1#u2`), the same composite value the
-    // frontend passes back on every messages call; only the storage keys add
-    // the `CONVERSATION#` prefix.
     const conversationId = buildConversationId(type, `${first}#${second}`)
 
     await AWSManager.dbClient.send(
@@ -84,6 +81,49 @@ export const conversationsDao = {
       })
     })
   },
+  /**
+   * The caller's membership row for one conversation, or `undefined` when the
+   * conversation does not exist or the caller is not a participant. This is the
+   * authorization source for realtime channels.
+   */
+  getUserConversationMember: async (input: {
+    userId: UserId
+    conversationId: ConversationId
+  }) => {
+    parseConversationId(input.conversationId)
+
+    const resp = await AWSManager.dbClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: buildKey(PREFIXES.USER, input.userId),
+          SK: `${PREFIXES.CONVERSATION}${input.conversationId}`,
+        },
+      }),
+    )
+
+    return resp.Item ? parseOrThrow(userMember_conversationItem, resp.Item) : undefined
+  },
+
+  /** True when the two users have a DIRECT conversation (2 ids sorted in the key). */
+  hasDirectConversationWith: async (input: {
+    userId: UserId
+    otherUserId: UserId
+  }): Promise<boolean> => {
+    const [first, second] = [input.userId, input.otherUserId].sort()
+    const resp = await AWSManager.dbClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: buildKey(PREFIXES.USER, input.userId),
+          SK: buildKey(PREFIXES.CONVERSATION, "DIRECT", first!, second!),
+        },
+      }),
+    )
+
+    return Boolean(resp.Item)
+  },
+
   markConversationRead: async (input: {
     userId: UserId
     conversationId: ConversationId
@@ -115,6 +155,8 @@ export const conversationsDao = {
     return (await AWSManager.cacheClient()).set(
       buildKey(PREFIXES.USER, userId, "ACTIVECONV"),
       conversationId,
+      "EX",
+      10 * 60, //10 min opne conv
     )
   },
   getUserActiveConversation: async ({ userId }: { userId: string }) => {

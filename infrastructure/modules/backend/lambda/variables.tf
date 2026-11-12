@@ -2,10 +2,6 @@ variable "api_gateway_execution_arn" {
   type = string
 }
 
-variable "ws_api_gateway_execution_arn" {
-  type = string
-}
-
 variable "api_lambda_secret_arn" {
   type = string
 }
@@ -22,6 +18,3 @@ variable "s3_media_bucket_name" {
   type = string
 }
 
-variable "api_lambda_secret_name" {
-  type = string
-}

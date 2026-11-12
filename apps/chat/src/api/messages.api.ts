@@ -1,101 +1,143 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
+import type { Message } from "@repo/types/schema"
 import {
-  WS_EVENT_TYPE,
-  WS_MESSAGE_ACK_TYPE,
-  WS_MESSAGE_ACTION,
-  WS_MESSAGE_EVENT_TYPE,
-  WS_MESSAGE_OP,
+  MESSAGE_EVENT,
+  messageCreatedEventSchema,
+  messageDeletedAckSchema,
+  messageEditedAckSchema,
+  messageTypingEventSchema,
+  messageUpdatedEventSchema,
   type DeleteMessageData,
   type EditMessageData,
-  type ListMessageData,
-  type Message,
-  type MessageListAck,
+  type MessagePublishPayload,
+  type MessageTypingData,
   type ReadMessageData,
   type SendMessageData,
-} from "@repo/types/schema"
-import { useWs } from "@/context/WebSocketContext"
+  type TypingStatus,
+} from "@repo/types/req"
+import { conversationsApi, type MessagePage } from "@/api/conversations.api"
+import { useRealtime } from "@/context/RealtimeContext"
+import { conversationChannel } from "@/lib/realtime"
 
 /**
- * The wire types are the schema's own (`@repo/types/schema`), shared with the
- * Lambda — this module only narrows what the app may omit. `clientId` is left
- * to the transport (`useWs().request`), except for `send` where the caller
- * supplies it to match its optimistic row.
+ * Request types are the shared `@repo/types/req` schemas. `conversationId`
+ * selects the channel and is stripped from the publish payload, so the wire
+ * data matches the Lambda's schema exactly.
  */
-export type SendMessageInput = SendMessageData
-export type EditMessageInput = EditMessageData
-export type DeleteMessageInput = DeleteMessageData
-/** `limit` defaults server-side, so the app may omit it. */
-export type ListMessagesInput = Omit<ListMessageData, "limit"> & { limit?: number }
-export type ReadMessagesInput = ReadMessageData
-
-interface Reply {
-  clientId?: string
-  message?: Message
-  messages?: Message[]
-  nextCursor?: string
+export type SendMessageInput = SendMessageData & { conversationId: string }
+export type EditMessageInput = EditMessageData & { conversationId: string }
+export type DeleteMessageInput = DeleteMessageData & { conversationId: string }
+export type ReadMessagesInput = ReadMessageData & { conversationId: string }
+export type ListMessagesInput = {
+  conversationId: string
+  cursor?: string
+  limit?: number
 }
 
-const REPLY_TIMEOUT_MS = 10_000
+export type { MessagePage }
 
-/** Reply types a request of each kind may receive (success + error). */
-const REPLY_TYPES: Record<string, string[]> = {
-  [WS_MESSAGE_OP.send]: [WS_MESSAGE_ACK_TYPE.sent, WS_EVENT_TYPE.error],
-  [WS_MESSAGE_OP.edit]: [WS_MESSAGE_ACK_TYPE.edited, WS_EVENT_TYPE.error],
-  [WS_MESSAGE_OP.delete]: [WS_MESSAGE_ACK_TYPE.deleted, WS_EVENT_TYPE.error],
-  [WS_MESSAGE_OP.list]: [WS_MESSAGE_ACK_TYPE.list, WS_EVENT_TYPE.error],
-  [WS_MESSAGE_OP.read]: [WS_EVENT_TYPE.error],
-}
-
-/** Turns a correlated reply into the value the caller expects. */
-function parseReply<T>(op: string, reply: Reply): T {
-  if (op === WS_MESSAGE_OP.list) {
-    return { messages: reply.messages ?? [], nextCursor: reply.nextCursor } as T
-  }
-  if (op === WS_MESSAGE_OP.read) return undefined as T
-  if (!reply.message) throw new Error(`${op} reply had no message`)
-  return reply.message as T
+export interface MessageEventHandlers {
+  onCreated: (message: Message, clientId?: string) => void
+  onUpdated: (message: Message) => void
+  onDeleted: (event: { messageId: string; conversationId: string }) => void
+  onTyping: (event: MessageTypingData) => void
 }
 
 /**
- * Typed message API over the socket. Each call returns a promise that resolves
- * from the reply echoing its own `clientId`, so concurrent requests never see
- * each other's results. `subscribe` is for unsolicited peer events.
+ * Message realtime API for one conversation. Publishes go to the conversation
+ * channel and the resulting event comes back through the same subscription, so
+ * the sender's optimistic row is replaced exactly like the peer's.
  */
-export function useMessagesApi() {
-  const { request, on } = useWs()
+export function useMessagesApi(conversationId: string, currentUserId: string | null) {
+  const { publish, subscribe } = useRealtime()
+  const channel = conversationChannel(conversationId)
 
   const api = useMemo(() => {
-    const sendFrame = <T>(op: string, data: Record<string, unknown>): Promise<T> => {
-      return request<T>(
-        { action: WS_MESSAGE_ACTION, op, data },
-        {
-          types: REPLY_TYPES[op] ?? [WS_EVENT_TYPE.error],
-          timeoutMs: REPLY_TIMEOUT_MS,
-        },
-      ).then((reply) => parseReply<T>(op, reply as unknown as Reply))
-    }
+    const publishMessage = (payload: MessagePublishPayload) => publish(channel, payload)
 
     return {
-      send: (input: SendMessageInput) => sendFrame<Message>(WS_MESSAGE_OP.send, { ...input }),
-      edit: (input: EditMessageInput) => sendFrame<Message>(WS_MESSAGE_OP.edit, { ...input }),
-      remove: (input: DeleteMessageInput) => sendFrame<void>(WS_MESSAGE_OP.delete, { ...input }),
-      list: (input: ListMessagesInput) =>
-        sendFrame<Pick<MessageListAck, "messages" | "nextCursor">>(WS_MESSAGE_OP.list, {
-          ...input,
-        }),
-      read: (input: ReadMessagesInput) => sendFrame<void>(WS_MESSAGE_OP.read, { ...input }),
+      send: (input: SendMessageInput) => {
+        const data: SendMessageData = {
+          type: input.type,
+          ...(input.body !== undefined ? { body: input.body } : {}),
+          ...(input.attachment ? { attachment: input.attachment } : {}),
+          ...(input.clientId ? { clientId: input.clientId } : {}),
+        }
+        return publishMessage({ eventType: MESSAGE_EVENT.send, data })
+      },
+
+      edit: (input: EditMessageInput) => {
+        const data: EditMessageData = {
+          messageId: input.messageId,
+          body: input.body,
+          ...(input.clientId ? { clientId: input.clientId } : {}),
+        }
+        return publishMessage({ eventType: MESSAGE_EVENT.edit, data })
+      },
+
+      remove: (input: DeleteMessageInput) => {
+        const data: DeleteMessageData = {
+          messageId: input.messageId,
+          ...(input.clientId ? { clientId: input.clientId } : {}),
+        }
+        return publishMessage({ eventType: MESSAGE_EVENT.delete, data })
+      },
+
+      read: (input: ReadMessagesInput) => {
+        const data: ReadMessageData = input.clientId ? { clientId: input.clientId } : {}
+        return publishMessage({ eventType: MESSAGE_EVENT.read, data })
+      },
+
+      /** Ephemeral typing state, published on the same conversation channel. */
+      typing: (status: TypingStatus) => {
+        if (!currentUserId) return Promise.resolve()
+        return publishMessage({
+          eventType: MESSAGE_EVENT.typing,
+          data: { userId: currentUserId, status },
+        })
+      },
+
+      /** History is HTTP now; only live traffic stays on the channel. */
+      list: (input: ListMessagesInput): Promise<MessagePage> => conversationsApi.getMessages(input),
     }
-  }, [request])
+  }, [publish, channel, currentUserId])
 
-  const onMessageCreated = (handler: (message: Message) => void) =>
-    on(WS_MESSAGE_EVENT_TYPE.created, (frame) => handler((frame as { message: Message }).message))
+  /**
+   * One channel subscription that fans out by `eventType` instead of three
+   * listeners on the same channel.
+   */
+  const subscribeToMessages = useCallback(
+    (handlers: MessageEventHandlers) =>
+      subscribe(channel, (event) => {
+        const typing = messageTypingEventSchema.safeParse(event)
+        if (typing.success) {
+          handlers.onTyping(typing.data.data)
+          return
+        }
 
-  const onMessageUpdated = (handler: (message: Message) => void) =>
-    on(WS_MESSAGE_EVENT_TYPE.updated, (frame) => handler((frame as { message: Message }).message))
+        const created = messageCreatedEventSchema.safeParse(event)
+        if (created.success) {
+          handlers.onCreated(created.data.data.message, created.data.data.clientId)
+          return
+        }
 
-  const onMessageDeleted = (
-    handler: (event: { messageId: string; conversationId: string; deletedAt: number }) => void,
-  ) => on(WS_MESSAGE_EVENT_TYPE.deleted, (frame) => handler(frame as never))
+        const updated = messageUpdatedEventSchema.safeParse(event)
+        if (updated.success) {
+          handlers.onUpdated(updated.data.data.message)
+          return
+        }
 
-  return { api, onMessageCreated, onMessageUpdated, onMessageDeleted }
+        const edited = messageEditedAckSchema.safeParse(event)
+        if (edited.success) {
+          handlers.onUpdated(edited.data.data.message)
+          return
+        }
+
+        const deleted = messageDeletedAckSchema.safeParse(event)
+        if (deleted.success) handlers.onDeleted(deleted.data.data)
+      }),
+    [subscribe, channel],
+  )
+
+  return { api, subscribeToMessages }
 }

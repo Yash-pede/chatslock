@@ -154,31 +154,6 @@ export const usersDao = {
       }),
     )
   },
-  createUserConnection: async ({
-    userId,
-    connectionId,
-  }: {
-    userId: UserId
-    connectionId: string
-  }) => {
-    return (await AWSManager.cacheClient()).sadd(
-      buildKey(PREFIXES.USER, userId, usersk.CONNECTION),
-      connectionId,
-    )
-  },
-
-  getUserConnections: async (input: { userId: UserId }) => {
-    return await (
-      await AWSManager.cacheClient()
-    ).smembers(buildKey(PREFIXES.USER, input.userId, usersk.CONNECTION))
-  },
-  deleteUserConnection: async (input: { userId: UserId; connectionId: string }) => {
-    return (await AWSManager.cacheClient()).srem(
-      buildKey(PREFIXES.USER, input.userId, usersk.CONNECTION),
-      input.connectionId,
-    )
-  },
-
   /** One auth-session row per login, newest last. */
   getAuthSessions: async (input: { userId: UserId }): Promise<AuthSession[]> => {
     const resp = await AWSManager.dbClient.send(

@@ -61,28 +61,11 @@ module "conversations_lambda" {
   source_path = "${path.root}/../functions/conversations/dist/index.mjs"
 }
 
-module "ws_authorizer_lambda" {
+module "realtime_lambda" {
   source = "terraform-aws-modules/lambda/aws"
 
-  function_name  = "wsAuthorizer"
-  handler        = "index.handler"
-  runtime        = "nodejs24.x"
-  create_role    = false
-  timeout        = 10
-  lambda_role    = aws_iam_role.api_lambda_role.arn
-  vpc_subnet_ids = var.vpc_subnet_ids
-
-  source_path = "${path.root}/../functions/wsAuthorizer/dist/index.mjs"
-  environment_variables = {
-    SECRET_NAME = var.api_lambda_secret_name
-  }
-}
-
-module "ws_events_lambda" {
-  source = "terraform-aws-modules/lambda/aws"
-
-  function_name = "wsEvents"
-  description   = "Lambda For Websocket Events."
+  function_name = "realtimeEvents"
+  description   = "Lambda For PUB/SUB Messaging using AppSync."
   handler       = "index.handler"
   runtime       = "nodejs24.x"
   create_role   = false
@@ -91,9 +74,12 @@ module "ws_events_lambda" {
   layers        = [aws_lambda_layer_version.lambda_layer.arn]
   lambda_role   = aws_iam_role.api_lambda_role.arn
 
-  source_path            = "${path.root}/../functions/wsConnectionEvents/dist/index.mjs"
+  source_path            = "${path.root}/../functions/RealtimeEvent/dist/index.mjs"
   vpc_security_group_ids = [aws_security_group.api_lambda_sg.id]
   vpc_subnet_ids         = var.vpc_subnet_ids
+
+  # XRAY Tracking
+  tracing_mode = "Active"
 
   environment_variables = {
     AWS_LAMBDA_LOG_LEVEL = "INFO"

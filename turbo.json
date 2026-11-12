@@ -24,6 +24,7 @@
     "SECRET_NAME",
     "EXPO_PUBLIC_API_URL",
     "EXPO_PUBLIC_WSAPI_URL",
+    "EXPO_PUBLIC_REGION",
     "NODE_ENV"
   ]
 }

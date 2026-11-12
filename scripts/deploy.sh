@@ -37,7 +37,7 @@ run_step() {
 
 echo "==> Building all workspaces, then every Lambda function"
 run_step "workspace build" pnpm build
-run_step "function build" pnpm --filter auth --filter users --filter conversations --filter ws-connections --filter ws-authorizer run build
+run_step "function build" pnpm --filter auth --filter users --filter conversations --filter conversationsEvent run build
 
 echo "==> Determining functions from Terraform config"
 declare -a FUNCTIONS=()

@@ -8,7 +8,6 @@ export default defineConfig({
     "src/dao/index.ts",
     "src/utils/index.ts",
     "src/req/index.ts",
-    "src/core/index.ts",
     "src/notifications/index.ts",
   ],
   clean: true,

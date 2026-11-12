@@ -1,0 +1,27 @@
+{
+  "name": "conversationsEvent",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm run check-types && esbuild --bundle --format=esm --outfile=./dist/index.mjs --platform=node --target=node24 --packages=external ./src/index.ts",
+    "check-types": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings 0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-lambda-powertools/event-handler": "^2.36.0",
+    "@aws-lambda-powertools/metrics": "^2.36.0",
+    "@repo/api": "workspace:*",
+    "zod": "catalog:",
+    "@repo/types": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
+    "@repo/eslint-config": "workspace:*",
+    "@types/node": "^26.1.1",
+    "esbuild": "catalog:",
+    "eslint": "10.9.1"
+  }
+}

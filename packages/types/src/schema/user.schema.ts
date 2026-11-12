@@ -15,7 +15,7 @@ export const username = str(3, 20)
 export const avatar = z.url("Invalid avatar URL format")
 export const phone = z.string().regex(/^\+\d{10,15}$/, "Invalid phone number")
 
-export const USER_SK = ["PROFILE", "CONNECTION"] as const
+export const USER_SK = ["PROFILE"] as const
 
 export type UserSK = (typeof USER_SK)[number]
 

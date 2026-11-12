@@ -1,23 +1,17 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
 import { messagePushNotification, sendPushNotification } from "@repo/api/notifications"
-import { ApiException, parseConversationId, parseOrThrow } from "@repo/api/utils"
+import { ApiException, AWSManager, parseConversationId, parseOrThrow } from "@repo/api/utils"
 import {
   MAX_MESSAGE_LENGTH,
-  messageCreatedEventSchema,
-  messageDeletedEventSchema,
-  messageUpdatedEventSchema,
-  WS_MESSAGE_EVENT_TYPE,
+  getPeerUserId,
   type ConversationId,
-  type DeleteMessageData,
-  type EditMessageData,
-  type ListMessageData,
   type Message,
   type MessageId,
-  type SendMessageData,
   type UserId,
 } from "@repo/types/schema"
+import type { DeleteMessageReq, EditMessageReq, SendMessageReq } from "@repo/types/req"
 
-type PostToConnection = (connectionId: string, body: unknown) => Promise<void>
+const { logger } = AWSManager
 
 /** Splits `TYPE#id`; a malformed id is a client error. */
 const conversationRef = (conversationId: ConversationId) => {
@@ -63,7 +57,7 @@ const notifyPeer = async ({
   try {
     const [sender, sessions] = await Promise.all([
       usersDao.getUserById({ userId: senderId }).catch((error) => {
-        console.warn("[ws] could not load sender for notification", error)
+        logger.warn("Could not load sender for notification", { error })
         return undefined
       }),
       usersDao.getAuthSessions({ userId: peerId }),
@@ -81,64 +75,52 @@ const notifyPeer = async ({
       ...messagePushNotification(message, sender?.username ?? "New message"),
     })
   } catch (error) {
-    console.error("[ws] push notification failed", error)
+    logger.error("Push notification failed", { error, peerId, senderId })
   }
 }
 
 /**
- * Pushes an event to every open socket of the other participant(s), read from
- * the conversation id. The sender is excluded: their confirmation is the ack.
- * If the peer has no open socket, a new message also goes out as a push.
+ * A push is only sent when the peer is not viewing this conversation. The
+ * conversation channel itself is fanned out by AppSync, so there is no socket
+ * registry to consult here.
  */
-const deliverMessageToPeer = async ({
+const notifyPeerIfNotViewing = async ({
   userId,
   conversationId,
-  payload,
-  postToConnection,
-  notifyMessage,
+  message,
 }: {
   userId: UserId
   conversationId: ConversationId
-  payload: unknown
-  postToConnection: PostToConnection
-  /** Set only for a newly created message; edits/deletes do not notify. */
-  notifyMessage?: Message
+  message: Message
 }): Promise<void> => {
-  const peerId = parseConversationId(conversationId)
-    .conversationId.split("#")
-    .find((id) => id !== userId)
+  try {
+    const peerId = getPeerUserId(conversationId, userId)
+    if (!peerId) return
 
-  if (!peerId) return
+    const peerActiveConversation = await conversationsDao.getUserActiveConversation({
+      userId: peerId,
+    })
+    if (peerActiveConversation === conversationId) return
 
-  const [peersConnectionIds, peerActiveConversation] = await Promise.all([
-    usersDao.getUserConnections({ userId: peerId }),
-    conversationsDao.getUserActiveConversation({ userId: peerId }),
-  ])
-
-  if (peerActiveConversation != conversationId && notifyMessage) {
-    await notifyPeer({ peerId, senderId: userId, message: notifyMessage })
+    await notifyPeer({ peerId, senderId: userId, message })
+  } catch (error) {
+    logger.warn("Peer notification skipped", { error, conversationId })
   }
-
-  await Promise.all(
-    peersConnectionIds.map((connectionId) => postToConnection(connectionId, payload)),
-  )
 }
 
 /** Wraps unexpected DAO failures; `ApiException`s pass through untouched. */
 const asApiError = (error: unknown, context: string): ApiException => {
   if (error instanceof ApiException) return error
-  console.error(context, error)
+  logger.error(context, { error })
   return new ApiException(500, { message: "Internal error. Please try again." })
 }
 
 export const sendMessageService = async ({
   senderId,
   message,
-  postToConnection,
 }: {
   senderId: UserId
-  message: SendMessageData
-  postToConnection: PostToConnection
+  message: SendMessageReq
 }): Promise<Message> => {
   try {
     await assertConversationAccess({ userId: senderId, conversationId: message.conversationId })
@@ -158,18 +140,9 @@ export const sendMessageService = async ({
       senderId,
     })
 
-    await deliverMessageToPeer({
-      userId: senderId,
-      conversationId: message.conversationId,
-      payload: parseOrThrow(messageCreatedEventSchema, {
-        type: WS_MESSAGE_EVENT_TYPE.created,
-        message: created,
-      }),
-      postToConnection,
-      notifyMessage: created,
-    })
+    await notifyPeerIfNotViewing({ userId: senderId, conversationId, message: created })
 
-    console.log("[ws] message.send stored", {
+    logger.info("Message stored", {
       senderId,
       conversationId,
       messageId: created.messageId,
@@ -178,14 +151,11 @@ export const sendMessageService = async ({
 
     return created
   } catch (error) {
-    // The full cause is logged: a validation error from the DAO otherwise
-    // reaches the client as an opaque "Internal error".
-    console.error("[ws] message.send failed", {
+    logger.error("message.send failed", {
       senderId,
       conversationId: message.conversationId,
       type: message.type,
-      error: error instanceof Error ? error.message : String(error),
-      cause: error instanceof Error ? (error.cause as Error | undefined)?.message : undefined,
+      error,
     })
     throw asApiError(error, `message.send failed for ${senderId}`)
   }
@@ -194,11 +164,9 @@ export const sendMessageService = async ({
 export const editMessageService = async ({
   editorId,
   edit,
-  postToConnection,
 }: {
   editorId: UserId
-  edit: EditMessageData
-  postToConnection: PostToConnection
+  edit: EditMessageReq
 }): Promise<Message> => {
   try {
     await assertConversationAccess({ userId: editorId, conversationId: edit.conversationId })
@@ -224,16 +192,6 @@ export const editMessageService = async ({
     const updated = await messagesDao.getMessageById(edit)
     if (!updated) throw new ApiException(404, { message: "Message not found" })
 
-    await deliverMessageToPeer({
-      userId: editorId,
-      conversationId: edit.conversationId,
-      payload: parseOrThrow(messageUpdatedEventSchema, {
-        type: WS_MESSAGE_EVENT_TYPE.updated,
-        message: updated,
-      }),
-      postToConnection,
-    })
-
     return updated
   } catch (error) {
     throw asApiError(error, `message.edit failed for ${editorId}`)
@@ -243,12 +201,10 @@ export const editMessageService = async ({
 export const deleteMessageService = async ({
   deleterId,
   target,
-  postToConnection,
 }: {
   deleterId: UserId
-  target: DeleteMessageData
-  postToConnection: PostToConnection
-}): Promise<{ messageId: MessageId; conversationId: ConversationId; deletedAt: number }> => {
+  target: DeleteMessageReq
+}): Promise<{ messageId: MessageId; conversationId: ConversationId }> => {
   try {
     await assertConversationAccess({ userId: deleterId, conversationId: target.conversationId })
 
@@ -262,49 +218,10 @@ export const deleteMessageService = async ({
       conversationId: target.conversationId,
       messageId: target.messageId,
     })
-    const deletedAt = Date.now()
 
-    await deliverMessageToPeer({
-      userId: deleterId,
-      conversationId: target.conversationId,
-      payload: parseOrThrow(messageDeletedEventSchema, {
-        type: WS_MESSAGE_EVENT_TYPE.deleted,
-        conversationId: target.conversationId,
-        messageId: target.messageId,
-        deletedAt,
-      }),
-      postToConnection,
-    })
-
-    return { conversationId: target.conversationId, messageId: target.messageId, deletedAt }
+    return { conversationId: target.conversationId, messageId: target.messageId }
   } catch (error) {
     throw asApiError(error, `message.delete failed for ${deleterId}`)
-  }
-}
-
-export const listMessagesService = async ({
-  userId,
-  list,
-}: {
-  userId: UserId
-  list: ListMessageData
-}): Promise<{ messages: Message[]; nextCursor?: string }> => {
-  try {
-    await assertConversationAccess({ userId, conversationId: list.conversationId })
-
-    const messages = await messagesDao.getMessagesByConversationId({
-      conversationId: list.conversationId,
-      ...(list.cursor ? { cursor: list.cursor } : {}),
-      limit: list.limit,
-    })
-
-    const oldest = messages.at(-1)
-    return {
-      messages,
-      nextCursor: messages.length === list.limit && oldest ? oldest.messageId : undefined,
-    }
-  } catch (error) {
-    throw asApiError(error, `message.list failed for ${userId}`)
   }
 }
 

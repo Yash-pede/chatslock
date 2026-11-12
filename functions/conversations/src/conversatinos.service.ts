@@ -1,5 +1,5 @@
-import { conversationsDao, usersDao } from "@repo/api/dao"
-import { ApiException, AWSManager, generateUlid } from "@repo/api/utils"
+import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
+import { ApiException, AWSManager, generateUlid, parseConversationId } from "@repo/api/utils"
 import {
   AVATAR_CONTENT_TYPES,
   avatarFileExtension,
@@ -8,9 +8,74 @@ import {
   mediaFileExtension,
   type MediaContentType,
 } from "@repo/types/req"
-import type { ConversationUserProfile, UserMemberConversation } from "@repo/types/schema"
+import type {
+  ConversationId,
+  ConversationUserProfile,
+  Message,
+  MessageId,
+  UserId,
+  UserMemberConversation,
+} from "@repo/types/schema"
 import { MAX_MEDIA_FILE_SIZE } from "@repo/types/req"
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post"
+
+/** Splits `TYPE#id`; a malformed id is a client error. */
+const conversationRef = (conversationId: ConversationId) => {
+  try {
+    return parseConversationId(conversationId)
+  } catch {
+    throw new ApiException(422, { message: `Invalid conversation id "${conversationId}"` })
+  }
+}
+
+/**
+ * Confirms the caller is a participant by checking that the storage part of the
+ * conversation id (`user1#user2`) contains the userId from the access token, or
+ * throws 403.
+ */
+const assertConversationAccess = async ({
+  userId,
+  conversationId,
+}: {
+  userId: UserId
+  conversationId: ConversationId
+}): Promise<void> => {
+  const { type, conversationId: storageId } = conversationRef(conversationId)
+
+  if (type === "DIRECT" && !storageId.split("#").includes(userId)) {
+    throw new ApiException(403, { message: "You are not a participant of this conversation" })
+  }
+}
+
+/**
+ * One page of message history, newest first, oldest id as the next cursor.
+ * `undefined` means the conversation has no older messages.
+ */
+export const listMessagesService = async ({
+  userId,
+  conversationId,
+  cursor,
+  limit,
+}: {
+  userId: UserId
+  conversationId: ConversationId
+  cursor?: MessageId
+  limit: number
+}): Promise<{ messages: Message[]; nextCursor?: MessageId }> => {
+  await assertConversationAccess({ userId, conversationId })
+
+  const messages = await messagesDao.getMessagesByConversationId({
+    conversationId,
+    ...(cursor ? { cursor } : {}),
+    limit,
+  })
+
+  const oldest = messages.at(-1)
+  return {
+    messages,
+    nextCursor: messages.length === limit && oldest ? oldest.messageId : undefined,
+  }
+}
 
 export const chatPageConversationsService = async ({
   userId,
