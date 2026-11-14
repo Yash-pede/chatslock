@@ -132,21 +132,21 @@ export default function ConversationScreen() {
   // selection time is captured in an event handler, never during render.
   const canEdit = Boolean(
     selectedMessage &&
-      selectedMessage.isMine &&
-      selectedMessage.type === "TEXT" &&
-      !selectedMessage.isSystem &&
-      selectedMessage.status !== "failed" &&
-      selectedAt !== null &&
-      selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
+    selectedMessage.isMine &&
+    selectedMessage.type === "TEXT" &&
+    !selectedMessage.isSystem &&
+    selectedMessage.status !== "failed" &&
+    selectedAt !== null &&
+    selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
 
   const canDelete = Boolean(
     selectedMessage &&
-      selectedMessage.isMine &&
-      !selectedMessage.isSystem &&
-      selectedMessage.status !== "failed" &&
-      selectedAt !== null &&
-      selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
+    selectedMessage.isMine &&
+    !selectedMessage.isSystem &&
+    selectedMessage.status !== "failed" &&
+    selectedAt !== null &&
+    selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
 
   const selectMessage = useCallback(

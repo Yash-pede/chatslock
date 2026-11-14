@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import {
-  MAX_MESSAGE_LENGTH,
-  MESSAGE_ACTION_WINDOW_MS,
-  type Message,
-} from "@repo/types/schema"
+import { MAX_MESSAGE_LENGTH, MESSAGE_ACTION_WINDOW_MS, type Message } from "@repo/types/schema"
 import {
   MAX_MEDIA_FILE_SIZE,
   normalizeMediaContentType,
@@ -632,9 +628,7 @@ export function useConversationMessages(
       }
 
       setMessages((current) => current.filter((item) => item.id !== message.id))
-      trackMutation(message.id, () =>
-        setMessages((current) => mergeMessages(current, [message])),
-      )
+      trackMutation(message.id, () => setMessages((current) => mergeMessages(current, [message])))
 
       void api
         .remove({ conversationId, messageId: message.id, clientId: newClientId() })
