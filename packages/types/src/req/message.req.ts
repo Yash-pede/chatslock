@@ -24,7 +24,6 @@ export const MESSAGE_EVENT = {
   send: "message.send",
   edit: "message.edit",
   delete: "message.delete",
-  read: "message.read",
   typing: "message.typing",
 } as const
 export type MessageEvent = (typeof MESSAGE_EVENT)[keyof typeof MESSAGE_EVENT]
@@ -53,10 +52,6 @@ export const deleteMessageData = z.strictObject({
   clientId: clientIdSchema,
 })
 
-export const readMessageData = z.strictObject({
-  clientId: clientIdSchema,
-})
-
 /** Ephemeral typing state; the Lambda validates `userId` against the caller. */
 export const TYPING_STATUS = ["START", "STOP"] as const
 export type TypingStatus = (typeof TYPING_STATUS)[number]
@@ -79,11 +74,6 @@ export const editMessageReq = z.strictObject({
 export const deleteMessageReq = z.strictObject({
   conversationId: compositeConversationId,
   ...deleteMessageData.shape,
-})
-
-export const readMessageReq = z.strictObject({
-  conversationId: compositeConversationId,
-  ...readMessageData.shape,
 })
 
 // ---- server → client: events and acks ----
@@ -132,7 +122,6 @@ export const messageDeletedAckSchema = z.strictObject({
 export type SendMessageData = z.infer<typeof sendMessageData>
 export type EditMessageData = z.infer<typeof editMessageData>
 export type DeleteMessageData = z.infer<typeof deleteMessageData>
-export type ReadMessageData = z.infer<typeof readMessageData>
 
 /**
  * The client → server publish envelope (`{ eventType, data }`). This is the same
@@ -143,7 +132,6 @@ export const messagePublishEnvelopeSchema = z.discriminatedUnion("eventType", [
   z.strictObject({ eventType: z.literal(MESSAGE_EVENT.send), data: sendMessageData }),
   z.strictObject({ eventType: z.literal(MESSAGE_EVENT.edit), data: editMessageData }),
   z.strictObject({ eventType: z.literal(MESSAGE_EVENT.delete), data: deleteMessageData }),
-  z.strictObject({ eventType: z.literal(MESSAGE_EVENT.read), data: readMessageData }),
   z.strictObject({ eventType: z.literal(MESSAGE_EVENT.typing), data: messageTypingData }),
 ])
 export type MessagePublishPayload = z.infer<typeof messagePublishEnvelopeSchema>
@@ -158,7 +146,6 @@ export type MessageTypingEvent = z.infer<typeof messageTypingEventSchema>
 export type SendMessageReq = z.infer<typeof sendMessageReq>
 export type EditMessageReq = z.infer<typeof editMessageReq>
 export type DeleteMessageReq = z.infer<typeof deleteMessageReq>
-export type ReadMessageReq = z.infer<typeof readMessageReq>
 
 export type MessageCreatedEvent = z.infer<typeof messageCreatedEventSchema>
 export type MessageUpdatedEvent = z.infer<typeof messageUpdatedEventSchema>

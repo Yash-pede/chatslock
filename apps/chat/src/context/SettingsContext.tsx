@@ -21,7 +21,7 @@ const DEFAULTS: AppSettings = {
   messageNotifications: true,
   notificationSound: true,
   messagePreview: true,
-  readReceipts: true,
+  readReceipts: false,
   mediaAutoDownload: true,
 }
 

@@ -32,6 +32,18 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
     return { ...base, type: "TEXT", text: "This message was deleted", isSystem: true }
   }
 
+  // Keep the original attachment (not just the image thumbnail / voice URL) so
+  // the selection actions can download the media instead of only previewing it.
+  const attachment = message.attachment
+    ? {
+        id: message.messageId,
+        url: message.attachment.url,
+        fileName: message.attachment.fileName ?? `${message.messageId}`,
+        sizeBytes: message.attachment.sizeBytes,
+        mimeType: message.attachment.mimeType,
+      }
+    : undefined
+
   switch (message.type) {
     case "IMAGE":
       return {
@@ -43,6 +55,7 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
           width: 600,
           height: 600,
         },
+        attachment,
       }
     case "AUDIO":
       return {
@@ -53,6 +66,7 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
           durationSeconds: Math.max(1, Math.round((message.attachment?.durationMs ?? 0) / 1000)),
           waveform: waveformFrom(message.messageId),
         },
+        attachment,
       }
     case "DOC": {
       const mimeType = message.attachment?.mimeType ?? "application/octet-stream"

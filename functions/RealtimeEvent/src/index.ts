@@ -22,7 +22,6 @@ import { assertCanSubscribeToUser, assertOwnUserChannel, userIdFromChannel } fro
 import {
   deleteMessageController,
   editMessageController,
-  readMessageController,
   sendMessageController,
 } from "./message/message.controller"
 
@@ -90,8 +89,6 @@ const handleConversationPublish: PublishHandler = async (payload, event) => {
         return await editMessageController({ conversationId, ...message.data }, event)
       case MESSAGE_EVENT.delete:
         return await deleteMessageController({ conversationId, ...message.data }, event)
-      case MESSAGE_EVENT.read:
-        return await readMessageController({ conversationId, ...message.data }, event)
       case MESSAGE_EVENT.typing:
         // Ephemeral: validate the caller owns the id, then let AppSync broadcast.
         if (message.data.userId !== userId) {

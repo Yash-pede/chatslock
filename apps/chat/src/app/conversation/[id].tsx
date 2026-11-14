@@ -24,6 +24,7 @@ import {
   useToast,
   useThemeColors,
 } from "@repo/ui"
+import * as Clipboard from "expo-clipboard"
 import { MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
 import {
@@ -40,6 +41,7 @@ import {
   TypingBubble,
   useActiveConversation,
   useConversationMessages,
+  useDocumentDownload,
   useMessageListScroll,
   type ChatMessage,
 } from "@/components/messages"
@@ -58,6 +60,7 @@ export default function ConversationScreen() {
   const colors = useThemeColors()
   const insets = useSafeAreaInsets()
   const { toast } = useToast()
+  const { download } = useDocumentDownload()
   const params = useLocalSearchParams<{
     id: string
     name?: string
@@ -140,6 +143,74 @@ export default function ConversationScreen() {
     selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
 
+  const mediaToDownload = useMemo(() => {
+    if (!selectedMessage) return null
+
+    // Prefer the original attachment URL (kept for images and audio too), then
+    // fall back to the rendered media URL. Optimistic rows point at local files
+    // (`file:`/`content:`), which cannot be downloaded until they are uploaded.
+    const isRemote = (url: string | undefined): url is string =>
+      Boolean(
+        url &&
+          !url.startsWith("file:") &&
+          !url.startsWith("content:") &&
+          !url.startsWith("blob:") &&
+          !url.startsWith("data:"),
+      )
+
+    if (selectedMessage.attachment && isRemote(selectedMessage.attachment.url)) {
+      return {
+        url: selectedMessage.attachment.url,
+        fileName: selectedMessage.attachment.fileName,
+        mimeType: selectedMessage.attachment.mimeType,
+      }
+    }
+    if (isRemote(selectedMessage.image?.url)) {
+      return {
+        url: selectedMessage.image.url,
+        fileName: `photo-${selectedMessage.id}.jpg`,
+        mimeType: "image/jpeg",
+      }
+    }
+    if (isRemote(selectedMessage.video?.url)) {
+      return {
+        url: selectedMessage.video.url,
+        fileName: `video-${selectedMessage.id}.mp4`,
+        mimeType: "video/mp4",
+      }
+    }
+    if (isRemote(selectedMessage.voice?.url)) {
+      return {
+        url: selectedMessage.voice.url,
+        fileName: `voice-${selectedMessage.id}.m4a`,
+        mimeType: "audio/mp4",
+      }
+    }
+    return null
+  }, [selectedMessage])
+
+  const canCopy = Boolean(selectedMessage?.text?.trim())
+  const canDownload = mediaToDownload !== null
+
+  const copySelected = useCallback(() => {
+    const text = selectedMessage?.text
+    if (!text) return
+    void Clipboard.setStringAsync(text)
+      .then(() => toast({ title: "Copied", description: "Message copied to clipboard." }))
+      .catch(() => toast({ title: "Could not copy", variant: "destructive" }))
+  }, [selectedMessage, toast])
+
+  const downloadSelected = useCallback(() => {
+    if (!mediaToDownload) return
+    void download(mediaToDownload).then((outcome) => {
+      if (outcome === "saved") {
+        toast({ title: "Downloaded", description: `${mediaToDownload.fileName} saved` })
+      } else if (outcome === "error") {
+        toast({ title: "Could not download", variant: "destructive" })
+      }
+    })
+  }, [download, mediaToDownload, toast])
+
   const canDelete = Boolean(
     selectedMessage &&
     selectedMessage.isMine &&
@@ -149,22 +220,11 @@ export default function ConversationScreen() {
     selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
 
-  const selectMessage = useCallback(
-    (message: ChatMessage) => {
-      // Both actions expire together; don't offer a dead-end selection.
-      if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
-        toast({
-          title: "Actions unavailable",
-          description: "Messages can only be edited or deleted within 15 minutes of sending.",
-          variant: "destructive",
-        })
-        return
-      }
-      setSelectedId(message.id)
-      setSelectedAt(Date.now())
-    },
-    [toast],
-  )
+  const selectMessage = useCallback((message: ChatMessage) => {
+    // Copy/download are always available; edit/delete are gated separately.
+    setSelectedId(message.id)
+    setSelectedAt(Date.now())
+  }, [])
 
   const clearSelection = useCallback(() => {
     setSelectedId(null)
@@ -183,7 +243,7 @@ export default function ConversationScreen() {
           message={item}
           selected={item.id === selectedId}
           onSelect={
-            item.isMine && !item.isSystem && item.status !== "failed"
+            !item.isSystem && item.status !== "failed"
               ? () => selectMessage(item)
               : undefined
           }
@@ -219,8 +279,12 @@ export default function ConversationScreen() {
 
           {selectedMessage ? (
             <MessageActions
+              canCopy={canCopy}
+              canDownload={canDownload}
               canEdit={canEdit}
               canDelete={canDelete}
+              onCopy={copySelected}
+              onDownload={downloadSelected}
               onEdit={() => {
                 setEditTarget(selectedMessage)
                 clearSelection()

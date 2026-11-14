@@ -46,8 +46,7 @@ resource "aws_dynamodb_table" "environment" {
     ignore_changes = [read_capacity, write_capacity]
   }
 
-  # Connection rows carry `expiresAt` so stale WebSocket entries are swept even
-  # when `$disconnect` never fires (network drop, crashed client).
+  # `expiresAt` (epoch seconds) sweeps 30-day-old messages and stale rows.
   ttl {
     attribute_name = "expiresAt"
     enabled        = true

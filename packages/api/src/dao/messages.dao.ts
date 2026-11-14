@@ -36,6 +36,15 @@ const messageKey = (conversationId: ConversationId, messageId: MessageId) => ({
   SK: buildKey(MESSAGE_SK_PREFIX, messageId),
 })
 
+/**
+ * Messages expire after 30 days. DynamoDB TTL is epoch **seconds**, so the
+ * expiry is derived from `Math.floor(now / 1000)` and not from `Date.now()`.
+ */
+const MESSAGE_TTL_SECONDS = 30 * 24 * 60 * 60
+
+/** Hide rows past their TTL until the asynchronous sweep removes them. */
+const notExpired = "(attribute_not_exists(expiresAt) OR expiresAt > :now)"
+
 export const messagesDao = {
   createMessage: async (input: CreateMessageInput): Promise<Message> => {
     const data = parseOrThrow(createMessageSchema, input)
@@ -52,6 +61,7 @@ export const messagesDao = {
       attachment: data.attachment,
       createdAt: now,
       updatedAt: now,
+      expiresAt: Math.floor(now / 1000) + MESSAGE_TTL_SECONDS,
     })
 
     await AWSManager.dbClient.send(
@@ -76,7 +86,14 @@ export const messagesDao = {
     )
 
     const item = result.Item
-    return item === undefined ? undefined : parseOrThrow(messageSchema, item)
+    if (item === undefined) return undefined
+
+    // TTL deletion is asynchronous; hide rows whose 30 days elapsed already.
+    if (typeof item.expiresAt === "number" && item.expiresAt <= Math.floor(Date.now() / 1000)) {
+      return undefined
+    }
+
+    return parseOrThrow(messageSchema, item)
   },
   /** Newest page of messages for a conversation, in chronological (ULID) order. */
   getMessagesByConversationId: async (input: {
@@ -89,11 +106,14 @@ export const messagesDao = {
       new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
-        FilterExpression: input.includeDeleted ? undefined : "attribute_not_exists(deletedAt)",
+        FilterExpression: input.includeDeleted
+          ? notExpired
+          : `attribute_not_exists(deletedAt) AND ${notExpired}`,
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": conversationPk(input.conversationId),
           ":sk": MESSAGE_SK_PREFIX,
+          ":now": Math.floor(Date.now() / 1000),
         },
         ScanIndexForward: false,
         ExclusiveStartKey: input.cursor

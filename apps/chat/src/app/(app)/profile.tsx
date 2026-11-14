@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ScrollView } from "react-native"
 import { useRouter } from "expo-router"
-import { AtSign, KeyRound, LogOut, Phone, ShieldCheck, UserRound } from "lucide-react-native"
+import { AtSign, KeyRound, LogOut, Phone, ShieldCheck, Timer, UserRound } from "lucide-react-native"
 import { SafeArea, SettingsGroup, SettingsIcon, SettingsRow, Text, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
 import { userProfileUrl } from "@/lib/links"
@@ -147,6 +147,17 @@ export default function ProfileScreen() {
         {publicLink ? <PublicLinkGroup link={publicLink} name={name} /> : null}
 
         <SettingsGroup title="Privacy">
+          <SettingsRow
+            title="Messages auto-delete"
+            description="Chats are permanently removed after 30 days as a privacy feature."
+            leading={
+              <SettingsIcon tone="neutral">
+                <Timer size={16} color={colors.foreground} />
+              </SettingsIcon>
+            }
+            value="30 days"
+            chevron={false}
+          />
           <SettingsRow
             title="Active sessions"
             description="Devices signed in to your account"

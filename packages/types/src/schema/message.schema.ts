@@ -107,6 +107,7 @@ const messageItemBase = z.strictObject({
   editedAt: zodTimestamp.optional(),
   /** Soft-delete marker; deleted messages keep their storage row for history sync. */
   deletedAt: zodTimestamp.optional(),
+  expiresAt: zodTimestamp,
 })
 
 /** `.omit()` must run on the refinement-free base; zod v4 rejects refinements there. */
@@ -117,7 +118,7 @@ export const messageItem = messageItemBase.superRefine(refineMessageContent)
  * Non-strict, so a full DynamoDB item can be parsed directly: `PK`/`SK` are dropped.
  */
 export const messageSchema = z
-  .object(messageItemBase.omit({ PK: true, SK: true }).shape)
+  .object(messageItemBase.omit({ PK: true, SK: true, expiresAt: true }).shape)
   .superRefine(refineMessageContent)
 
 /** A new message: identity and storage attributes are supplied by the DAO. */

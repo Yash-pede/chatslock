@@ -1,4 +1,4 @@
-import { BatchWriteCommand, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb"
+import { BatchWriteCommand, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb"
 import {
   CONVERSATION_SK,
   conversationItem,
@@ -119,27 +119,6 @@ export const conversationsDao = {
     )
 
     return Boolean(resp.Item)
-  },
-
-  markConversationRead: async (input: {
-    userId: UserId
-    conversationId: ConversationId
-  }): Promise<void> => {
-    parseConversationId(input.conversationId)
-
-    await AWSManager.dbClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: {
-          PK: buildKey(PREFIXES.USER, input.userId),
-          SK: `${PREFIXES.CONVERSATION}${input.conversationId}`,
-        },
-        UpdateExpression: "SET #unreadCount = :zero",
-        ConditionExpression: "attribute_exists(PK)",
-        ExpressionAttributeNames: { "#unreadCount": "unreadCount" },
-        ExpressionAttributeValues: { ":zero": 0 },
-      }),
-    )
   },
 
   setUserActiveConversation: async ({

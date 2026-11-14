@@ -7,14 +7,12 @@ import {
   messageEditedAckSchema,
   type DeleteMessageReq,
   type EditMessageReq,
-  type ReadMessageReq,
   type SendMessageReq,
 } from "@repo/types/req"
 import { identityOf } from "../identity"
 import {
   deleteMessageService,
   editMessageService,
-  readMessageService,
   sendMessageService,
 } from "./message.service"
 
@@ -64,11 +62,3 @@ export const deleteMessageController = async (
 }
 
 /** Read receipts have no payload; returning nothing also skips the broadcast. */
-export const readMessageController = async (
-  data: ReadMessageReq,
-  event: AppSyncEventsPublishEvent,
-) => {
-  const { userId } = identityOf(event)
-
-  await readMessageService({ userId, conversationId: data.conversationId })
-}

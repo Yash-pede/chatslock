@@ -3,14 +3,11 @@ import { useRouter } from "expo-router"
 import {
   Bell,
   Bug,
-  Database,
   Eye,
   Info,
   Lock,
   MessageSquare,
-  Monitor,
   Moon,
-  Share2,
   Sun,
   UserRound,
   Volume2,
@@ -25,7 +22,6 @@ const APP_VERSION = Constants.expoConfig?.version ?? "1.0.0"
 const THEME_OPTIONS: { key: ThemePreference; label: string; icon: LucideIcon }[] = [
   { key: "light", label: "Light", icon: Sun },
   { key: "dark", label: "Dark", icon: Moon },
-  { key: "system", label: "System", icon: Monitor },
 ]
 
 /** A row whose trailing control is a boolean switch. */
@@ -184,40 +180,17 @@ export default function SettingsScreen() {
 
         <SettingsGroup
           title="Privacy"
-          footer="Read receipts tell the other person you have seen their message."
+          footer="Read receipts are off by default and will be available in a future update."
         >
-          <SettingSwitch
+          <ComingSoonRow
             title="Read receipts"
             description="Share when you have read messages"
             icon={Eye}
-            value={settings.readReceipts}
-            onChange={(next) => setSetting("readReceipts", next)}
           />
           <ComingSoonRow
             title="Blocked contacts"
             description="Manage people you have blocked"
             icon={Lock}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup title="Data and storage">
-          <SettingSwitch
-            title="Auto-download media"
-            description="Download photos on Wi-Fi"
-            icon={Database}
-            value={settings.mediaAutoDownload}
-            onChange={(next) => setSetting("mediaAutoDownload", next)}
-          />
-          <SettingsRow
-            title="Storage usage"
-            description="Cache and downloads"
-            leading={
-              <SettingsIcon tone="neutral">
-                <Database size={16} color={colors.foreground} />
-              </SettingsIcon>
-            }
-            value="Soon"
-            chevron={false}
           />
         </SettingsGroup>
 
@@ -231,11 +204,6 @@ export default function SettingsScreen() {
                 <UserRound size={16} color={colors.foreground} />
               </SettingsIcon>
             }
-          />
-          <ComingSoonRow
-            title="Share Chatslock"
-            description="Invite someone to chat with you"
-            icon={Share2}
           />
           <ComingSoonRow title="Report a problem" icon={Bug} />
         </SettingsGroup>

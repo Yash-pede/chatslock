@@ -1,4 +1,4 @@
-import { Pencil, Trash2, X } from "lucide-react-native"
+import { Copy, Download, Pencil, Trash2, X } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { Text, useThemeColors } from "@repo/ui"
 
@@ -39,14 +39,22 @@ function Action({
  * selected at a time; the bar sits under the header so the list keeps its size.
  */
 export function MessageActions({
+  canCopy,
+  canDownload,
   canEdit,
   canDelete,
+  onCopy,
+  onDownload,
   onEdit,
   onDelete,
   onCancel,
 }: {
+  canCopy: boolean
+  canDownload: boolean
   canEdit: boolean
   canDelete: boolean
+  onCopy: () => void
+  onDownload: () => void
   onEdit: () => void
   onDelete: () => void
   onCancel: () => void
@@ -56,6 +64,22 @@ export function MessageActions({
   return (
     <View className="flex-row items-center justify-between px-2 py-1">
       <View className="flex-row items-center gap-1">
+        {canCopy ? (
+          <Action
+            icon={<Copy size={15} color={colors.foreground} />}
+            label="Copy"
+            tint={colors.foreground}
+            onPress={onCopy}
+          />
+        ) : null}
+        {canDownload ? (
+          <Action
+            icon={<Download size={15} color={colors.foreground} />}
+            label="Download"
+            tint={colors.foreground}
+            onPress={onDownload}
+          />
+        ) : null}
         {canEdit ? (
           <Action
             icon={<Pencil size={15} color={colors.foreground} />}

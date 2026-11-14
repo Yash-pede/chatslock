@@ -11,7 +11,6 @@ import {
   type EditMessageData,
   type MessagePublishPayload,
   type MessageTypingData,
-  type ReadMessageData,
   type SendMessageData,
   type TypingStatus,
 } from "@repo/types/req"
@@ -27,7 +26,6 @@ import { conversationChannel } from "@/lib/realtime"
 export type SendMessageInput = SendMessageData & { conversationId: string }
 export type EditMessageInput = EditMessageData & { conversationId: string }
 export type DeleteMessageInput = DeleteMessageData & { conversationId: string }
-export type ReadMessagesInput = ReadMessageData & { conversationId: string }
 export type ListMessagesInput = {
   conversationId: string
   cursor?: string
@@ -81,11 +79,6 @@ export function useMessagesApi(conversationId: string, currentUserId: string | n
           ...(input.clientId ? { clientId: input.clientId } : {}),
         }
         return publishMessage({ eventType: MESSAGE_EVENT.delete, data })
-      },
-
-      read: (input: ReadMessagesInput) => {
-        const data: ReadMessageData = input.clientId ? { clientId: input.clientId } : {}
-        return publishMessage({ eventType: MESSAGE_EVENT.read, data })
       },
 
       /** Ephemeral typing state, published on the same conversation channel. */

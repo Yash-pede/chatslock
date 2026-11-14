@@ -239,20 +239,3 @@ export const deleteMessageService = async ({
     throw asApiError(error, `message.delete failed for ${deleterId}`)
   }
 }
-
-export const readMessageService = async ({
-  userId,
-  conversationId,
-}: {
-  userId: UserId
-  conversationId: ConversationId
-}): Promise<void> => {
-  try {
-    await assertConversationAccess({ userId, conversationId })
-    // The composite id is the membership row's sort key minus the
-    // CONVERSATION# prefix — the DAO writes exactly that key.
-    await conversationsDao.markConversationRead({ userId, conversationId })
-  } catch (error) {
-    throw asApiError(error, `message.read failed for ${userId}`)
-  }
-}

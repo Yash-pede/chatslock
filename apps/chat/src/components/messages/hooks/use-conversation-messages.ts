@@ -85,7 +85,6 @@ export function useConversationMessages(
   const cursorRef = useRef<string | undefined>(undefined)
   const loadingOlderRef = useRef(false)
   const unreadRemainingRef = useRef(0)
-  const readSentRef = useRef(false)
   const [peerTyping, setPeerTyping] = useState(false)
   const typingSentRef = useRef(false)
   const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -275,14 +274,6 @@ export function useConversationMessages(
     [currentUserId],
   )
 
-  const markRead = useCallback(() => {
-    if (readSentRef.current) return
-    readSentRef.current = true
-    unreadRemainingRef.current = 0
-    // Fire-and-forget: failing to mark read must not affect the screen.
-    void api.read({ conversationId }).catch(() => undefined)
-  }, [api, conversationId])
-
   const loadOlder = useCallback(() => {
     // The ref guard makes repeated scroll events in the same frame harmless.
     if (loadingOlderRef.current || !hasOlder || !cursorRef.current) return
@@ -311,7 +302,6 @@ export function useConversationMessages(
     let cancelled = false
     cursorRef.current = undefined
     loadingOlderRef.current = false
-    readSentRef.current = false
     unreadRemainingRef.current = unreadCount
 
     void (async () => {
@@ -322,7 +312,6 @@ export function useConversationMessages(
         setHasOlder(Boolean(page.nextCursor))
         applyPage(page)
         setStatus("ready")
-        markRead()
       } catch {
         if (!cancelled) setStatus("error")
       }
@@ -331,7 +320,7 @@ export function useConversationMessages(
     return () => {
       cancelled = true
     }
-    // applyPage/markRead are stable per conversationId/api identity
+    // applyPage is stable per conversationId/api identity
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUserId])
 
