@@ -12,7 +12,19 @@ import {
   View,
 } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useThemeColors } from "@repo/ui"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  useToast,
+  useThemeColors,
+} from "@repo/ui"
+import { MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
 import {
   collectMedia,
@@ -20,7 +32,9 @@ import {
   ConversationHeader,
   ConversationListHeader,
   ConversationLoading,
+  EditMessageDialog,
   MediaViewer,
+  MessageActions,
   MessageBubble,
   MessageComposer,
   TypingBubble,
@@ -43,6 +57,7 @@ const keyExtractor = (item: ChatMessage) => item.pendingId ?? item.id
 export default function ConversationScreen() {
   const colors = useThemeColors()
   const insets = useSafeAreaInsets()
+  const { toast } = useToast()
   const params = useLocalSearchParams<{
     id: string
     name?: string
@@ -69,6 +84,8 @@ export default function ConversationScreen() {
     retry,
     peerTyping,
     notifyTyping,
+    editMessage,
+    deleteMessage,
   } = useConversationMessages(conversationId, user?.userId ?? null, {
     unreadCount: Number(params.unread) || 0,
   })
@@ -101,6 +118,58 @@ export default function ConversationScreen() {
     mediaRef.current = media
   }, [media])
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** When the selection started; the edit window is measured from here. */
+  const [selectedAt, setSelectedAt] = useState<number | null>(null)
+  const [editTarget, setEditTarget] = useState<ChatMessage | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null)
+
+  const selectedMessage = selectedId
+    ? (messages.find((message) => message.id === selectedId) ?? null)
+    : null
+
+  // Edits are only offered within the window the backend enforces. The
+  // selection time is captured in an event handler, never during render.
+  const canEdit = Boolean(
+    selectedMessage &&
+      selectedMessage.isMine &&
+      selectedMessage.type === "TEXT" &&
+      !selectedMessage.isSystem &&
+      selectedMessage.status !== "failed" &&
+      selectedAt !== null &&
+      selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
+  )
+
+  const canDelete = Boolean(
+    selectedMessage &&
+      selectedMessage.isMine &&
+      !selectedMessage.isSystem &&
+      selectedMessage.status !== "failed" &&
+      selectedAt !== null &&
+      selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
+  )
+
+  const selectMessage = useCallback(
+    (message: ChatMessage) => {
+      // Both actions expire together; don't offer a dead-end selection.
+      if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+        toast({
+          title: "Actions unavailable",
+          description: "Messages can only be edited or deleted within 15 minutes of sending.",
+          variant: "destructive",
+        })
+        return
+      }
+      setSelectedId(message.id)
+      setSelectedAt(Date.now())
+    },
+    [toast],
+  )
+
+  const clearSelection = useCallback(() => {
+    setSelectedId(null)
+    setSelectedAt(null)
+  }, [])
 
   const openMedia = useCallback((id: string) => {
     const index = mediaRef.current.findIndex((item) => item.id === id)
@@ -112,12 +181,18 @@ export default function ConversationScreen() {
       <View style={styles.row}>
         <MessageBubble
           message={item}
+          selected={item.id === selectedId}
+          onSelect={
+            item.isMine && !item.isSystem && item.status !== "failed"
+              ? () => selectMessage(item)
+              : undefined
+          }
           onRetry={item.status === "failed" ? () => retry(item) : undefined}
           onOpenMedia={openMedia}
         />
       </View>
     ),
-    [openMedia, retry],
+    [openMedia, retry, selectMessage, selectedId],
   )
 
   const emptyState =
@@ -141,6 +216,22 @@ export default function ConversationScreen() {
             peerStatus={peerStatus}
             typing={peerTyping}
           />
+
+          {selectedMessage ? (
+            <MessageActions
+              canEdit={canEdit}
+              canDelete={canDelete}
+              onEdit={() => {
+                setEditTarget(selectedMessage)
+                clearSelection()
+              }}
+              onDelete={() => {
+                setDeleteTarget(selectedMessage)
+                clearSelection()
+              }}
+              onCancel={clearSelection}
+            />
+          ) : null}
 
           <FlashList
             ref={listRef}
@@ -187,6 +278,46 @@ export default function ConversationScreen() {
             onSendAudio={sendAudio}
             onTyping={notifyTyping}
           />
+
+          {editTarget ? (
+            <EditMessageDialog
+              key={editTarget.id}
+              message={editTarget}
+              onCancel={() => setEditTarget(null)}
+              onSave={(text) => {
+                editMessage(editTarget, text)
+                setEditTarget(null)
+              }}
+            />
+          ) : null}
+
+          <AlertDialog
+            open={deleteTarget !== null}
+            onOpenChange={(open) => {
+              if (!open) setDeleteTarget(null)
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this message?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  It will be removed for everyone in this chat.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onPress={() => setDeleteTarget(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive"
+                  onPress={() => {
+                    if (deleteTarget) deleteMessage(deleteTarget)
+                    setDeleteTarget(null)
+                  }}
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <MediaViewer
             items={media}

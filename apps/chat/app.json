@@ -2,7 +2,7 @@
   "expo": {
     "name": "chatslock",
     "slug": "chatzy",
-    "version": "1.0.0",
+    "version": "2.0.12",
     "orientation": "portrait",
     "icon": "./assets/files/icon-1024.png",
     "scheme": "chatslock",

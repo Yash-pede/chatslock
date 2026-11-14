@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo } from "react"
+import { AppState } from "react-native"
 import { Amplify } from "aws-amplify"
 import { events, type EventsChannel } from "aws-amplify/api"
 import { tokenManager, tokenRefreshService } from "@repo/utils"
@@ -22,25 +23,44 @@ Amplify.configure({
   },
 })
 
-/** Payload published by the Lambda; `type` is the server event name. */
+/** Payload published by the Lambda; `eventType` is the server event name. */
 export type RealtimeEvent = { eventType?: string; [key: string]: unknown }
 
 type Listener = (event: RealtimeEvent) => void
-
-interface ChannelEntry {
-  channel: EventsChannel
-  subscription: ReturnType<EventsChannel["subscribe"]>
-}
+type EventsSubscription = ReturnType<EventsChannel["subscribe"]>
 
 /**
- * Channels and their listeners live at module scope so a provider re-render can
- * never detach a screen's subscription. Channels are keyed by their full path
- * (`conversation/DIRECT#u1#u2`, `user/<uuid>`), so any namespace works the same.
+ * Explicit lifecycle for one channel. There is no "is it open?" boolean hidden
+ * in refs: every channel is in exactly one of these states.
  */
+type ChannelState =
+  | { status: "connecting"; promise: Promise<void> }
+  | {
+      status: "open"
+      connection: EventsChannel
+      subscription: EventsSubscription
+      /** ID token the socket was authorized with; a refresh forces a reopen. */
+      idToken: string
+    }
+  | { status: "reconnecting"; timer: ReturnType<typeof setTimeout> }
+
 const listeners = new Map<string, Set<Listener>>()
-const entries = new Map<string, ChannelEntry>()
-const opening = new Map<string, Promise<void>>()
-const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const channels = new Map<string, ChannelState>()
+
+/**
+ * A valid Cognito **ID token** (AppSync Events rejects the access token in the
+ * authorization header). Awaits the shared silent refresh instead of returning
+ * null, so a publish right after expiry still goes out on the first try.
+ */
+const currentIdToken = async (): Promise<string> => {
+  if (!tokenRefreshService.ensureAccessToken()) {
+    await tokenRefreshService.refreshNow()
+  }
+
+  const idToken = tokenManager.getIdToken()
+  if (!idToken) throw new Error("Not authenticated")
+  return idToken
+}
 
 const dispatch = (channel: string, event: RealtimeEvent) => {
   console.log("[realtime] event received", { channel, event })
@@ -48,52 +68,52 @@ const dispatch = (channel: string, event: RealtimeEvent) => {
 }
 
 const closeChannel = (channel: string) => {
-  const timer = retryTimers.get(channel)
-  if (timer) {
-    clearTimeout(timer)
-    retryTimers.delete(channel)
+  const state = channels.get(channel)
+  if (!state) return
+
+  channels.delete(channel)
+
+  if (state.status === "reconnecting") {
+    clearTimeout(state.timer)
+    return
   }
 
-  const entry = entries.get(channel)
-  if (!entry) return
-
-  entries.delete(channel)
-  entry.subscription.unsubscribe()
-  entry.channel.close()
+  if (state.status === "open") {
+    state.subscription.unsubscribe()
+    state.connection.close()
+  }
 }
 
 const scheduleReconnect = (channel: string) => {
-  if (retryTimers.has(channel) || !listeners.get(channel)?.size) return
+  if (!listeners.get(channel)?.size) {
+    channels.delete(channel)
+    return
+  }
 
-  retryTimers.set(
-    channel,
-    setTimeout(() => {
-      retryTimers.delete(channel)
-      void openChannel(channel)
-    }, RECONNECT_DELAY_MS),
-  )
+  if (channels.get(channel)?.status === "reconnecting") return
+
+  const timer = setTimeout(() => {
+    channels.delete(channel)
+    void ensureChannel(channel)
+  }, RECONNECT_DELAY_MS)
+
+  channels.set(channel, { status: "reconnecting", timer })
 }
 
-/** Opens one WebSocket channel (Amplify reuses the socket across channels). */
-const openChannel = (channel: string): Promise<void> => {
-  if (entries.has(channel)) return Promise.resolve()
-  const pending = opening.get(channel)
-  if (pending) return pending
+/** Opens (or joins) the single socket for a channel. */
+const ensureChannel = (channel: string): Promise<void> => {
+  const state = channels.get(channel)
+  if (state?.status === "open") return Promise.resolve()
+  if (state?.status === "connecting") return state.promise
+  if (state?.status === "reconnecting") clearTimeout(state.timer)
 
   const promise = (async () => {
     try {
-      // `ensureAccessToken` also refreshes the session (which rotates the ID
-      // token). AppSync Events requires the Cognito **ID token** in the
-      // Authorization header, not the access token.
-      const accessToken = tokenRefreshService.ensureAccessToken()
-      const idToken = tokenManager.getIdToken()
-      if (!accessToken || !idToken) {
-        // A silent refresh is in flight; retry opens once the session exists.
-        scheduleReconnect(channel)
+      const idToken = await currentIdToken()
+      if (!listeners.get(channel)?.size) {
+        channels.delete(channel)
         return
       }
-
-      if (!listeners.get(channel)?.size) return
 
       const connection = await events.connect(channel, {
         authMode: "lambda",
@@ -102,6 +122,7 @@ const openChannel = (channel: string): Promise<void> => {
 
       if (!listeners.get(channel)?.size) {
         connection.close()
+        channels.delete(channel)
         return
       }
 
@@ -112,12 +133,13 @@ const openChannel = (channel: string): Promise<void> => {
           }
         },
         error: () => {
+          console.warn("[realtime] channel error", { channel })
           closeChannel(channel)
           scheduleReconnect(channel)
         },
       })
 
-      entries.set(channel, { channel: connection, subscription })
+      channels.set(channel, { status: "open", connection, subscription, idToken })
 
       void subscription.ready
         .then(() => console.log("[realtime] channel ready", { channel }))
@@ -130,11 +152,11 @@ const openChannel = (channel: string): Promise<void> => {
       console.warn("[realtime] channel connect failed", { channel, error })
       scheduleReconnect(channel)
     } finally {
-      opening.delete(channel)
+      if (channels.get(channel)?.status === "connecting") channels.delete(channel)
     }
   })()
 
-  opening.set(channel, promise)
+  channels.set(channel, { status: "connecting", promise })
   return promise
 }
 
@@ -157,11 +179,31 @@ export function RealtimeProvider({
 }) {
   useEffect(() => {
     if (!active) {
-      for (const channel of [...entries.keys()]) closeChannel(channel)
+      for (const channel of [...channels.keys()]) closeChannel(channel)
       return
     }
 
-    for (const channel of listeners.keys()) void openChannel(channel)
+    for (const channel of listeners.keys()) void ensureChannel(channel)
+  }, [active])
+
+  // Backgrounding suspends the socket and the token may expire while away:
+  // refresh once and rebuild every channel with the new authorization.
+  useEffect(() => {
+    if (!active) return
+
+    const onAppStateChange = (next: string) => {
+      if (next !== "active") return
+      void (async () => {
+        await tokenRefreshService.refreshNow()
+        for (const channel of listeners.keys()) {
+          closeChannel(channel)
+          void ensureChannel(channel)
+        }
+      })()
+    }
+
+    const subscription = AppState.addEventListener("change", onAppStateChange)
+    return () => subscription.remove()
   }, [active])
 
   const subscribe = useCallback((channel: string, listener: Listener) => {
@@ -170,7 +212,7 @@ export function RealtimeProvider({
     listeners.set(channel, channelListeners)
     console.log("[realtime] subscribe", { channel, listeners: channelListeners.size })
 
-    void openChannel(channel)
+    void ensureChannel(channel)
 
     return () => {
       const current = listeners.get(channel)
@@ -188,23 +230,37 @@ export function RealtimeProvider({
   const publish = useCallback(async (channel: string, payload: unknown) => {
     console.log("[realtime] publish", { channel, payload })
 
-    // Wait for a channel that is already connecting for a subscriber, so the
-    // publish goes out on the same socket instead of opening a second one.
-    await opening.get(channel)
-
-    const entry = entries.get(channel)
-    if (entry) {
-      // Amplify's payload type is a recursive JSON union; callers pass the
-      // schema output, which only needs to be JSON-serializable.
-      await entry.channel.publish(payload as never)
-      console.log("[realtime] publish sent", { channel })
-      return
+    // A publish is authorized with the token captured when the socket opened.
+    // If the session rotated since, the socket must be rebuilt first.
+    const idToken = await currentIdToken()
+    const state = channels.get(channel)
+    if (state?.status === "open" && state.idToken !== idToken) {
+      closeChannel(channel)
+      void ensureChannel(channel)
+    } else if (state?.status === "connecting") {
+      await state.promise
     }
 
-    // Nothing is subscribed: use a short-lived channel just for this publish.
-    const idToken = tokenRefreshService.ensureAccessToken() && tokenManager.getIdToken()
-    if (!idToken) throw new Error("Not authenticated")
+    const current = channels.get(channel)
+    if (current?.status === "open") {
+      try {
+        // Amplify's payload type is a recursive JSON union; callers pass the
+        // schema output, which only needs to be JSON-serializable.
+        await current.connection.publish(payload as never)
+        console.log("[realtime] publish sent", { channel })
+        return
+      } catch (error) {
+        console.warn("[realtime] publish on open channel failed, reconnecting", {
+          channel,
+          error,
+        })
+        closeChannel(channel)
+        void ensureChannel(channel)
+      }
+    }
 
+    // No usable socket (never subscribed, or the open one just failed): publish
+    // over a short-lived channel authorized with the fresh token.
     const connection = await events.connect(channel, {
       authMode: "lambda",
       authToken: idToken,

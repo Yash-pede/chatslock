@@ -150,7 +150,7 @@ export default function ProfileScreen() {
           <SettingsRow
             title="Active sessions"
             description="Devices signed in to your account"
-            onPress={() => router.push("/sessions" as never)}
+            onPress={() => router.push("/sessions")}
             leading={
               <SettingsIcon tone="neutral">
                 <KeyRound size={16} color={colors.foreground} />

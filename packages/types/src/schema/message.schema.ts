@@ -11,8 +11,11 @@ const zodTimestamp = z.number().int().nonnegative()
 
 /** Hard cap for a text message body, enforced at the schema level everywhere. */
 export const MAX_MESSAGE_LENGTH = 4000 as const
-/** Hard cap for a single attachment (25 MB). */
-export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
+/** Hard cap for a single attachment (100 MB). */
+export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
+
+/** Editing and deleting are only allowed this long after the message was created. */
+export const MESSAGE_ACTION_WINDOW_MS = 15 * 60 * 1000
 
 /** Crockford base32 ULID: 10 chars of timestamp + 16 chars of randomness. */
 export const ulid = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, "Invalid ULID")
@@ -40,9 +43,17 @@ export type MessageAttachment = z.infer<typeof messageAttachment>
 
 /** Shared content invariants between the stored item and the API-facing shape. */
 export const refineMessageContent = (
-  data: { type: MessageType; body?: string; attachment?: MessageAttachment },
+  data: {
+    type: MessageType
+    body?: string
+    attachment?: MessageAttachment
+    deletedAt?: number
+  },
   ctx: z.RefinementCtx,
 ) => {
+  // Soft-deleted rows intentionally lose their body/attachment.
+  if (data.deletedAt) return
+
   if (data.type === "TEXT") {
     if (!data.body) {
       ctx.addIssue({ code: "custom", message: "Text messages require a body", path: ["body"] })

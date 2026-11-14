@@ -31,7 +31,7 @@ export const MEDIA_CONTENT_TYPES = [
 
 export type MediaContentType = (typeof MEDIA_CONTENT_TYPES)[number]
 
-const MEDIA_FILE_EXTENSIONS = [
+export const MEDIA_FILE_EXTENSIONS = [
   "mp3",
   "wav",
   "ogg",
@@ -54,21 +54,74 @@ const MEDIA_FILE_EXTENSIONS = [
   "webp",
   "gif",
 ] as const
-type MediaFileExtension = (typeof MEDIA_FILE_EXTENSIONS)[number]
+export type MediaFileExtension = (typeof MEDIA_FILE_EXTENSIONS)[number]
 
+/**
+ * Reads the extension from the final dot, whatever the rest of the name looks
+ * like. Document pickers return real names ("My Report (1).pdf", "résumé.pdf"),
+ * so restricting the base name rejected perfectly valid PDFs and documents.
+ */
 export function mediaFileExtension(fileName: string): MediaFileExtension | undefined {
-  const match = /^[A-Za-z0-9_-]{1,64}\.([A-Za-z0-9]{1,5})$/.exec(fileName)
-  const extension = match?.[1]?.toLowerCase()
+  const name = fileName.trim().toLowerCase()
+  const dot = name.lastIndexOf(".")
+  if (dot <= 0 || dot === name.length - 1) return undefined
+
+  const extension = name.slice(dot + 1)
+  if (!/^[a-z0-9]{1,5}$/.test(extension)) return undefined
 
   return MEDIA_FILE_EXTENSIONS.includes(extension as MediaFileExtension)
     ? (extension as MediaFileExtension)
     : undefined
 }
 
+/** Extension -> canonical MIME type for this app's allowed uploads. */
+const EXTENSION_CONTENT_TYPES: Record<MediaFileExtension, MediaContentType> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  m4a: "audio/mp4",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  txt: "text/plain",
+  zip: "application/zip",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+}
+
+/**
+ * Resolves the picker's MIME value onto the allowed set. Pickers frequently
+ * report `application/octet-stream`, `image/jpg`, `audio/m4a`, etc.; the
+ * extension is the reliable signal, and it is also what the S3 key uses.
+ */
+export function normalizeMediaContentType(
+  fileName: string,
+  contentType: string | undefined,
+): MediaContentType | undefined {
+  if (contentType && (MEDIA_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+    return contentType as MediaContentType
+  }
+
+  const extension = mediaFileExtension(fileName)
+  return extension ? EXTENSION_CONTENT_TYPES[extension] : undefined
+}
+
 export const mediaUploadPresignUrlSchema = baseSchema.extend({
   body: z.strictObject({
-    contentType: z.enum(MEDIA_CONTENT_TYPES, "This file type is not allowed"),
-    fileName: str(1, 100).refine(
+    // Pickers can report variant types (`application/octet-stream`, `audio/m4a`);
+    // the service resolves the canonical type from the extension.
+    contentType: z.string().min(1).max(255),
+    fileName: str(1, 255).refine(
       (name) => mediaFileExtension(name) !== undefined,
       "This file type is not allowed",
     ),

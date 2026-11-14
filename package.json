@@ -9,6 +9,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "eas:build": "cd apps/chat && eas build --platform android --profile production",
+    "eas:buildlocal": "sh -c 'mkdir -p \"$HOME/eas-tmp\" && TMPDIR=\"$HOME/eas-tmp\" eas build --platform android --profile production --local'",
     "eas:submit": "cd apps/chat && eas submit --platform android",
     "lint": "turbo run lint",
     "lint:fix": "turbo run lint -- --fix",

@@ -1,6 +1,7 @@
 import { memo, useState } from "react"
 import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
+import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated"
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
 import { FileText, Pause, Play } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
@@ -30,6 +31,7 @@ function AudioBubble({
   variant,
   time,
   status,
+  selected,
   failedClass,
 }: {
   voice: { url: string; durationSeconds: number; waveform: number[] }
@@ -38,6 +40,7 @@ function AudioBubble({
   variant: "sent" | "received"
   time: string
   status: ChatMessage["status"]
+  selected?: boolean
   failedClass?: string
 }) {
   const player = useAudioPlayer(voice.url ? { uri: voice.url } : null)
@@ -59,7 +62,14 @@ function AudioBubble({
       variant={variant}
       timestamp={time}
       status={status}
-      className={cn("w-[62%] max-w-[66%]", failedClass)}
+      className={cn(
+        "w-[62%] max-w-[66%]",
+        selected &&
+          (variant === "sent"
+            ? "border-2 border-primary-foreground/70 bg-primary/85"
+            : "border-2 border-primary bg-secondary/85"),
+        failedClass,
+      )}
     >
       <View className="flex-row items-center gap-2.5">
         <Pressable
@@ -102,6 +112,10 @@ export interface MessageBubbleProps {
   onRetry?: () => void
   /** Opens the full-screen media viewer at this message's photo/video. */
   onOpenMedia?: (id: string) => void
+  /** Long-press selects the message for edit/delete. */
+  onSelect?: () => void
+  /** Highlights the currently selected bubble. */
+  selected?: boolean
 }
 
 /** Photo bubble that shows a loader until the image has loaded. */
@@ -152,6 +166,8 @@ export const MessageBubble = memo(function MessageBubble({
   message,
   onRetry,
   onOpenMedia,
+  onSelect,
+  selected = false,
 }: MessageBubbleProps) {
   const colors = useThemeColors()
   const variant = message.isMine ? "sent" : "received"
@@ -160,6 +176,23 @@ export const MessageBubble = memo(function MessageBubble({
   const subtle = message.isMine ? `${colors.primaryForeground}99` : colors.mutedForeground
   const failed = message.status === "failed"
   const failedClass = failed ? "border border-destructive/60 bg-destructive/10" : undefined
+  const selectedClass = selected
+    ? message.isMine
+      ? "border-2 border-primary-foreground/70 bg-primary/85"
+      : "border-2 border-primary bg-secondary/85"
+    : undefined
+  // Springy pop when the message is picked; the style worklet owns the animation.
+  const selectedStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: withSpring(selected ? 1.04 : 1, {
+          damping: 15,
+          stiffness: 260,
+          mass: 0.6,
+        }),
+      },
+    ],
+  }))
 
   const renderBubble = () => {
     if (message.isSystem) {
@@ -185,11 +218,13 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
-          className={cn("p-1 px-1 pb-1.5", failedClass)}
+          className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
         >
           <Pressable
             onPress={() => onOpenMedia?.(message.id)}
-            disabled={!onOpenMedia}
+            onLongPress={onSelect}
+            delayLongPress={250}
+            disabled={!onOpenMedia && !onSelect}
             accessibilityRole="imagebutton"
             accessibilityLabel="Open photo"
             className="active:opacity-90"
@@ -218,11 +253,13 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
-          className={cn("p-1 px-1 pb-1.5", failedClass)}
+          className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
         >
           <Pressable
             onPress={() => onOpenMedia?.(message.id)}
-            disabled={!onOpenMedia}
+            onLongPress={onSelect}
+            delayLongPress={250}
+            disabled={!onOpenMedia && !onSelect}
             accessibilityRole="button"
             accessibilityLabel="Play video"
             className="active:opacity-90"
@@ -241,7 +278,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
-          className={cn("w-[78%] max-w-[78%]", failedClass)}
+          className={cn("w-[78%] max-w-[78%]", selectedClass, failedClass)}
         >
           <View className="flex-row items-center gap-3">
             <View
@@ -280,6 +317,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           time={time}
           status={message.status}
+          selected={selected}
           failedClass={failedClass}
         />
       )
@@ -290,7 +328,7 @@ export const MessageBubble = memo(function MessageBubble({
         variant={variant}
         timestamp={time}
         status={message.status}
-        className={failedClass}
+        className={cn(selectedClass, failedClass)}
       >
         <LinkifiedText
           text={message.text ?? ""}
@@ -306,7 +344,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (failed && onRetry) {
     return (
-      <View className="items-end">
+      <Animated.View style={selectedStyle} className="items-end">
         <Pressable
           onPress={onRetry}
           accessibilityRole="button"
@@ -316,9 +354,23 @@ export const MessageBubble = memo(function MessageBubble({
           {bubble}
         </Pressable>
         <Text className="me-1 mt-0.5 text-[10px] text-destructive">Not sent · tap to retry</Text>
-      </View>
+      </Animated.View>
     )
   }
 
-  return bubble
+  if (!onSelect || failed) return <Animated.View style={selectedStyle}>{bubble}</Animated.View>
+
+  return (
+    <Animated.View style={selectedStyle}>
+      <Pressable
+        onLongPress={onSelect}
+        delayLongPress={250}
+        accessibilityRole="button"
+        accessibilityLabel="Select message"
+        className="active:opacity-90"
+      >
+        {bubble}
+      </Pressable>
+    </Animated.View>
+  )
 })

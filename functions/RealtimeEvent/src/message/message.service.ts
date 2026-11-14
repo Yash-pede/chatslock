@@ -3,6 +3,7 @@ import { messagePushNotification, sendPushNotification } from "@repo/api/notific
 import { ApiException, AWSManager, parseConversationId, parseOrThrow } from "@repo/api/utils"
 import {
   MAX_MESSAGE_LENGTH,
+  MESSAGE_ACTION_WINDOW_MS,
   getPeerUserId,
   type ConversationId,
   type Message,
@@ -178,9 +179,20 @@ export const editMessageService = async ({
     }
 
     const existing = await messagesDao.getMessageById(edit)
-    if (!existing) throw new ApiException(404, { message: "Message not found" })
+    if (!existing || existing.deletedAt) {
+      throw new ApiException(404, { message: "Message not found" })
+    }
     if (existing.senderId !== editorId) {
       throw new ApiException(403, { message: "You can only edit your own messages" })
+    }
+    if (Date.now() - existing.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+      throw new ApiException(403, {
+        code: "EDIT_WINDOW_EXPIRED",
+        message: "Messages can only be edited within 15 minutes of sending",
+      })
+    }
+    if (existing.createdAt > Date.now() - 15 * 60) {
+      throw new ApiException(403, { message: "Can only edit messages withing 15 min." })
     }
 
     await messagesDao.editMessage({
@@ -210,6 +222,9 @@ export const deleteMessageService = async ({
 
     const existing = await messagesDao.getMessageById(target)
     if (!existing) throw new ApiException(404, { message: "Message not found" })
+    if (existing.deletedAt) {
+      return { conversationId: target.conversationId, messageId: target.messageId }
+    }
     if (existing.senderId !== deleterId) {
       throw new ApiException(403, { message: "You can only delete your own messages" })
     }

@@ -82,12 +82,14 @@ export const messagesDao = {
   getMessagesByConversationId: async (input: {
     conversationId: ConversationId
     limit: number
+    includeDeleted?: false
     cursor?: MessageId
   }): Promise<Message[]> => {
     const result = await AWSManager.dbClient.send(
       new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
+        FilterExpression: input.includeDeleted ? undefined : "attribute_not_exists(deletedAt)",
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": conversationPk(input.conversationId),
@@ -137,14 +139,11 @@ export const messagesDao = {
       new UpdateCommand({
         TableName: TABLE_NAME,
         Key: messageKey(data.conversationId, data.messageId),
-        UpdateExpression:
-          "SET #deletedAt = :deletedAt, #updatedAt = :updatedAt REMOVE #body, #attachment",
+        UpdateExpression: "SET #deletedAt = :deletedAt, #updatedAt = :updatedAt",
         ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(#deletedAt)",
         ExpressionAttributeNames: {
           "#deletedAt": "deletedAt",
           "#updatedAt": "updatedAt",
-          "#body": "body",
-          "#attachment": "attachment",
         },
         ExpressionAttributeValues: {
           ":deletedAt": now,

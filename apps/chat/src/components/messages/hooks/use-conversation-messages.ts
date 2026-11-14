@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { Message } from "@repo/types/schema"
 import {
-  MEDIA_CONTENT_TYPES,
-  type MediaContentType,
+  MAX_MESSAGE_LENGTH,
+  MESSAGE_ACTION_WINDOW_MS,
+  type Message,
+} from "@repo/types/schema"
+import {
+  MAX_MEDIA_FILE_SIZE,
+  normalizeMediaContentType,
   type MessageTypingData,
   type TypingStatus,
 } from "@repo/types/req"
@@ -29,6 +33,10 @@ export interface UseConversationMessagesResult {
   peerTyping: boolean
   /** Call on every non-empty composer change; throttles START/STOP for us. */
   notifyTyping: () => void
+  /** Replaces the text of an existing message (own messages only). */
+  editMessage: (message: ChatMessage, body: string) => void
+  /** Removes a message (own messages only). */
+  deleteMessage: (message: ChatMessage) => void
 }
 
 const PAGE_SIZE = 25
@@ -86,6 +94,10 @@ export function useConversationMessages(
   const typingSentRef = useRef(false)
   const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const peerTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Edit/delete are optimistic; a missing broadcast rolls them back. */
+  const pendingMutations = useRef(
+    new Map<string, { timer: ReturnType<typeof setTimeout>; rollback: () => void }>(),
+  )
 
   // Reset to the loading state during render when the conversation changes, so
   // the load effect below never has to setState synchronously in its body.
@@ -103,6 +115,26 @@ export function useConversationMessages(
       current.map((item) => (item.id === id ? { ...item, status: next } : item)),
     )
   }, [])
+
+  const settleMutation = useCallback((id: string) => {
+    const pending = pendingMutations.current.get(id)
+    if (!pending) return
+    clearTimeout(pending.timer)
+    pendingMutations.current.delete(id)
+  }, [])
+
+  const trackMutation = useCallback(
+    (id: string, rollback: () => void) => {
+      settleMutation(id)
+      const timer = setTimeout(() => {
+        pendingMutations.current.delete(id)
+        rollback()
+        toast({ title: "Could not update the message", variant: "destructive" })
+      }, DELIVERY_TIMEOUT_MS)
+      pendingMutations.current.set(id, { timer, rollback })
+    },
+    [settleMutation, toast],
+  )
 
   /** Fails the optimistic row if its `clientId` never comes back from the channel. */
   const watchDelivery = useCallback((clientId: string) => {
@@ -125,6 +157,7 @@ export function useConversationMessages(
   const upsertServerMessage = useCallback(
     (message: Message, clientId?: string) => {
       if (message.conversationId !== conversationId) return
+      settleMutation(message.messageId)
       const mapped = { ...toChatMessage(message, currentUserId), status: "sent" as const }
       setMessages((current) => {
         const pendingIndex = current.findIndex((item) =>
@@ -163,7 +196,7 @@ export function useConversationMessages(
         return [...current, mapped]
       })
     },
-    [conversationId, currentUserId],
+    [conversationId, currentUserId, settleMutation],
   )
 
   /** One page via the correlated `list` request; rejects on error/timeout. */
@@ -313,15 +346,24 @@ export function useConversationMessages(
         onUpdated: upsertServerMessage,
         onDeleted: (event) => {
           if (event.conversationId !== conversationId) return
+          settleMutation(event.messageId)
           setMessages((current) => current.filter((item) => item.id !== event.messageId))
         },
         onTyping: handlePeerTyping,
       }),
-    [conversationId, handlePeerTyping, subscribeToMessages, upsertServerMessage],
+    [conversationId, handlePeerTyping, settleMutation, subscribeToMessages, upsertServerMessage],
   )
 
-  // Leaving the screen must not leave the peer stuck on "typing…".
-  useEffect(() => stopTyping, [stopTyping])
+  // Leaving the screen must not leave the peer stuck on "typing…", and pending
+  // edit/delete rollback timers must not fire after unmount.
+  useEffect(() => {
+    const pending = pendingMutations.current
+    return () => {
+      stopTyping()
+      for (const mutation of pending.values()) clearTimeout(mutation.timer)
+      pending.clear()
+    }
+  }, [stopTyping])
 
   const send = useCallback(
     (text: string) => {
@@ -361,13 +403,22 @@ export function useConversationMessages(
   const sendMedia = useCallback(
     (media: PickedMedia) => {
       if (!media || !currentUserId) return
-      if (!MEDIA_CONTENT_TYPES.includes(media.mimeType as MediaContentType)) {
+
+      // Pickers often report `application/octet-stream` or `image/jpg`; resolve
+      // it from the extension so PDFs/documents/images all get a valid type.
+      const contentType = normalizeMediaContentType(media.fileName, media.mimeType)
+      if (!contentType) {
         toast({ title: "File type not supported", variant: "destructive" })
         return
       }
+      if (media.sizeBytes > MAX_MEDIA_FILE_SIZE) {
+        toast({ title: "File is too large (max 100 MB)", variant: "destructive" })
+        return
+      }
 
-      const isImage = media.mimeType.startsWith("image/")
-      const isVideo = media.mimeType.startsWith("video/")
+      const sizeBytes = Math.max(media.sizeBytes, 1)
+      const isImage = contentType.startsWith("image/")
+      const isVideo = contentType.startsWith("video/")
       const clientId = newClientId()
       const optimisticId = `optimistic-${clientId}`
       const dimensions = { width: media.width ?? 600, height: media.height ?? 600 }
@@ -389,8 +440,8 @@ export function useConversationMessages(
                 id: optimisticId,
                 url: "",
                 fileName: media.fileName,
-                sizeBytes: media.sizeBytes,
-                mimeType: media.mimeType,
+                sizeBytes,
+                mimeType: contentType,
               },
         createdAt: Date.now(),
         status: "sending",
@@ -401,16 +452,16 @@ export function useConversationMessages(
       void (async () => {
         try {
           const presign = await conversationsApi.getMediaPresign({
-            contentType: media.mimeType as MediaContentType,
+            contentType,
             fileName: media.fileName,
-            fileSize: media.sizeBytes,
+            fileSize: sizeBytes,
             conversationId,
           })
 
           await uploadMediaToBucket({
             uploadUrl: presign.uploadUrl,
             fields: presign.fields,
-            file: { uri: media.uri, name: media.fileName, type: media.mimeType },
+            file: { uri: media.uri, name: media.fileName, type: contentType },
           })
 
           const url = mediaObjectUrl(new URL(presign.uploadUrl).origin, presign.key)
@@ -419,8 +470,8 @@ export function useConversationMessages(
             type: isImage ? "IMAGE" : "DOC",
             attachment: {
               url,
-              mimeType: media.mimeType,
-              sizeBytes: media.sizeBytes,
+              mimeType: contentType,
+              sizeBytes,
               fileName: media.fileName,
             },
             clientId,
@@ -444,6 +495,17 @@ export function useConversationMessages(
     (audio: RecordedAudio & { fileName: string; mimeType: string }) => {
       if (!audio?.uri || !currentUserId) return
 
+      const contentType = normalizeMediaContentType(audio.fileName, audio.mimeType)
+      if (!contentType) {
+        toast({ title: "Could not send the audio", variant: "destructive" })
+        return
+      }
+      if (audio.sizeBytes > MAX_MEDIA_FILE_SIZE) {
+        toast({ title: "Recording is too large (max 100 MB)", variant: "destructive" })
+        return
+      }
+
+      const sizeBytes = Math.max(audio.sizeBytes, 1)
       const clientId = newClientId()
       const optimisticId = `optimistic-${clientId}`
       const durationSeconds = Math.max(1, Math.round(audio.durationMs / 1000))
@@ -464,16 +526,16 @@ export function useConversationMessages(
       void (async () => {
         try {
           const presign = await conversationsApi.getMediaPresign({
-            contentType: audio.mimeType as MediaContentType,
+            contentType,
             fileName: audio.fileName,
-            fileSize: audio.sizeBytes,
+            fileSize: sizeBytes,
             conversationId,
           })
 
           await uploadMediaToBucket({
             uploadUrl: presign.uploadUrl,
             fields: presign.fields,
-            file: { uri: audio.uri, name: audio.fileName, type: audio.mimeType },
+            file: { uri: audio.uri, name: audio.fileName, type: contentType },
           })
 
           const url = mediaObjectUrl(new URL(presign.uploadUrl).origin, presign.key)
@@ -482,8 +544,8 @@ export function useConversationMessages(
             type: "AUDIO",
             attachment: {
               url,
-              mimeType: audio.mimeType,
-              sizeBytes: audio.sizeBytes,
+              mimeType: contentType,
+              sizeBytes,
               fileName: audio.fileName,
               durationMs: audio.durationMs,
             },
@@ -522,6 +584,69 @@ export function useConversationMessages(
     [api, conversationId, setMessageStatus, watchDelivery],
   )
 
+  const editMessage = useCallback(
+    (message: ChatMessage, body: string) => {
+      const text = body.trim()
+      if (!text || text === message.text || text.length > MAX_MESSAGE_LENGTH) return
+      if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+        toast({
+          title: "Edit window expired",
+          description: "Messages can only be edited within 15 minutes of sending.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const previous = message.text
+      setMessages((current) =>
+        current.map((item) => (item.id === message.id ? { ...item, text } : item)),
+      )
+      trackMutation(message.id, () =>
+        setMessages((current) =>
+          current.map((item) => (item.id === message.id ? { ...item, text: previous } : item)),
+        ),
+      )
+
+      void api
+        .edit({ conversationId, messageId: message.id, body: text, clientId: newClientId() })
+        .catch(() => {
+          settleMutation(message.id)
+          setMessages((current) =>
+            current.map((item) => (item.id === message.id ? { ...item, text: previous } : item)),
+          )
+          toast({ title: "Could not edit the message", variant: "destructive" })
+        })
+    },
+    [api, conversationId, settleMutation, toast, trackMutation],
+  )
+
+  const deleteMessage = useCallback(
+    (message: ChatMessage) => {
+      if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+        toast({
+          title: "Delete window expired",
+          description: "Messages can only be deleted within 15 minutes of sending.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      setMessages((current) => current.filter((item) => item.id !== message.id))
+      trackMutation(message.id, () =>
+        setMessages((current) => mergeMessages(current, [message])),
+      )
+
+      void api
+        .remove({ conversationId, messageId: message.id, clientId: newClientId() })
+        .catch(() => {
+          settleMutation(message.id)
+          setMessages((current) => mergeMessages(current, [message]))
+          toast({ title: "Could not delete the message", variant: "destructive" })
+        })
+    },
+    [api, conversationId, settleMutation, toast, trackMutation],
+  )
+
   return useMemo(
     () => ({
       messages,
@@ -535,6 +660,8 @@ export function useConversationMessages(
       retry,
       peerTyping,
       notifyTyping,
+      editMessage,
+      deleteMessage,
     }),
     [
       messages,
@@ -548,6 +675,8 @@ export function useConversationMessages(
       retry,
       peerTyping,
       notifyTyping,
+      editMessage,
+      deleteMessage,
     ],
   )
 }

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import type { OtpChallenge } from "@repo/utils"
+import { useToast } from "@repo/ui"
 import { useAuth } from "@/context/AuthContext"
 
-const RESEND_COOLDOWN_SECONDS = 30
 const PHONE_DIGITS = 10
 
 export type OtpStep = "phone" | "otp"
@@ -16,6 +16,7 @@ const message = (error: unknown, fallback: string) =>
 
 export function useOtpLogin() {
   const { requestCode, verifyCode, auth } = useAuth()
+  const { toast } = useToast()
   const authError = auth.status === "signedOut" ? auth.error : null
 
   const [phone, setPhone] = useState("+91")
@@ -23,36 +24,29 @@ export function useOtpLogin() {
   const [challenge, setChallenge] = useState<OtpChallenge | null>(null)
   /** Last phone a code was requested for; the OTP step shows its own error. */
   const [pendingPhone, setPendingPhone] = useState<string | null>(null)
-  /** A resend in flight from the OTP step (the first send already moved on). */
-  const [sendingFromOtp, setSendingFromOtp] = useState(false)
   const [otp, setOtp] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [resendIn, setResendIn] = useState(0)
-  const [requesting, setRequesting] = useState(false)
-  const [verifying, setVerifying] = useState(false)
-  /** Bumped to remount the code input at digit one after a failure. */
-  const [attempt, setAttempt] = useState(0)
+  /** Exactly one async activity at a time; no overlapping booleans. */
+  const [activity, setActivity] = useState<"idle" | "requesting" | "verifying">("idle")
+  const requesting = activity === "requesting"
+  const verifying = activity === "verifying"
   /** Latest OTP request; a slow earlier response must not win. */
   const requestSeq = useRef(0)
 
   const phoneValid = useMemo(() => isValidPhone(phone), [phone])
-  const busy = requesting || verifying
-
-  useEffect(() => {
-    if (resendIn <= 0) return
-    const timer = setTimeout(() => setResendIn((value) => value - 1), 1000)
-    return () => clearTimeout(timer)
-  }, [resendIn])
-
-  const fail = (e: unknown, fallback: string) => {
-    setError(message(e, fallback))
+  /** Drops the challenge and returns to the number form (toast the caller). */
+  const backToPhone = () => {
+    requestSeq.current += 1
+    setStep("phone")
+    setChallenge(null)
+    setPendingPhone(null)
+    setError(null)
     setOtp("")
-    setAttempt((value) => value + 1)
   }
 
   const requestOtp = async (): Promise<OtpChallenge | null> => {
     const current = ++requestSeq.current
-    setRequesting(true)
+    setActivity("requesting")
     try {
       const next = await requestCode(phone)
       if (current !== requestSeq.current) return next
@@ -60,28 +54,25 @@ export function useOtpLogin() {
       setPendingPhone(null)
       setOtp("")
       setError(null)
-      setResendIn(RESEND_COOLDOWN_SECONDS)
       return next
     } catch (e) {
       if (current !== requestSeq.current) throw e
-      // The user is already on the OTP step (the send was fired in the
-      // background), so the failure is reported there and they stay on it.
-      setChallenge(null)
-      setError(message(e, `We couldn't send a code to ${phone}. Tap resend to try again.`))
+      toast({
+        title: "Couldn't send the code",
+        description: message(e, `We couldn't send a code to ${phone}.`),
+        variant: "destructive",
+      })
+      backToPhone()
       throw e
     } finally {
-      if (current === requestSeq.current) {
-        setRequesting(false)
-        setSendingFromOtp(false)
-      }
+      setActivity((current) => (current === "requesting" ? "idle" : current))
     }
   }
 
   /**
    * Moves to the code screen immediately and requests the code in the
    * background: waiting for Cognito's challenge made the button feel stuck.
-   * The challenge arrives a moment later; a failure (or the user resending)
-   * is reported on the OTP step, never back on the phone step.
+   * A failure is toasted and sends the user back to the phone step.
    */
   const sendCode = async () => {
     setError(null)
@@ -100,25 +91,29 @@ export function useOtpLogin() {
     void requestOtp().catch(() => undefined)
   }
 
-  const resend = async () => {
-    if (resendIn > 0 || requesting) return
-    setError(null)
-    setSendingFromOtp(true)
-    await requestOtp().catch(() => undefined)
-  }
-
   const verify = async () => {
     if (!challenge) {
-      throw new Error(
-        requesting
-          ? "Still sending your code. Try again in a moment."
-          : "Request a new code to continue.",
-      )
+      toast({
+        title: "Code expired",
+        description: "Enter your number to get a new code.",
+        variant: "destructive",
+      })
+      backToPhone()
+      return
     }
-    if (otp.length !== 6) throw new Error("Enter the 6-digit code to continue.")
-    if (verifying) return
 
-    setVerifying(true)
+    if (otp.length !== 6) {
+      toast({
+        title: "Invalid code",
+        description: "Enter the 6-digit code to continue.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (activity !== "idle") return
+
+    setActivity("verifying")
     setError(null)
     try {
       const result = await verifyCode({
@@ -126,27 +121,26 @@ export function useOtpLogin() {
         username: challenge.username,
         session: challenge.session,
       })
-      // Wrong code: keep the (possibly rotated) session and let the user retry.
+      // Wrong code, expired/rotated session, or any other failure: the OTP step
+      // is a dead end now, so report it and go back to the number form.
       if ("answerCorrect" in result) {
-        setChallenge({ ...challenge, ...(result.session ? { session: result.session } : {}) })
-        fail(result.message, "Incorrect code.")
+        toast({
+          title: "Couldn't verify",
+          description: result.message || "Incorrect code.",
+          variant: "destructive",
+        })
+        backToPhone()
       }
     } catch (e) {
-      fail(e, "Could not verify the code.")
-      throw e
+      toast({
+        title: "Couldn't verify",
+        description: message(e, "Could not verify the code."),
+        variant: "destructive",
+      })
+      backToPhone()
     } finally {
-      setVerifying(false)
+      setActivity((current) => (current === "verifying" ? "idle" : current))
     }
-  }
-
-  const changeNumber = () => {
-    // Invalidate an in-flight request so its result cannot reopen the OTP step.
-    requestSeq.current += 1
-    setStep("phone")
-    setChallenge(null)
-    setPendingPhone(null)
-    setError(null)
-    setOtp("")
   }
 
   return {
@@ -163,18 +157,12 @@ export function useOtpLogin() {
     /** Phone shown on the OTP step (set the moment the code was requested). */
     otpPhone: pendingPhone ?? phone,
     otp,
-    attempt,
     error: error ?? authError,
-    resendIn,
     requesting,
-    /** True while a code requested from the OTP step is in flight. */
-    sendingCode: requesting && (sendingFromOtp || step === "otp"),
     verifying,
     phoneValid,
-    busy,
     sendCode,
-    resend,
     verify,
-    changeNumber,
+    changeNumber: backToPhone,
   }
 }

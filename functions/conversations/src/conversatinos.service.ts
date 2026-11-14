@@ -4,9 +4,8 @@ import {
   AVATAR_CONTENT_TYPES,
   avatarFileExtension,
   type AvatarContentType,
-  MEDIA_CONTENT_TYPES,
   mediaFileExtension,
-  type MediaContentType,
+  normalizeMediaContentType,
 } from "@repo/types/req"
 import type {
   ConversationId,
@@ -113,12 +112,13 @@ export const getMediaUploadPresignedUrl = async ({
   fileName,
   conversationId,
 }: {
-  contentType: MediaContentType
+  contentType: string
   fileName: string
   conversationId: string
 }) => {
   const extension = mediaFileExtension(fileName)
-  if (!MEDIA_CONTENT_TYPES.includes(contentType) || !extension) {
+  const resolved = normalizeMediaContentType(fileName, contentType)
+  if (!extension || !resolved) {
     throw new ApiException(400, {
       code: "INVALID_FILE_TYPE",
       message: "This file type is not allowed",
@@ -135,7 +135,9 @@ export const getMediaUploadPresignedUrl = async ({
   const command = await createPresignedPost(AWSManager.s3Client, {
     Bucket: bucket,
     Key: key,
-    Expires: 60 * 2,
+    // Voice notes and larger files can take a while on mobile networks; a
+    // two-minute policy expired mid-upload and surfaced as a failed send.
+    Expires: 60 * 10,
     Conditions: [["content-length-range", 1, MAX_MEDIA_FILE_SIZE]],
   })
 
