@@ -152,10 +152,10 @@ export default function ConversationScreen() {
     const isRemote = (url: string | undefined): url is string =>
       Boolean(
         url &&
-          !url.startsWith("file:") &&
-          !url.startsWith("content:") &&
-          !url.startsWith("blob:") &&
-          !url.startsWith("data:"),
+        !url.startsWith("file:") &&
+        !url.startsWith("content:") &&
+        !url.startsWith("blob:") &&
+        !url.startsWith("data:"),
       )
 
     if (selectedMessage.attachment && isRemote(selectedMessage.attachment.url)) {
@@ -243,9 +243,7 @@ export default function ConversationScreen() {
           message={item}
           selected={item.id === selectedId}
           onSelect={
-            !item.isSystem && item.status !== "failed"
-              ? () => selectMessage(item)
-              : undefined
+            !item.isSystem && item.status !== "failed" ? () => selectMessage(item) : undefined
           }
           onRetry={item.status === "failed" ? () => retry(item) : undefined}
           onOpenMedia={openMedia}

@@ -10,11 +10,7 @@ import {
   type SendMessageReq,
 } from "@repo/types/req"
 import { identityOf } from "../identity"
-import {
-  deleteMessageService,
-  editMessageService,
-  sendMessageService,
-} from "./message.service"
+import { deleteMessageService, editMessageService, sendMessageService } from "./message.service"
 
 const clientIdOf = (data: { clientId?: string }) =>
   data.clientId ? { clientId: data.clientId } : {}
