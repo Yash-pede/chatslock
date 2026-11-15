@@ -1,10 +1,7 @@
 import z from "zod"
-import { compositeConversationId } from "../schema/conversation.schema"
+import { userId } from "../schema/user.schema"
 import { baseSchema } from "./base"
-
-/** Presence the client reports when it opens or leaves a conversation. */
-export const CLIENT_CONVERSATION_STATUS = ["OPENED", "CLOSED"] as const
-export type ClientConversationStatus = (typeof CLIENT_CONVERSATION_STATUS)[number]
+import { MAX_PROFILE_LOOKUP } from "./conversations.req"
 
 export const PEER_USER_STATUS = ["ONLINE", "OFFLINE"] as const
 export type PeerUserStatus = (typeof PEER_USER_STATUS)[number]
@@ -24,10 +21,22 @@ export const userPublishEnvelopeSchema = z.discriminatedUnion("eventType", [
 ])
 export type UserPublishPayload = z.infer<typeof userPublishEnvelopeSchema>
 
-export const userActiveConversationReq = baseSchema.extend({
-  body: z.strictObject({
-    conversationId: compositeConversationId,
-    status: z.enum(CLIENT_CONVERSATION_STATUS),
+/** `GET /api/users/profile?username=…` — one public profile. */
+export const getPublicProfileReq = baseSchema.extend({
+  query: z.strictObject({
+    username: z.string().min(3).max(20),
   }),
 })
-export type UserActiveConversationReq = z.infer<typeof userActiveConversationReq>
+export type GetPublicProfileRequest = z.infer<typeof getPublicProfileReq>
+
+/** `POST /api/users/profiles` — public profiles for a page of peer ids. */
+export const getUserProfilesReq = baseSchema.extend({
+  body: z.strictObject({
+    userIds: z
+      .array(userId)
+      .min(1, "At least one userId is required")
+      .max(MAX_PROFILE_LOOKUP, `At most ${MAX_PROFILE_LOOKUP} userIds are allowed`)
+      .refine((ids) => new Set(ids).size === ids.length, "userIds must be unique"),
+  }),
+})
+export type GetUserProfilesRequest = z.infer<typeof getUserProfilesReq>

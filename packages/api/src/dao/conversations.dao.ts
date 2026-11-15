@@ -2,6 +2,7 @@ import { BatchWriteCommand, GetCommand, QueryCommand } from "@aws-sdk/lib-dynamo
 import {
   CONVERSATION_SK,
   conversationItem,
+  conversationSchema,
   PREFIXES,
   TABLE_NAME,
   userMember_conversationItem,
@@ -81,6 +82,23 @@ export const conversationsDao = {
       })
     })
   },
+  /** Conversation metadata (type + createdAt), or `undefined` if it is gone. */
+  getConversation: async (conversationId: ConversationId) => {
+    parseConversationId(conversationId)
+
+    const resp = await AWSManager.dbClient.send(
+      new GetCommand({
+        TableName: TABLE_NAME,
+        Key: {
+          PK: `${PREFIXES.CONVERSATION}${conversationId}`,
+          SK: CONVERSATION_SK[0],
+        },
+      }),
+    )
+
+    return resp.Item ? parseOrThrow(conversationSchema, resp.Item) : undefined
+  },
+
   /**
    * The caller's membership row for one conversation, or `undefined` when the
    * conversation does not exist or the caller is not a participant. This is the

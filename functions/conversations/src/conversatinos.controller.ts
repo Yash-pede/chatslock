@@ -1,13 +1,15 @@
 import type { Context } from "hono"
 import type {
+  CreateDirectConversationRequest,
   GetChatPageConversationRequest,
   GetConversationMessagesRequest,
-  GetConversationProfilesRequest,
+  GetDirectConversationRequest,
   MediaUploadPresignUrlRequest,
 } from "@repo/types/req"
 import {
   chatPageConversationsService,
-  conversationProfilesService,
+  createDirectConversationService,
+  getDirectConversationService,
   getMediaUploadPresignedUrl,
   listMessagesService,
 } from "./conversatinos.service"
@@ -36,14 +38,6 @@ export const listMessagesController = async (c: Context) => {
   return c.json(resp)
 }
 
-/** Batch-resolves the other participant(s) of the listed conversations. */
-export const conversationProfilesController = async (c: Context) => {
-  const { body }: GetConversationProfilesRequest = c.get("valid")
-  const resp = await conversationProfilesService({ userIds: body.userIds })
-
-  return c.json(resp)
-}
-
 export const getMediaUploadPresignedUrlController = async (c: Context) => {
   const { body }: MediaUploadPresignUrlRequest = c.get("valid")
 
@@ -53,4 +47,24 @@ export const getMediaUploadPresignedUrlController = async (c: Context) => {
     conversationId: body.conversationId,
   })
   return c.json(url)
+}
+
+export const getDirectConversationController = async (c: Context) => {
+  const { query }: GetDirectConversationRequest = c.get("valid")
+  const resp = await getDirectConversationService({
+    userId: c.get("userId"),
+    otherUserId: query.userId,
+  })
+
+  return c.json(resp)
+}
+
+export const createDirectConversationController = async (c: Context) => {
+  const { body }: CreateDirectConversationRequest = c.get("valid")
+  const resp = await createDirectConversationService({
+    userId: c.get("userId"),
+    otherUserId: body.userId,
+  })
+
+  return c.json(resp)
 }

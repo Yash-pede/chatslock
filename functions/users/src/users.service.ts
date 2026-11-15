@@ -2,12 +2,12 @@ import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
 import { ApiException, AWSManager, parseOrThrow } from "@repo/api/utils"
-import { getPeerUserId, UserId } from "@repo/types"
+import { ConversationUserProfile, conversationUserProfileSchema, type UserId } from "@repo/types"
 import {
   AVATAR_CONTENT_TYPES,
   avatarFileExtension,
-  ClientConversationStatus,
   type AvatarContentType,
+  type PeerUserStatus,
 } from "@repo/types/req"
 import { HTTPException } from "hono/http-exception"
 
@@ -250,34 +250,54 @@ export const revokeUserSession = async ({
   if (!revoked) throw new HTTPException(404, { message: "Session not found" })
 }
 
-export const userActiveConversationService = async ({
-  userId,
-  conversationId,
-  status,
+/** How recent `lastActiveAt` must be for a user to count as online. */
+
+/**
+ * Public profile shown on `/u/<username>` and in the chat list. Fetching it
+ * also marks the caller active, which is what powers the online indicator.
+ */
+const markViewerActive = (viewerId: UserId) =>
+  usersDao.updateUser({ userId: viewerId, lastActiveAt: Date.now() }).catch(() => undefined)
+
+const withPresence = async (profile: ConversationUserProfile) => {
+  const activeConversation = await conversationsDao.getUserActiveConversation({
+    userId: profile.userId,
+  })
+
+  const status: PeerUserStatus = activeConversation ? "ONLINE" : "OFFLINE"
+
+  return { ...profile, status }
+}
+
+/** `/u/<username>`: resolve the handle, then return the public profile. */
+export const getPublicProfileByUsername = async ({
+  viewerId,
+  username,
 }: {
-  userId: UserId
-  conversationId: string
-  status: ClientConversationStatus
+  viewerId: UserId
+  username: string
 }) => {
-  switch (status) {
-    case "OPENED": {
-      await Promise.allSettled([
-        conversationsDao.setUserActiveConversation({ userId, conversationId }),
-        usersDao.updateUser({
-          userId,
-          lastActiveAt: Date.now(),
-        }),
-      ])
+  await markViewerActive(viewerId)
 
-      const peerId = getPeerUserId(conversationId, userId)
-      const peerActiveConversation = peerId
-        ? await conversationsDao.getUserActiveConversation({ userId: peerId })
-        : null
+  const [match] =
+    (await usersDao.getUserByUsername({ username: username.trim().toLowerCase() })) ?? []
+  if (!match) throw new HTTPException(404, { message: "User not found" })
 
-      return peerActiveConversation ? "ONLINE" : "OFFLINE"
-    }
-    case "CLOSED":
-      await conversationsDao.deleteUserActiveConversation({ userId })
-      return undefined
-  }
+  // The schema is non-strict, so this also strips phone, role and auth fields.
+  const profile = parseOrThrow(conversationUserProfileSchema, match)
+  return await withPresence(profile)
+}
+
+/** Batch profiles for the chat list (by user id). */
+export const getPublicProfilesByIds = async ({
+  viewerId,
+  userIds,
+}: {
+  viewerId: UserId
+  userIds: string[]
+}) => {
+  await markViewerActive(viewerId)
+
+  const profiles = await usersDao.getPublicProfilesByIds({ userIds })
+  return Promise.all(profiles.map((profile) => withPresence(profile)))
 }

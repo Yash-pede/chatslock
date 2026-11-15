@@ -49,18 +49,22 @@ export const getConversationMessagesSchema = baseSchema.extend({
 
 export type GetConversationMessagesRequest = z.infer<typeof getConversationMessagesSchema>
 
+/** `GET /api/conversations/direct?userId=` — the direct chat with one peer. */
+export const getDirectConversationSchema = baseSchema.extend({
+  query: z.strictObject({
+    userId,
+  }),
+})
+export type GetDirectConversationRequest = z.infer<typeof getDirectConversationSchema>
+
+/** `POST /api/conversations/direct` — create (or return) a direct chat. */
+export const createDirectConversationSchema = baseSchema.extend({
+  body: z.strictObject({
+    userId,
+  }),
+})
+export type CreateDirectConversationRequest = z.infer<typeof createDirectConversationSchema>
+
 /** Max peers resolvable in one request (the chat page's page size). */
 export const MAX_PROFILE_LOOKUP = 25
 
-export const getConversationProfilesSchema = baseSchema.extend({
-  body: z.strictObject({
-    userIds: z
-      .array(userId)
-      .min(1, "At least one userId is required")
-      .max(MAX_PROFILE_LOOKUP, `At most ${MAX_PROFILE_LOOKUP} userIds are allowed`)
-      .refine((ids) => new Set(ids).size === ids.length, "userIds must be unique"),
-  }),
-})
-
-export type GetConversationProfilesRequest = z.infer<typeof getConversationProfilesSchema>
-export type GetConversationProfilesInput = z.input<typeof getConversationProfilesSchema>

@@ -4,20 +4,22 @@ import type {
   ConfirmAvatarUploadRequest,
   RevokeSessionRequest,
   UpdateMyProfileRequest,
+  GetPublicProfileRequest,
+  GetUserProfilesRequest,
   UpdateSessionPushTokenRequest,
-  UserActiveConversationReq,
   UserOnboardingRequest,
 } from "@repo/types/req"
 import {
   confirmAvatarUpload,
   getAvatarPresignedUrl,
+  getPublicProfileByUsername,
+  getPublicProfilesByIds,
   getUserById,
   getUserSessions,
   onboardUser,
   revokeUserSession,
   updateMyProfile,
   updateSessionPushToken,
-  userActiveConversationService,
 } from "./users.service"
 
 export const onboardingController = async (c: Context) => {
@@ -100,15 +102,27 @@ export const revokeSessionController = async (c: Context) => {
   return c.json({ message: "Session revoked" })
 }
 
-export const userConversationController = async (c: Context) => {
-  const { body }: UserActiveConversationReq = c.get("valid")
-  const userId = c.get("userId")
-  const status = await userActiveConversationService({
-    userId,
-    conversationId: body.conversationId,
-    status: body.status,
+
+/** Public profile for `/u/<username>` and the chat list; also marks the caller active. */
+export const getPublicProfileController = async (c: Context) => {
+  const { query }: GetPublicProfileRequest = c.get("valid")
+
+  const resp = await getPublicProfileByUsername({
+    viewerId: c.get("userId"),
+    username: query.username,
   })
-  return c.json({
-    peerStatus: status,
+
+  return c.json(resp)
+}
+
+/** Batch public profiles for the chat list. */
+export const getPublicProfilesController = async (c: Context) => {
+  const { body }: GetUserProfilesRequest = c.get("valid")
+
+  const profiles = await getPublicProfilesByIds({
+    viewerId: c.get("userId"),
+    userIds: body.userIds,
   })
+
+  return c.json({ profiles })
 }

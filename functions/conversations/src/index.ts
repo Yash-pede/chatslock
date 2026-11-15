@@ -3,15 +3,17 @@ import { handle } from "@hono/aws-lambda"
 import type { ApiGatewayRequestContextV2, LambdaContext, LambdaEvent } from "@hono/aws-lambda"
 import { apiErrorHandler, withAuth, withResponse } from "@repo/api/utils"
 import {
+  createDirectConversationSchema,
   getChatPageConversationSchema,
   getConversationMessagesSchema,
-  getConversationProfilesSchema,
+  getDirectConversationSchema,
   mediaUploadPresignUrlSchema,
 } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
 import {
   chatPageConversationsController,
-  conversationProfilesController,
+  createDirectConversationController,
+  getDirectConversationController,
   getMediaUploadPresignedUrlController,
   listMessagesController,
 } from "./conversatinos.controller"
@@ -28,13 +30,18 @@ app.use(withResponse)
 app.use(withAuth)
 
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
-
 app.get("/messages", validateWithZod(getConversationMessagesSchema), listMessagesController)
 
+app.get(
+  "/direct",
+  validateWithZod(getDirectConversationSchema),
+  getDirectConversationController,
+)
+
 app.post(
-  "/profiles",
-  validateWithZod(getConversationProfilesSchema),
-  conversationProfilesController,
+  "/direct",
+  validateWithZod(createDirectConversationSchema),
+  createDirectConversationController,
 )
 
 app.post(

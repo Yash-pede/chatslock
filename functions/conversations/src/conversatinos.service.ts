@@ -1,5 +1,11 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
-import { ApiException, AWSManager, generateUlid, parseConversationId } from "@repo/api/utils"
+import {
+  ApiException,
+  AWSManager,
+  buildConversationId,
+  generateUlid,
+  parseConversationId,
+} from "@repo/api/utils"
 import {
   AVATAR_CONTENT_TYPES,
   avatarFileExtension,
@@ -9,7 +15,6 @@ import {
 } from "@repo/types/req"
 import type {
   ConversationId,
-  ConversationUserProfile,
   Message,
   MessageId,
   UserId,
@@ -90,21 +95,6 @@ export const chatPageConversationsService = async ({
 }
 
 /**
- * Resolve the peer profiles for a set of user ids. Direct conversation ids are
- * `u1#u2`, so the client splits the id and asks for the other participant here
- * instead of receiving full user records in the conversation list.
- */
-export const conversationProfilesService = async ({
-  userIds,
-}: {
-  userIds: string[]
-}): Promise<{ profiles: ConversationUserProfile[] }> => {
-  const profiles = await usersDao.getPublicProfilesByIds({ userIds })
-
-  return { profiles }
-}
-
-/**
  * Presigns a direct PUT of a media file into the media bucket.
  */
 export const getMediaUploadPresignedUrl = async ({
@@ -142,4 +132,75 @@ export const getMediaUploadPresignedUrl = async ({
   })
 
   return { uploadUrl: encodeURI(command.url), fields: command.fields, key }
+}
+
+const directConversationId = (userId: UserId, otherUserId: UserId) => {
+  const [first, second] = [userId, otherUserId].sort()
+  return buildConversationId("DIRECT", `${first}#${second}`)
+}
+
+/** The caller's direct conversation with one peer, or `null` when none exists. */
+export const getDirectConversationService = async ({
+  userId,
+  otherUserId,
+}: {
+  userId: UserId
+  otherUserId: UserId
+}) => {
+  if (userId === otherUserId) {
+    throw new ApiException(400, { message: "Choose another user" })
+  }
+
+  const conversationId = directConversationId(userId, otherUserId)
+  const member = await conversationsDao.getUserConversationMember({ userId, conversationId })
+  if (!member) return null
+
+  const meta = await conversationsDao.getConversation(conversationId)
+
+  return {
+    conversationId,
+    conversationType: "DIRECT" as const,
+    unreadCount: member.unreadCount,
+    createdAt: meta?.createdAt ?? null,
+  }
+}
+
+/** Direct chats are only allowed between one normal user and one agent. */
+const isUserAgentPair = (a: string, b: string) =>
+  (a === "user" && b === "agent") || (a === "agent" && b === "user")
+
+/**
+ * Creates the direct conversation if the pair is user + agent; an existing one
+ * is returned instead of re-created so createdAt/unread stay intact.
+ */
+export const createDirectConversationService = async ({
+  userId,
+  otherUserId,
+}: {
+  userId: UserId
+  otherUserId: UserId
+}) => {
+  if (userId === otherUserId) {
+    throw new ApiException(400, { message: "Choose another user" })
+  }
+
+  const [self, other] = await Promise.all([
+    usersDao.getUserById({ userId }),
+    usersDao.getUserById({ userId: otherUserId }),
+  ])
+  if (!self || !other) throw new ApiException(404, { message: "User not found" })
+
+  // chat app normall
+  // if (!isUserAgentPair(self.role, other.role)) {
+  //   throw new ApiException(403, {
+  //     message: "Conversations can only be created between a user and an agent",
+  //   })
+  // }
+
+  const existing = await getDirectConversationService({ userId, otherUserId })
+  if (existing) return existing
+
+  await conversationsDao.createDirectConversation([userId, otherUserId])
+
+  return getDirectConversationService({ userId, otherUserId })
 }

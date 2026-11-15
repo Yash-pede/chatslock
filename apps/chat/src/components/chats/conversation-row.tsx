@@ -23,7 +23,16 @@ export function ConversationRow({ item, onPress }: ConversationRowProps) {
       accessibilityLabel={`Chat with ${name}`}
       className="flex-row items-center gap-3 px-4 active:bg-secondary/60"
     >
-      <UserAvatar size={AVATAR_SIZE} avatar={item.peer?.avatar} name={name} />
+      <View className="relative">
+        <UserAvatar size={AVATAR_SIZE} avatar={item.peer?.avatar} name={name} />
+        {item.peer?.status === "ONLINE" ? (
+          <View
+            className="absolute -bottom-0.5 -end-0.5 h-3.5 w-3.5 rounded-full border-2 bg-green-500"
+            style={{ borderColor: colors.background }}
+            accessibilityLabel="Online"
+          />
+        ) : null}
+      </View>
 
       <View className="flex-1 gap-1 border-b border-border/60 py-2.5">
         <View className="flex-row items-center gap-1">

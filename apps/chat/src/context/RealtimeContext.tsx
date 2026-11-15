@@ -186,20 +186,18 @@ export function RealtimeProvider({
     for (const channel of listeners.keys()) void ensureChannel(channel)
   }, [active])
 
-  // Backgrounding suspends the socket and the token may expire while away:
-  // refresh once and rebuild every channel with the new authorization.
+  // Backgrounding suspends the socket: rebuild channels on return. The token
+  // itself is refreshed by silent auth/`currentIdToken`, so no explicit
+  // `/auth/refresh` call is made here.
   useEffect(() => {
     if (!active) return
 
     const onAppStateChange = (next: string) => {
       if (next !== "active") return
-      void (async () => {
-        await tokenRefreshService.refreshNow()
-        for (const channel of listeners.keys()) {
-          closeChannel(channel)
-          void ensureChannel(channel)
-        }
-      })()
+      for (const channel of listeners.keys()) {
+        closeChannel(channel)
+        void ensureChannel(channel)
+      }
     }
 
     const subscription = AppState.addEventListener("change", onAppStateChange)

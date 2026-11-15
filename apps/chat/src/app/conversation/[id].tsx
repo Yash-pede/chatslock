@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from "expo-router"
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ChevronDown } from "lucide-react-native"
 import { FlashList, type ListRenderItem } from "@shopify/flash-list"
@@ -25,7 +25,9 @@ import {
   useThemeColors,
 } from "@repo/ui"
 import * as Clipboard from "expo-clipboard"
-import { MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
+import { getPeerUserId, MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
+import type { PeerUserStatus } from "@repo/types/req"
+import { usersApi } from "@/api/users.api"
 import { useProfile } from "@/context/profile/ProfileContext"
 import {
   collectMedia,
@@ -39,7 +41,6 @@ import {
   MessageBubble,
   MessageComposer,
   TypingBubble,
-  useActiveConversation,
   useConversationMessages,
   useDocumentDownload,
   useMessageListScroll,
@@ -72,8 +73,6 @@ export default function ConversationScreen() {
   const conversationId = params.id ?? ""
   const name = params.name ?? "Conversation"
   const avatar = params.avatar
-
-  const { peerStatus } = useActiveConversation(conversationId, user?.userId ?? null)
 
   const {
     messages,
@@ -121,6 +120,17 @@ export default function ConversationScreen() {
     mediaRef.current = media
   }, [media])
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [peerPresence, setPeerPresence] = useState<{
+    status: PeerUserStatus
+    lastActiveAt: number
+    username: string
+  } | null>(null)
+  const currentUserId = user?.userId ?? null
+  const peerId = useMemo(
+    () => (currentUserId ? getPeerUserId(conversationId, currentUserId) : null),
+    [conversationId, currentUserId],
+  )
+
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** When the selection started; the edit window is measured from here. */
   const [selectedAt, setSelectedAt] = useState<number | null>(null)
@@ -220,6 +230,30 @@ export default function ConversationScreen() {
     selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
 
+  // Presence + last activity for the header, refreshed when the screen gains focus.
+  useFocusEffect(
+    useCallback(() => {
+      if (!peerId) return
+      let cancelled = false
+
+      void usersApi
+        .getProfiles([peerId])
+        .then(([profile]) => {
+          if (cancelled || !profile) return
+          setPeerPresence({
+            status: profile.status,
+            lastActiveAt: profile.lastActiveAt,
+            username: profile.username,
+          })
+        })
+        .catch(() => undefined)
+
+      return () => {
+        cancelled = true
+      }
+    }, [peerId]),
+  )
+
   const selectMessage = useCallback((message: ChatMessage) => {
     // Copy/download are always available; edit/delete are gated separately.
     setSelectedId(message.id)
@@ -271,8 +305,14 @@ export default function ConversationScreen() {
           <ConversationHeader
             name={name}
             avatar={avatar}
-            peerStatus={peerStatus}
+            peerStatus={peerPresence?.status}
+            lastActiveAt={peerPresence?.lastActiveAt}
             typing={peerTyping}
+            onPressProfile={
+              peerPresence
+                ? () => router.push(`/u/${encodeURIComponent(peerPresence.username)}`)
+                : undefined
+            }
           />
 
           {selectedMessage ? (

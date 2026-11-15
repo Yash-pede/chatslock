@@ -1,11 +1,6 @@
 import { apiClient } from "@/api/client"
-import type { getUser } from "@repo/types/schema"
-import type {
-  AvatarContentType,
-  ClientConversationStatus,
-  PeerUserStatus,
-  UserOnboardingRequest,
-} from "@repo/types/req"
+import type { ConversationUserProfile, getUser } from "@repo/types/schema"
+import type { AvatarContentType, PeerUserStatus, UserOnboardingRequest } from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
@@ -26,6 +21,12 @@ function unwrap<T>(body: unknown): T {
     return (body as { data: T }).data
   }
   return body as T
+}
+
+/** Public profile + online state returned by `GET /api/users/profile`. */
+export interface PublicUserProfile extends ConversationUserProfile {
+  /** `ONLINE`/`OFFLINE`, matching the realtime presence event shape. */
+  status: PeerUserStatus
 }
 
 export type OnboardingInput = UserOnboardingRequest["body"]
@@ -71,15 +72,18 @@ export const usersApi = {
   },
 
   /**
-   * `POST /api/users/conversationMeta` — reports the conversation currently on
-   * screen. Returns the peer's presence (`undefined` when closing).
+   * `GET /api/users/profile?username=` — one public profile and its online
+   * state. Also refreshes the caller's `lastActiveAt` server-side.
    */
-  setConversationMeta: async (input: {
-    conversationId: string
-    status: ClientConversationStatus
-  }): Promise<PeerUserStatus | undefined> => {
-    const { data } = await apiClient.post("/api/users/conversationMeta", input)
-    return unwrap<{ peerStatus?: PeerUserStatus }>(data).peerStatus
+  getProfile: async (username: string): Promise<PublicUserProfile> => {
+    const { data } = await apiClient.get("/api/users/profile", { params: { username } })
+    return unwrap<PublicUserProfile>(data)
+  },
+
+  /** `POST /api/users/profiles` — public profiles for a page of peer ids. */
+  getProfiles: async (userIds: string[]): Promise<PublicUserProfile[]> => {
+    const { data } = await apiClient.post("/api/users/profiles", { userIds })
+    return unwrap<{ profiles: PublicUserProfile[] }>(data).profiles
   },
 
   /** `GET /api/users/sessions` — active auth sessions for this account. */

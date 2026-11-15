@@ -1,6 +1,6 @@
 import { File as ExpoFile } from "expo-file-system"
 import { apiClient } from "@/api/client"
-import type { ConversationUserProfile, Message, UserMemberConversation } from "@repo/types/schema"
+import type { Message, UserMemberConversation } from "@repo/types/schema"
 import type { MediaContentType } from "@repo/types/req"
 
 /** A media upload target returned by `POST /api/conversations/media` (presigned POST). */
@@ -12,11 +12,22 @@ export interface MediaPresignResult {
   key: string
 }
 
-export type { ConversationUserProfile, UserMemberConversation }
+export type { UserMemberConversation }
+
+/** Default page size for the conversation list. */
+export const CHAT_PAGE_SIZE = 25
 
 /** `GET /api/conversations/chat` — one page of the caller's conversations. */
 export interface ChatPage {
   conversations: UserMemberConversation[]
+}
+
+/** A single direct conversation as returned by the direct-chat endpoints. */
+export interface ConversationSummary {
+  conversationId: string
+  conversationType: "DIRECT" | "GROUP" | "SUPPORT"
+  unreadCount: number
+  createdAt: number | null
 }
 
 /** One page of message history, newest first; `nextCursor` pages older. */
@@ -24,14 +35,6 @@ export interface MessagePage {
   messages: Message[]
   nextCursor?: string
 }
-
-/** `POST /api/conversations/profiles` — public profiles for up to 25 user ids. */
-export interface ProfilesResponse {
-  profiles: ConversationUserProfile[]
-}
-
-/** Max ids accepted by one profiles request (mirrors the server schema). */
-export const MAX_PROFILE_LOOKUP = 25
 
 /** Unwraps the server's `{ ok, data }` envelope when present. */
 function unwrap<T>(body: unknown): T {
@@ -51,10 +54,22 @@ export function responseStatus(error: unknown): number | undefined {
  * URL shapes and envelope handling stay in one place.
  */
 export const conversationsApi = {
+  /** `GET /api/conversations/direct?userId=` — one direct chat or `null`. */
+  getDirectConversation: async (userId: string): Promise<ConversationSummary | null> => {
+    const { data } = await apiClient.get("/api/conversations/direct", { params: { userId } })
+    return unwrap<ConversationSummary | null>(data)
+  },
+
+  /** `POST /api/conversations/direct` — create/return a user+agent direct chat. */
+  createDirectConversation: async (userId: string): Promise<ConversationSummary> => {
+    const { data } = await apiClient.post("/api/conversations/direct", { userId })
+    return unwrap<ConversationSummary>(data)
+  },
+
   /** `GET /api/conversations/chat?pageSize=` — caller's conversation memberships. */
   getChatPage: async (input: { pageSize?: number } = {}): Promise<ChatPage> => {
     const { data } = await apiClient.get("/api/conversations/chat", {
-      params: { pageSize: input.pageSize ?? MAX_PROFILE_LOOKUP },
+      params: { pageSize: input.pageSize ?? CHAT_PAGE_SIZE },
     })
     return unwrap<ChatPage>(data)
   },
@@ -80,14 +95,6 @@ export const conversationsApi = {
   },
 
   /** `POST /api/conversations/profiles` — peer profiles by id (batched). */
-  getProfiles: async (userIds: string[]): Promise<ConversationUserProfile[]> => {
-    if (userIds.length === 0) return []
-
-    const { data } = await apiClient.post("/api/conversations/profiles", {
-      userIds: userIds.slice(0, MAX_PROFILE_LOOKUP),
-    })
-    return unwrap<ProfilesResponse>(data).profiles
-  },
 
   /** `POST /api/conversations/media` — presigns a media upload (S3 POST). */
   getMediaPresign: async (input: {

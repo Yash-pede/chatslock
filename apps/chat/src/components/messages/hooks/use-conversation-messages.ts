@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useFocusEffect } from "expo-router"
 import { MAX_MESSAGE_LENGTH, MESSAGE_ACTION_WINDOW_MS, type Message } from "@repo/types/schema"
 import {
   MAX_MEDIA_FILE_SIZE,
@@ -324,19 +325,23 @@ export function useConversationMessages(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, currentUserId])
 
-  useEffect(
-    () =>
-      subscribeToMessages({
-        onCreated: upsertServerMessage,
-        onUpdated: upsertServerMessage,
-        onDeleted: (event) => {
-          if (event.conversationId !== conversationId) return
-          settleMutation(event.messageId)
-          setMessages((current) => current.filter((item) => item.id !== event.messageId))
-        },
-        onTyping: handlePeerTyping,
-      }),
-    [conversationId, handlePeerTyping, settleMutation, subscribeToMessages, upsertServerMessage],
+  // Focus-scoped so a conversation screen left in the stack (profile push,
+  // another chat opened on top) does not keep a second channel listener.
+  useFocusEffect(
+    useCallback(
+      () =>
+        subscribeToMessages({
+          onCreated: upsertServerMessage,
+          onUpdated: upsertServerMessage,
+          onDeleted: (event) => {
+            if (event.conversationId !== conversationId) return
+            settleMutation(event.messageId)
+            setMessages((current) => current.filter((item) => item.id !== event.messageId))
+          },
+          onTyping: handlePeerTyping,
+        }),
+      [conversationId, handlePeerTyping, settleMutation, subscribeToMessages, upsertServerMessage],
+    ),
   )
 
   // Leaving the screen must not leave the peer stuck on "typing…", and pending

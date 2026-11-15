@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { extractErrorMessage } from "@repo/utils"
-import { conversationsApi, MAX_PROFILE_LOOKUP } from "@/api/conversations.api"
+import { CHAT_PAGE_SIZE, conversationsApi } from "@/api/conversations.api"
 import {
   buildChatList,
   collectPeerIds,
@@ -27,7 +27,7 @@ export function useChatList(currentUserId: string | null): UseChatListResult {
   const load = useCallback(async () => {
     try {
       const { conversations } = await conversationsApi.getChatPage({
-        pageSize: MAX_PROFILE_LOOKUP,
+        pageSize: CHAT_PAGE_SIZE,
       })
       const profiles = await fetchPeerProfiles(collectPeerIds(conversations, currentUserId))
       setItems(buildChatList(conversations, profiles, currentUserId))

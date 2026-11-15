@@ -1,8 +1,5 @@
-import {
-  conversationsApi,
-  MAX_PROFILE_LOOKUP,
-  type ConversationUserProfile,
-} from "@/api/conversations.api"
+import { usersApi, type PublicUserProfile } from "@/api/users.api"
+import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
 import { getPeerUserId, type UserMemberConversation } from "@repo/types/schema"
 
 /** A conversation joined with the other participant's public profile. */
@@ -10,7 +7,7 @@ export interface ChatListItem {
   conversationId: string
   conversationType: UserMemberConversation["conversationType"]
   unreadCount: number
-  peer: ConversationUserProfile | null
+  peer: PublicUserProfile | null
 }
 
 /** Unique peer ids for a page, in first-seen order. */
@@ -29,19 +26,19 @@ export function collectPeerIds(
 }
 
 /**
- * Resolve every peer profile, chunking requests to the server's per-call limit
- * so a page larger than 25 still resolves completely.
+ * Resolves every peer profile through the users batch endpoint, chunking so a
+ * page larger than the server limit still resolves completely.
  */
 export async function fetchPeerProfiles(
   userIds: string[],
-): Promise<Map<string, ConversationUserProfile>> {
+): Promise<Map<string, PublicUserProfile>> {
   const batches: string[][] = []
   for (let i = 0; i < userIds.length; i += MAX_PROFILE_LOOKUP) {
     batches.push(userIds.slice(i, i + MAX_PROFILE_LOOKUP))
   }
 
-  const results = await Promise.all(batches.map((batch) => conversationsApi.getProfiles(batch)))
-  const map = new Map<string, ConversationUserProfile>()
+  const results = await Promise.all(batches.map((batch) => usersApi.getProfiles(batch)))
+  const map = new Map<string, PublicUserProfile>()
 
   for (const profiles of results) {
     for (const profile of profiles) map.set(profile.userId, profile)
@@ -52,7 +49,7 @@ export async function fetchPeerProfiles(
 
 export function buildChatList(
   conversations: UserMemberConversation[],
-  profiles: Map<string, ConversationUserProfile>,
+  profiles: Map<string, PublicUserProfile>,
   currentUserId: string | null,
 ): ChatListItem[] {
   return conversations.map<ChatListItem>((conversation) => {
