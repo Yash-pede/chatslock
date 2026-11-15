@@ -32,11 +32,7 @@ app.use(withAuth)
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 app.get("/messages", validateWithZod(getConversationMessagesSchema), listMessagesController)
 
-app.get(
-  "/direct",
-  validateWithZod(getDirectConversationSchema),
-  getDirectConversationController,
-)
+app.get("/direct", validateWithZod(getDirectConversationSchema), getDirectConversationController)
 
 app.post(
   "/direct",

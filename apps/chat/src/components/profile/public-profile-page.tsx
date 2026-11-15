@@ -5,10 +5,7 @@ import { ChevronLeft } from "lucide-react-native"
 import { format, formatDistanceToNow } from "date-fns"
 import { Button, SafeArea, Spinner, Text, useToast, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
-import {
-  conversationsApi,
-  type ConversationSummary,
-} from "@/api/conversations.api"
+import { conversationsApi, type ConversationSummary } from "@/api/conversations.api"
 import { usersApi, type PublicUserProfile } from "@/api/users.api"
 import { UserAvatar } from "@/components/user-avatar"
 
@@ -163,9 +160,7 @@ export function PublicProfilePage({ username }: { username: string }) {
                       ? `Conversation started ${format(conversation.createdAt, "d MMM yyyy")}`
                       : "Conversation already exists"}
                   </Text>
-                  <Button onPress={() => openConversation(conversation)}>
-                    Open conversation
-                  </Button>
+                  <Button onPress={() => openConversation(conversation)}>Open conversation</Button>
                 </>
               ) : (
                 <>

@@ -102,7 +102,6 @@ export const revokeSessionController = async (c: Context) => {
   return c.json({ message: "Session revoked" })
 }
 
-
 /** Public profile for `/u/<username>` and the chat list; also marks the caller active. */
 export const getPublicProfileController = async (c: Context) => {
   const { query }: GetPublicProfileRequest = c.get("valid")

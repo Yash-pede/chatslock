@@ -67,4 +67,3 @@ export type CreateDirectConversationRequest = z.infer<typeof createDirectConvers
 
 /** Max peers resolvable in one request (the chat page's page size). */
 export const MAX_PROFILE_LOOKUP = 25
-
