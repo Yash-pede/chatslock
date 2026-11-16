@@ -121,12 +121,32 @@ app.onPublish("/user/*", async (payload, event) => {
   const channel = event.info.channel.path
 
   try {
-    const { userId } = identityOf(event)
     const channelUserId = userIdFromChannel(channel)
-    assertOwnUserChannel(channelUserId, userId)
-
     const message = parsePayload(userPublishEnvelopeSchema, payload)
-    logger.info("User status published", { userId, userStatus: message.data.userStatus })
+
+    // Cognito clients may only publish to their own channel. The realtime
+    // Lambda publishes presence for a user with its IAM role instead.
+    const identity = event.identity as
+      | {
+          sub?: string
+          claims?: { sub?: string }
+          userArn?: string
+          accountId?: string
+        }
+      | null
+    const cognitoUserId = identity?.claims?.sub ?? identity?.sub
+
+    if (cognitoUserId) {
+      assertOwnUserChannel(channelUserId, cognitoUserId)
+    } else if (!identity?.userArn) {
+      throw new UnauthorizedException("Unable to identify the user status publisher")
+    }
+
+    logger.info("User status published", {
+      userId: cognitoUserId ?? identity?.userArn,
+      channelUserId,
+      userStatus: message.data.userStatus,
+    })
     return message
   } catch (error) {
     logger.error("User status publish denied", { channel, error })

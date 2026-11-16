@@ -1,4 +1,5 @@
 import type { Message } from "@repo/types/schema"
+import type { CachedMessage } from "@/db/schema"
 import type { ChatMessage } from "../types"
 
 /**
@@ -93,22 +94,33 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
 }
 
 /**
- * Merges new messages into the list, de-duplicating by id and ordering by ULID
- * (the key the server pages by). Optimistic rows have no ULID yet, so they sort
- * last until the server echoes them back.
+ * Rebuilds the wire-shaped message from a cache row. Local-only columns
+ * (`pendingId`, `status`) are intentionally dropped.
  */
-export function mergeMessages(existing: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
-  const byId = new Map<string, ChatMessage>()
-  for (const item of [...existing, ...incoming]) byId.set(item.id, item)
-  return [...byId.values()].sort((a, b) => compareIds(a.id, b.id))
+export function messageFromRow(row: CachedMessage): Message {
+  return {
+    messageId: row.messageId,
+    conversationId: row.conversationId,
+    senderId: row.senderId,
+    type: row.type,
+    ...(row.body !== null ? { body: row.body } : {}),
+    ...(row.attachment !== null ? { attachment: row.attachment } : {}),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    ...(row.editedAt !== null ? { editedAt: row.editedAt } : {}),
+    ...(row.deletedAt !== null ? { deletedAt: row.deletedAt } : {}),
+  }
 }
 
-function compareIds(a: string, b: string): number {
-  const aOptimistic = a.startsWith("optimistic-")
-  const bOptimistic = b.startsWith("optimistic-")
-  if (aOptimistic || bOptimistic) {
-    if (aOptimistic && bOptimistic) return Number(a.split("-")[1]) - Number(b.split("-")[1])
-    return aOptimistic ? 1 : -1
+/** A cached row in bubble shape, including its local send status. */
+export function cachedRowToChatMessage(
+  row: CachedMessage,
+  currentUserId: string | null,
+): ChatMessage {
+  return {
+    ...toChatMessage(messageFromRow(row), currentUserId),
+    status: (row.status as ChatMessage["status"] | null) ?? "sent",
+    ...(row.pendingId ? { pendingId: row.pendingId } : {}),
   }
-  return a < b ? -1 : a > b ? 1 : 0
 }
+

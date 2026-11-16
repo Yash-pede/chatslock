@@ -3,10 +3,12 @@ import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
 import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated"
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
-import { FileText, Pause, Play } from "lucide-react-native"
+import { FileText, Pause, Play, WifiOff } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
+import { useRealtime } from "@/context/RealtimeContext"
 import { DownloadButton } from "./download-button"
 import { LinkifiedText } from "./linkified-text"
+import { MediaOfflinePlaceholder } from "./media-offline-placeholder"
 import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
 import type { ChatMessage } from "../types"
 
@@ -33,6 +35,7 @@ function AudioBubble({
   status,
   selected,
   failedClass,
+  online,
 }: {
   voice: { url: string; durationSeconds: number; waveform: number[] }
   tint: string
@@ -42,8 +45,10 @@ function AudioBubble({
   status: ChatMessage["status"]
   selected?: boolean
   failedClass?: string
+  online: boolean
 }) {
-  const player = useAudioPlayer(voice.url ? { uri: voice.url } : null)
+  const remote = voice.url.startsWith("http")
+  const player = useAudioPlayer(remote && !online ? null : voice.url ? { uri: voice.url } : null)
   const audio = useAudioPlayerStatus(player)
   const durationSeconds = audio.duration > 0 ? audio.duration : voice.durationSeconds
   const progress = durationSeconds > 0 ? audio.currentTime / durationSeconds : 0
@@ -55,6 +60,39 @@ function AudioBubble({
       if (audio.didJustFinish || audio.currentTime >= durationSeconds) void player.seekTo(0)
       player.play()
     }
+  }
+
+  if (remote && !online) {
+    return (
+      <ChatBubble
+        variant={variant}
+        timestamp={time}
+        status={status}
+        className={cn(
+          "w-[62%] max-w-[66%]",
+          selected &&
+            (variant === "sent"
+              ? "border-2 border-primary-foreground/70 bg-primary/85"
+              : "border-2 border-primary bg-secondary/85"),
+          failedClass,
+        )}
+      >
+        <View className="flex-row items-center gap-2.5">
+          <View
+            className="h-8 w-8 shrink-0 items-center justify-center rounded-full"
+            style={{ backgroundColor: `${tint}22` }}
+          >
+            <WifiOff size={15} color={tint} />
+          </View>
+          <Text className="flex-1 text-xs leading-4" style={{ color: subtle }}>
+            Voice message unavailable offline
+          </Text>
+          <Text className="shrink-0 text-xs leading-4" style={{ color: subtle }}>
+            {formatDuration(durationSeconds)}
+          </Text>
+        </View>
+      </ChatBubble>
+    )
   }
 
   return (
@@ -119,19 +157,45 @@ export interface MessageBubbleProps {
 }
 
 /** Photo bubble that shows a loader until the image has loaded. */
-function BubbleImage({ url, width, height }: { url: string; width: number; height: number }) {
+function BubbleImage({
+  url,
+  width,
+  height,
+  online,
+}: {
+  url: string
+  width: number
+  height: number
+  online: boolean
+}) {
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return (
+      <MediaOfflinePlaceholder
+        width={width}
+        height={height}
+        label={online ? "Couldn't load photo" : "Photo unavailable offline"}
+      />
+    )
+  }
+
   return (
     <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/10">
       <Image
         source={{ uri: url }}
         style={{ width, height }}
+        cachePolicy={"memory-disk"}
         contentFit="cover"
         transition={120}
         accessibilityLabel="Photo"
         onLoadStart={() => setLoading(true)}
         onLoad={() => setLoading(false)}
-        onError={() => setLoading(false)}
+        onError={() => {
+          setLoading(false)
+          setFailed(true)
+        }}
       />
       {loading ? <Spinner className="absolute inset-0" color="#ffffff" /> : null}
     </View>
@@ -139,8 +203,40 @@ function BubbleImage({ url, width, height }: { url: string; width: number; heigh
 }
 
 /** Video poster with a play affordance; shows a loader until the poster is ready. */
-function VideoPreview({ url, width, height }: { url: string; width: number; height: number }) {
-  const { thumbnail, loading } = useVideoThumbnail(url)
+function VideoPreview({
+  url,
+  width,
+  height,
+  online,
+}: {
+  url: string
+  width: number
+  height: number
+  online: boolean
+}) {
+  const remote = url.startsWith("http")
+  const canLoad = !remote || online
+  const { thumbnail, loading } = useVideoThumbnail(canLoad ? url : "")
+
+  if (!canLoad) {
+    return (
+      <MediaOfflinePlaceholder
+        width={width}
+        height={height}
+        label="Video unavailable offline"
+      />
+    )
+  }
+
+  if (!loading && !thumbnail) {
+    return (
+      <MediaOfflinePlaceholder
+        width={width}
+        height={height}
+        label={online ? "Video preview unavailable" : "Video unavailable offline"}
+      />
+    )
+  }
 
   return (
     <View style={{ width, height, borderRadius: 10, overflow: "hidden" }} className="bg-black/80">
@@ -170,6 +266,7 @@ export const MessageBubble = memo(function MessageBubble({
   selected = false,
 }: MessageBubbleProps) {
   const colors = useThemeColors()
+  const { online } = useRealtime()
   const variant = message.isMine ? "sent" : "received"
   const time = clock(message.createdAt)
   const tint = message.isMine ? colors.primaryForeground : colors.secondaryForeground
@@ -229,7 +326,13 @@ export const MessageBubble = memo(function MessageBubble({
             accessibilityLabel="Open photo"
             className="active:opacity-90"
           >
-            <BubbleImage url={url} width={imageWidth} height={imageHeight} />
+            <BubbleImage
+              key={online ? "online" : "offline"}
+              url={url}
+              width={imageWidth}
+              height={imageHeight}
+              online={online}
+            />
           </Pressable>
           {message.text ? (
             <LinkifiedText
@@ -264,7 +367,13 @@ export const MessageBubble = memo(function MessageBubble({
             accessibilityLabel="Play video"
             className="active:opacity-90"
           >
-            <VideoPreview url={message.video.url} width={videoWidth} height={videoHeight} />
+            <VideoPreview
+              key={online ? "online" : "offline"}
+              url={message.video.url}
+              width={videoWidth}
+              height={videoHeight}
+              online={online}
+            />
           </Pressable>
         </ChatBubble>
       )
@@ -300,7 +409,7 @@ export const MessageBubble = memo(function MessageBubble({
                 {formatSize(sizeBytes)}
               </Text>
             </View>
-            {url.startsWith("http") ? (
+            {url.startsWith("http") && online ? (
               <DownloadButton url={url} fileName={fileName} mimeType={mimeType} tint={tint} />
             ) : null}
           </View>
@@ -311,6 +420,7 @@ export const MessageBubble = memo(function MessageBubble({
     if (message.type === "AUDIO" && message.voice) {
       return (
         <AudioBubble
+          key={online ? "online" : "offline"}
           voice={message.voice}
           tint={tint}
           subtle={subtle}
@@ -319,6 +429,7 @@ export const MessageBubble = memo(function MessageBubble({
           status={message.status}
           selected={selected}
           failedClass={failedClass}
+          online={online}
         />
       )
     }

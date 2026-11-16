@@ -13,7 +13,9 @@ import Animated, {
 } from "react-native-reanimated"
 import { Play, X } from "lucide-react-native"
 import { Carousel, Spinner, Text } from "@repo/ui"
+import { useRealtime } from "@/context/RealtimeContext"
 import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
+import { MediaOfflinePlaceholder } from "./media-offline-placeholder"
 import type { MediaItem } from "../lib/media"
 
 const MIN_SCALE = 1
@@ -35,14 +37,17 @@ function ZoomableImage({
   url,
   width,
   height,
+  online,
   onZoomingChange,
 }: {
   url: string
   width: number
   height: number
+  online: boolean
   onZoomingChange?: (zoomed: boolean) => void
 }) {
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [panEnabled, setPanEnabled] = useState(false)
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null)
 
@@ -157,26 +162,62 @@ function ZoomableImage({
         style={[{ width, height }, animatedStyle]}
         className="items-center justify-center"
       >
-        <Image
-          source={{ uri: url }}
-          style={{ width, height }}
-          contentFit="contain"
-          onLoadStart={() => setLoading(true)}
-          onLoad={(e) => {
-            setSourceSize({ width: e.source.width, height: e.source.height })
-            setLoading(false)
-          }}
-          onError={() => setLoading(false)}
-        />
-        {loading ? <Spinner className="absolute inset-0" color="#ffffff" size="lg" /> : null}
+        {failed ? (
+          <MediaOfflinePlaceholder
+            width={width}
+            height={height}
+            tone="dark"
+            label={online ? "Photo unavailable" : "Photo unavailable offline"}
+          />
+        ) : (
+          <Image
+            source={{ uri: url }}
+            style={{ width, height }}
+            contentFit="contain"
+            onLoadStart={() => setLoading(true)}
+            onLoad={(e) => {
+              setSourceSize({ width: e.source.width, height: e.source.height })
+              setLoading(false)
+            }}
+            onError={() => {
+              setLoading(false)
+              setFailed(true)
+            }}
+          />
+        )}
+        {!failed && loading ? (
+          <Spinner className="absolute inset-0" color="#ffffff" size="lg" />
+        ) : null}
       </Animated.View>
     </GestureDetector>
   )
 }
 
 /** A paused video's poster while its page is off-screen. */
-function VideoPoster({ url, width, height }: { url: string; width: number; height: number }) {
-  const { thumbnail, loading } = useVideoThumbnail(url)
+function VideoPoster({
+  url,
+  width,
+  height,
+  online,
+}: {
+  url: string
+  width: number
+  height: number
+  online: boolean
+}) {
+  const { thumbnail, loading } = useVideoThumbnail(online ? url : "")
+
+  if (!online) {
+    return (
+      <MediaOfflinePlaceholder
+        width={width}
+        height={height}
+        tone="dark"
+        label="Video unavailable offline"
+      />
+    )
+  }
+
   return (
     <View style={{ width, height }} className="items-center justify-center">
       {thumbnail ? (
@@ -196,16 +237,38 @@ function VideoPoster({ url, width, height }: { url: string; width: number; heigh
 }
 
 /** The active video page; owns the player so only one plays at a time. */
-function ActiveVideo({ url, width, height }: { url: string; width: number; height: number }) {
-  const player = useVideoPlayer(url, (instance) => {
+function ActiveVideo({
+  url,
+  width,
+  height,
+  online,
+}: {
+  url: string
+  width: number
+  height: number
+  online: boolean
+}) {
+  const player = useVideoPlayer(online ? url : null, (instance) => {
     instance.loop = false
   })
   const { status } = useEvent(player, "statusChange", { status: player.status })
 
   useEffect(() => {
+    if (!online) return
     player.play()
     return () => player.pause()
-  }, [player])
+  }, [online, player])
+
+  if (!online) {
+    return (
+      <MediaOfflinePlaceholder
+        width={width}
+        height={height}
+        tone="dark"
+        label="Video unavailable offline"
+      />
+    )
+  }
 
   const loading = status === "idle" || status === "loading"
 
@@ -231,6 +294,7 @@ export interface MediaViewerProps {
 export function MediaViewer({ items, initialIndex, visible, onClose }: MediaViewerProps) {
   const { width, height } = useWindowDimensions()
   const insets = useSafeAreaInsets()
+  const { online } = useRealtime()
   const [index, setIndex] = useState(initialIndex)
   // While the current photo is magnified we lock paging so panning the image
   // doesn't trigger a swipe to the next item.
@@ -250,15 +314,29 @@ export function MediaViewer({ items, initialIndex, visible, onClose }: MediaView
     <View key={item.id} style={{ width, height }} className="items-center justify-center">
       {item.kind === "image" ? (
         <ZoomableImage
+          key={`${item.id}:${online ? "online" : "offline"}`}
           url={item.url}
           width={width}
           height={height}
+          online={online}
           onZoomingChange={handleZoomingChange}
         />
       ) : items[index]?.id === item.id ? (
-        <ActiveVideo url={item.url} width={width} height={height} />
+        <ActiveVideo
+          key={`${item.id}:${online ? "online" : "offline"}`}
+          url={item.url}
+          width={width}
+          height={height}
+          online={online}
+        />
       ) : (
-        <VideoPoster url={item.url} width={width} height={height} />
+        <VideoPoster
+          key={`${item.id}:${online ? "online" : "offline"}`}
+          url={item.url}
+          width={width}
+          height={height}
+          online={online}
+        />
       )}
     </View>
   ))

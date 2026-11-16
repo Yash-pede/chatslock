@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Image } from "expo-image"
 import { View } from "react-native"
 import { Text } from "@repo/ui"
@@ -20,8 +21,11 @@ function initials(name: string): string {
 /** Circular user avatar with a deterministic initials fallback. */
 export function UserAvatar({ size = 54, avatar, name, className }: UserAvatarProps) {
   const shape = { width: size, height: size, borderRadius: size / 2 }
+  // Track the URL that failed rather than a boolean, so a new avatar retries.
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null)
+  const showImage = Boolean(avatar) && failedAvatar !== avatar
 
-  if (avatar) {
+  if (avatar && showImage) {
     return (
       <Image
         source={{ uri: avatar }}
@@ -29,6 +33,7 @@ export function UserAvatar({ size = 54, avatar, name, className }: UserAvatarPro
         contentFit="cover"
         transition={120}
         accessibilityLabel={name}
+        onError={() => setFailedAvatar(avatar)}
       />
     )
   }

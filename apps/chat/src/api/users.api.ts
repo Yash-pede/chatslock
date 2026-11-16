@@ -1,6 +1,11 @@
 import { apiClient } from "@/api/client"
 import type { ConversationUserProfile, getUser } from "@repo/types/schema"
-import type { AvatarContentType, PeerUserStatus, UserOnboardingRequest } from "@repo/types/req"
+import type {
+  AvatarContentType,
+  ClientConversationStatus,
+  PeerUserStatus,
+  UserOnboardingRequest,
+} from "@repo/types/req"
 
 /** The signed-in user's profile, as returned by `GET /api/users/me`. */
 export type Profile = getUser
@@ -84,6 +89,19 @@ export const usersApi = {
   getProfiles: async (userIds: string[]): Promise<PublicUserProfile[]> => {
     const { data } = await apiClient.post("/api/users/profiles", { userIds })
     return unwrap<{ profiles: PublicUserProfile[] }>(data).profiles
+  },
+
+  /**
+   * `POST /api/users/conversationMeta` — reports the conversation currently on
+   * screen. CLOSED clears the server-side active conversation and publishes
+   * OFFLINE to the user's channel.
+   */
+  setConversationMeta: async (input: {
+    conversationId: string
+    status: ClientConversationStatus
+  }): Promise<PeerUserStatus | undefined> => {
+    const { data } = await apiClient.post("/api/users/conversationMeta", input)
+    return unwrap<{ peerStatus?: PeerUserStatus }>(data).peerStatus
   },
 
   /** `GET /api/users/sessions` — active auth sessions for this account. */

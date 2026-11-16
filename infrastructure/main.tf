@@ -113,7 +113,7 @@ resource "aws_secretsmanager_secret_version" "example" {
     s3_media_bucket         = module.s3_media.bucket_name
     cache_endpoint          = module.cache.endpoint
     cache_port              = module.cache.port
-
+    appsync_endpoint        = module.appsync.appSyncHttpEndpoint
   })
 }
 

@@ -114,6 +114,8 @@ async function persist(data: AuthTokens): Promise<AuthTokens> {
     await secureStorage.storeAuthClient(data.client ?? "otp")
   }
   if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
+  const user = tokenManager.getUser()
+  if (user) await secureStorage.storeIdentity(user)
   return data
 }
 
@@ -270,6 +272,8 @@ export async function refresh(): Promise<AuthTokens> {
     expiresIn: data.expiresIn,
   })
   if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
+  const user = tokenManager.getUser()
+  if (user) await secureStorage.storeIdentity(user)
   return { ...data, refreshToken }
 }
 

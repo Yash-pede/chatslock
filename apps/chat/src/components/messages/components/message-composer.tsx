@@ -25,7 +25,8 @@ import { useAudioRecorder, type RecordedAudio } from "../hooks/use-audio-recorde
 import type { PickedMedia } from "../types"
 
 export interface MessageComposerProps {
-  onSend: (text: string) => void | Promise<void>
+  /** Return `false` to keep the typed text (e.g. the send was rejected). */
+  onSend: (text: string) => boolean | void | Promise<boolean | void>
   onSendMedia?: (media: PickedMedia) => void | Promise<void>
   onSendAudio?: (audio: RecordedAudio & { fileName: string; mimeType: string }) => void
   /** Called on every non-empty change so the parent can publish typing state. */
@@ -69,7 +70,8 @@ export function MessageComposer({
   const submit = async () => {
     const text = value.trim()
     if (!text || text.length > MAX_MESSAGE_LENGTH) return
-    await onSend(text)
+    const sent = await onSend(text)
+    if (sent === false) return
     setValue("")
   }
 

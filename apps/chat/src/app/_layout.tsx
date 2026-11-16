@@ -1,17 +1,57 @@
+import type { ReactNode } from "react"
 import { View } from "react-native"
 import { Stack, type ErrorBoundaryProps } from "expo-router"
 import { StatusBar } from "expo-status-bar"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { BrandMark, Button, SafeArea, Spinner, Text, ThemeProvider, ToastProvider } from "@repo/ui"
 import { AuthProvider } from "@/context/AuthContext"
 import { ProfileProvider, useProfile } from "@/context/profile/ProfileContext"
 import { SettingsProvider } from "@/context/SettingsContext"
-import { RealtimeGate } from "@/context/RealtimeContext"
+import { RealtimeGate, useRealtime } from "@/context/RealtimeContext"
+import { LocalDbProvider } from "@/db"
 import { UnverifiedGate } from "@/components/unverified-gate"
 import type { Flow } from "@/context/profile/profile"
 import "../../global.css"
 import { NotificationProvider } from "@/context/NotificationContext"
 
 const appIcon = require("../../assets/files/icon-1024.png")
+const OFFLINE_BANNER_HEIGHT = 28
+
+/**
+ * App chrome shared by every route. The offline banner covers the status-bar
+ * area and shifts the navigator by its content height; screens keep their own
+ * top safe-area inset, so content starts exactly below the banner.
+ */
+function AppFrame({ children }: { children: ReactNode }) {
+  const { online } = useRealtime()
+  const insets = useSafeAreaInsets()
+
+  return (
+    <View className="flex-1 bg-background">
+      <StatusBar style={online ? "auto" : "light"} />
+      <View className="flex-1" style={{ paddingTop: online ? 0 : OFFLINE_BANNER_HEIGHT }}>
+        {children}
+      </View>
+      {!online ? (
+        <View
+          className="absolute left-0 right-0 z-50 bg-destructive"
+          style={{
+            top: 0,
+            height: insets.top + OFFLINE_BANNER_HEIGHT,
+            paddingTop: insets.top,
+          }}
+          accessibilityLiveRegion="polite"
+        >
+          <View className="flex-1 items-center justify-center px-3">
+            <Text variant="small" className="font-medium text-destructive-foreground">
+              You&apos;re offline — showing saved content
+            </Text>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  )
+}
 
 /** Splash while the session is restored and the profile is loaded. */
 function LoadingGate() {
@@ -61,20 +101,23 @@ function ProtectedNavigator({ flow }: { flow: Flow }) {
 export default function RootLayout() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <ProfileProvider>
-            <NotificationProvider>
-              <SettingsProvider>
-                <RealtimeGate>
-                  <StatusBar style="auto" />
-                  <RootNavigator />
-                </RealtimeGate>
-              </SettingsProvider>
-            </NotificationProvider>
-          </ProfileProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <LocalDbProvider fallback={<LoadingGate />}>
+        <ToastProvider>
+          <AuthProvider>
+            <ProfileProvider>
+              <NotificationProvider>
+                <SettingsProvider>
+                  <RealtimeGate>
+                    <AppFrame>
+                      <RootNavigator />
+                    </AppFrame>
+                  </RealtimeGate>
+                </SettingsProvider>
+              </NotificationProvider>
+            </ProfileProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </LocalDbProvider>
     </ThemeProvider>
   )
 }

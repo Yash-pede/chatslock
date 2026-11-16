@@ -1,8 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import NetInfo from "@react-native-community/netinfo"
 import {
   authEvents,
   logout as revokeSession,
+  secureStorage,
   silentAuthService,
+  tokenManager,
   tokenRefreshService,
   type AuthUser,
   type OtpChallenge,
@@ -16,6 +19,7 @@ import {
   storedIdentity,
   type AuthState,
 } from "./auth/state"
+import { clearLocalCache, useLocalDb } from "@/db"
 
 export type { AuthState }
 
@@ -46,22 +50,52 @@ const AuthContext = createContext<AuthContextValue | null>(null)
  */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [auth, setAuth] = useState<AuthState>({ status: "restoring" })
+  const { db } = useLocalDb()
+  const authRef = useRef(auth)
 
-  const signOutLocally = useCallback((error: string | null) => {
-    tokenRefreshService.stopAutoRefresh()
-    setAuth({ status: "signedOut", error })
-  }, [])
+  useEffect(() => {
+    authRef.current = auth
+  }, [auth])
+
+  const signOutLocally = useCallback(
+    (error: string | null) => {
+      tokenRefreshService.stopAutoRefresh()
+      // Cached chats/messages must not be visible to the next account.
+      void clearLocalCache(db).catch((cacheError) => {
+        console.warn("[db] failed to clear local cache", cacheError)
+      })
+      setAuth({ status: "signedOut", error })
+    },
+    [db],
+  )
 
   useEffect(() => {
     let cancelled = false
 
     void (async () => {
+      // Avoid a 30s refresh timeout on a cold start that NetInfo already knows
+      // is offline; the stored identity is enough to open cached screens.
+      const net = await NetInfo.fetch().catch(() => null)
+      const offline = net?.isConnected === false || net?.isInternetReachable === false
+
+      if (offline) {
+        const [identity, refreshToken] = await Promise.all([
+          secureStorage.getIdentity(),
+          tokenManager.getRefreshToken(),
+        ])
+        if (cancelled) return
+        if (identity && refreshToken) {
+          setAuth(signedIn(identity, { startRefresh: false }))
+          return
+        }
+      }
+
       const silent = await silentAuthService.attemptSilentAuth()
       if (cancelled) return
 
-      const identity = silent.isAuthenticated ? storedIdentity() : null
+      const identity = silent.user ?? (silent.isAuthenticated ? storedIdentity() : null)
       if (identity) {
-        setAuth(signedIn(identity))
+        setAuth(signedIn(identity, { startRefresh: !silent.offline }))
       } else {
         setAuth({ status: "signedOut", error: silent.error })
       }
@@ -70,6 +104,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  // A restored offline session has no access token. Refresh as soon as the
+  // network returns (also covers a token that expired while offline); a
+  // rejected refresh still logs out via the auth event bus.
+  useEffect(() => {
+    return NetInfo.addEventListener((state) => {
+      if (state.isConnected !== true || state.isInternetReachable !== true) return
+      if (authRef.current.status !== "signedIn") return
+      if (!tokenManager.isAccessTokenExpired() && !tokenManager.isIdTokenExpired()) return
+      void tokenRefreshService.refreshNow().catch(() => undefined)
+    })
+  }, [])
+
+  // Keep the auth identity in step with refreshed ID tokens (including the
+  // successful recovery triggered by the listener above). A token change while
+  // signed out must not resurrect the session; explicit sign-in handles that.
+  useEffect(() => {
+    return tokenManager.onChange(() => {
+      if (authRef.current.status !== "signedIn") return
+      const identity = tokenManager.getUser()
+      if (!identity) return
+      setAuth(signedIn(identity))
+    })
   }, [])
 
   useEffect(() => {

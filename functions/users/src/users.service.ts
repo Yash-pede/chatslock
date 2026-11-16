@@ -1,12 +1,20 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
-import { ApiException, AWSManager, parseOrThrow } from "@repo/api/utils"
-import { ConversationUserProfile, conversationUserProfileSchema, type UserId } from "@repo/types"
+import { ApiException, AWSManager, parseOrThrow, publishAppSyncEvent } from "@repo/api/utils"
+import {
+  ConversationUserProfile,
+  conversationUserProfileSchema,
+  getPeerUserId,
+  type ConversationId,
+  type UserId,
+} from "@repo/types"
 import {
   AVATAR_CONTENT_TYPES,
   avatarFileExtension,
+  USER_EVENT,
   type AvatarContentType,
+  type ClientConversationStatus,
   type PeerUserStatus,
 } from "@repo/types/req"
 import { HTTPException } from "hono/http-exception"
@@ -250,7 +258,72 @@ export const revokeUserSession = async ({
   if (!revoked) throw new HTTPException(404, { message: "Session not found" })
 }
 
-/** How recent `lastActiveAt` must be for a user to count as online. */
+/**
+ * `POST /api/users/conversationMeta` — records whether the user is viewing a
+ * conversation. OPENED sets the active-conversation cache used by public
+ * profiles and push suppression; CLOSED clears it and tells peers to go offline.
+ */
+export const userActiveConversationService = async ({
+  userId,
+  conversationId,
+  status,
+}: {
+  userId: UserId
+  conversationId: ConversationId
+  status: ClientConversationStatus
+}): Promise<PeerUserStatus | undefined> => {
+  if (status !== "CLOSED") {
+    await Promise.allSettled([
+      conversationsDao.setUserActiveConversation({ userId, conversationId }),
+      usersDao.updateUser({ userId, lastActiveAt: Date.now() }),
+    ])
+
+    // Heartbeats only refresh the cache TTL; only an actual open announces
+    // ONLINE to peers.
+    if (status === "HEARTBEAT") return undefined
+
+    await publishAppSyncEvent(`/user/${userId}`, {
+      eventType: USER_EVENT.status,
+      data: { userStatus: "ONLINE" },
+    }).catch((error) => {
+      console.warn("Failed to publish online presence", error)
+    })
+
+    const peerId = getPeerUserId(conversationId, userId)
+    const peerActiveConversation = peerId
+      ? await conversationsDao.getUserActiveConversation({ userId: peerId })
+      : null
+
+    return peerActiveConversation ? "ONLINE" : "OFFLINE"
+  }
+
+  // A late CLOSED from the previous screen must not clear the conversation the
+  // user has since opened.
+  const activeConversation = await conversationsDao
+    .getUserActiveConversation({ userId })
+    .catch(() => undefined)
+
+  if (activeConversation && activeConversation !== conversationId) {
+    await usersDao.updateUser({ userId, lastActiveAt: Date.now() }).catch(() => undefined)
+    return undefined
+  }
+
+  await conversationsDao.deleteUserActiveConversation({ userId }).catch((error) => {
+    console.warn("Failed to clear active conversation", error)
+  })
+  await usersDao.updateUser({ userId, lastActiveAt: Date.now() }).catch(() => undefined)
+
+  // The cache deletion makes `/profiles` report OFFLINE; this event updates
+  // peers that are already viewing the conversation.
+  await publishAppSyncEvent(`/user/${userId}`, {
+    eventType: USER_EVENT.status,
+    data: { userStatus: "OFFLINE" },
+  }).catch((error) => {
+    console.warn("Failed to publish offline presence", error)
+  })
+
+  return undefined
+}
 
 /**
  * Public profile shown on `/u/<username>` and in the chat list. Fetching it
@@ -277,7 +350,7 @@ export const getPublicProfileByUsername = async ({
   viewerId: UserId
   username: string
 }) => {
-  await markViewerActive(viewerId)
+  // await markViewerActive(viewerId)
 
   const [match] =
     (await usersDao.getUserByUsername({ username: username.trim().toLowerCase() })) ?? []
@@ -296,7 +369,7 @@ export const getPublicProfilesByIds = async ({
   viewerId: UserId
   userIds: string[]
 }) => {
-  await markViewerActive(viewerId)
+  // await markViewerActive(viewerId)
 
   const profiles = await usersDao.getPublicProfilesByIds({ userIds })
   return Promise.all(profiles.map((profile) => withPresence(profile)))

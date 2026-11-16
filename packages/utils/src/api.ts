@@ -1,8 +1,7 @@
 import axios, { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from "axios"
 import { getApiBaseUrl } from "./config"
 import { tokenManager } from "./auth/tokenManager"
-import { refresh as refreshTokens } from "./auth/authService"
-import { authEvents } from "./auth/authEvents"
+import { tokenRefreshService } from "./auth/tokenRefreshService"
 
 /**
  * The shared client for authenticated API calls. The base URL is resolved per
@@ -91,14 +90,15 @@ apiClient.interceptors.response.use(
     isRefreshing = true
 
     try {
-      const tokens = await refreshTokens()
-      processQueue(null, tokens.accessToken)
-      originalRequest.headers.Authorization = `Bearer ${tokens.accessToken}`
+      await tokenRefreshService.refreshNow()
+      const accessToken = tokenManager.getAccessToken()
+      if (!accessToken) throw new Error("The session could not be refreshed.")
+
+      processQueue(null, accessToken)
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`
       return apiClient(originalRequest)
     } catch (refreshError) {
       processQueue(refreshError, null)
-      await tokenManager.clearAllTokens()
-      authEvents.emitLogout()
       return Promise.reject(refreshError)
     } finally {
       isRefreshing = false

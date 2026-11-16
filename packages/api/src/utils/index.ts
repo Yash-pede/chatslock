@@ -1,4 +1,5 @@
 export * from "./apiException"
+export * from "./appsyncEvents"
 export * from "./awsConfig"
 export * from "./authorization"
 export * from "./keys"

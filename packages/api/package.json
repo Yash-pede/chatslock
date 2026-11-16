@@ -45,6 +45,7 @@
     "@hono/aws-lambda": "catalog:",
     "@hono/zod-validator": "^0.9.1",
     "@repo/types": "workspace:*",
+    "aws4": "^1.13.2",
     "dotenv": "^18.0.6",
     "expo-server-sdk": "^8.0.0",
     "hono": "catalog:",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
+    "@types/aws4": "^1.11.6",
     "@types/node": "^26.4.1",
     "eslint": "10.9.1",
     "tsup": "catalog:",

@@ -74,6 +74,19 @@ class TokenManager {
   }
 
   /**
+   * AppSync Events authorizes every socket with the ID token, so an expired
+   * access token is not the only reason a reconnect needs a refresh.
+   */
+  isIdTokenExpired(): boolean {
+    const idToken = this.state.idToken
+    if (!idToken) return true
+
+    const claims = decodeJwt<IdTokenClaims>(idToken)
+    if (!claims?.exp) return true
+    return Date.now() >= claims.exp * 1000 - 30000
+  }
+
+  /**
    * Synchronous listener for token changes. Lets the HTTP client attach the
    * Authorization header in the same tick as a request, so a call made right
    * after sign-in never goes out unauthenticated.

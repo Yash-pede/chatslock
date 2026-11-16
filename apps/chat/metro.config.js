@@ -8,6 +8,25 @@ const workspaceRoot = path.resolve(projectRoot, "../..")
 
 const config = getDefaultConfig(projectRoot)
 
+// expo-sqlite ships a WebAssembly build for the web target.
+if (!config.resolver.assetExts.includes("wasm")) {
+  config.resolver.assetExts.push("wasm")
+}
+config.resolver.sourceExts.push("sql")
+
+// The SQLite web build needs cross-origin isolation for SharedArrayBuffer.
+const enhanceMiddleware = config.server.enhanceMiddleware
+config.server.enhanceMiddleware = (middleware, metroServer) => {
+  const enhancedMiddleware = enhanceMiddleware
+    ? enhanceMiddleware(middleware, metroServer)
+    : middleware
+  return (req, res, next) => {
+    res.setHeader("Cross-Origin-Embedder-Policy", "credentialless")
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin")
+    return enhancedMiddleware(req, res, next)
+  }
+}
+
 config.watchFolders = [workspaceRoot]
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),

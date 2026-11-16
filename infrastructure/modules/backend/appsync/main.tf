@@ -41,6 +41,11 @@ resource "aws_appsync_api" "api" {
       }
     }
 
+    # Backend publishers (the realtime Lambda) sign HTTP publishes with SigV4.
+    auth_provider {
+      auth_type = "AWS_IAM"
+    }
+
     connection_auth_mode {
       auth_type = "AMAZON_COGNITO_USER_POOLS"
     }
@@ -101,6 +106,15 @@ resource "aws_appsync_channel_namespace" "conversation" {
 resource "aws_appsync_channel_namespace" "user" {
   name   = "user"
   api_id = aws_appsync_api.api.api_id
+
+  publish_auth_mode {
+    auth_type = "AWS_IAM"
+  }
+
+  subscribe_auth_mode {
+    auth_type = "AMAZON_COGNITO_USER_POOLS"
+  }
+
   handler_configs {
     on_publish {
       behavior = "DIRECT"

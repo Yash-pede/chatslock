@@ -8,13 +8,16 @@ import React, {
   useState,
 } from "react"
 import { discardSession, tokenRefreshService } from "@repo/utils"
+import NetInfo from "@react-native-community/netinfo"
 import { usersApi, type OnboardingForm, type Profile } from "@/api/users.api"
+import { cacheSelfProfile, getCachedSelfProfile, useLocalDb } from "@/db"
 import {
   clearPendingAgent,
   loadPendingAgent,
   readInstallReferrerAgentOnce,
   savePendingAgent,
 } from "@/lib/pending-agent"
+import { useNetworkStatus } from "@/lib/use-network-status"
 import { useAuth } from "@/context/AuthContext"
 import { loadProfile, logProfile, userFlowFor, type Flow, type ProfileState } from "./profile"
 
@@ -39,8 +42,17 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null)
 
+/** Cached profile is shown if `/me` has not answered within this window. */
+const PROFILE_CACHE_TIMEOUT_MS = 4_000
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const { auth, phone, signOut } = useAuth()
+  const { db } = useLocalDb()
+  const { status: networkStatus } = useNetworkStatus()
   const signedIn = auth.status === "signedIn"
   const identity = auth.status === "signedIn" ? auth.identity : null
   const staff = identity !== null && identity.groups.length > 0
@@ -111,12 +123,60 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = useCallback(async (): Promise<ProfileState | null> => {
     const request = ++inFlight.current
     const key = sessionKey
-    const next = await loadProfile()
+    const userId = identity?.id ?? null
+
+    // A cached `/me` is enough to open the app offline; the network path below
+    // still runs as soon as connectivity returns.
+    const net = await NetInfo.fetch().catch(() => null)
+    const offline = net?.isConnected === false || net?.isInternetReachable === false
+    const cached = userId
+      ? await getCachedSelfProfile(db, userId).catch((error) => {
+          console.warn("[db] failed to read cached profile", error)
+          return null
+        })
+      : null
+
+    if (offline) {
+      if (request !== inFlight.current || key !== sessionKey) return null
+      return cached
+        ? { status: "ready", profile: cached }
+        : {
+            status: "error",
+            message: "You're offline. Connect to the internet to finish setting up your account.",
+          }
+    }
+
+    let next: ProfileState | null
+    if (cached) {
+      // A connected-but-unreachable network can take 30s to fail; don't keep
+      // the cached app behind the splash for that long.
+      next = await Promise.race([
+        loadProfile(),
+        delay(PROFILE_CACHE_TIMEOUT_MS).then(() => null),
+      ])
+      if (!next) {
+        if (request !== inFlight.current || key !== sessionKey) return null
+        return { status: "ready", profile: cached }
+      }
+    } else {
+      next = await loadProfile()
+    }
+    if (!next) return null
 
     // A late result from a previous session must not be applied to this one.
     if (request !== inFlight.current || key !== sessionKey) return null
+
+    if (next.status === "ready") {
+      await cacheSelfProfile(db, next.profile).catch((error) => {
+        console.warn("[db] failed to cache own profile", error)
+      })
+      return next
+    }
+
+    // A transport failure should not hide an account we already know about.
+    if (next.status === "error" && cached) return { status: "ready", profile: cached }
     return next
-  }, [sessionKey])
+  }, [db, identity, sessionKey])
 
   /** Applies a `/me` result to state, dropping the session when refused. */
   const applyProfile = useCallback(
@@ -148,8 +208,12 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       inFlight.current++
       return
     }
-    void fetchProfile().then(applyProfile)
-  }, [signedIn, sessionKey, fetchProfile, applyProfile])
+    void fetchProfile()
+      .then(applyProfile)
+      .catch((error) => {
+        console.warn("[profile] load failed", error)
+      })
+  }, [signedIn, sessionKey, fetchProfile, applyProfile, networkStatus])
 
   const reload = useCallback(async () => {
     // Force a new attempt: the gate is showing, so `staffResolved` may have

@@ -1,4 +1,6 @@
 import { usersApi, type PublicUserProfile } from "@/api/users.api"
+import { profileFromRow } from "@/db/profiles"
+import type { CachedConversation, CachedProfile } from "@/db/schema"
 import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
 import { getPeerUserId, type UserMemberConversation } from "@repo/types/schema"
 
@@ -47,11 +49,14 @@ export async function fetchPeerProfiles(
   return map
 }
 
-export function buildChatList(
-  conversations: UserMemberConversation[],
-  profiles: Map<string, PublicUserProfile>,
+/** Builds the chat list from the cached conversations and peer profiles. */
+export function buildChatListFromCache(
+  conversations: CachedConversation[],
+  profiles: CachedProfile[],
   currentUserId: string | null,
 ): ChatListItem[] {
+  const byId = new Map(profiles.map((profile) => [profile.userId, profileFromRow(profile)]))
+
   return conversations.map<ChatListItem>((conversation) => {
     const peerId = getPeerUserId(conversation.conversationId, currentUserId)
 
@@ -59,7 +64,7 @@ export function buildChatList(
       conversationId: conversation.conversationId,
       conversationType: conversation.conversationType,
       unreadCount: conversation.unreadCount,
-      peer: peerId ? (profiles.get(peerId) ?? null) : null,
+      peer: peerId ? (byId.get(peerId) ?? null) : null,
     }
   })
 }

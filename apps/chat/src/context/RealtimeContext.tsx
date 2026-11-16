@@ -1,11 +1,15 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo } from "react"
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { AppState } from "react-native"
+import NetInfo, { type NetInfoState } from "@react-native-community/netinfo"
 import { Amplify } from "aws-amplify"
 import { events, type EventsChannel } from "aws-amplify/api"
 import { tokenManager, tokenRefreshService } from "@repo/utils"
 import { useProfile } from "@/context/profile/ProfileContext"
 
-const RECONNECT_DELAY_MS = 3_000
+const RECONNECT_BASE_DELAY_MS = 1_000
+const RECONNECT_MAX_DELAY_MS = 30_000
+const CONNECT_TIMEOUT_MS = 15_000
+const READY_TIMEOUT_MS = 15_000
 
 /**
  * Amplify needs the Events endpoint once. Auth is always supplied per call from
@@ -34,7 +38,7 @@ type EventsSubscription = ReturnType<EventsChannel["subscribe"]>
  * in refs: every channel is in exactly one of these states.
  */
 type ChannelState =
-  | { status: "connecting"; promise: Promise<void> }
+  | { status: "connecting"; promise: Promise<void>; epoch: number }
   | {
       status: "open"
       connection: EventsChannel
@@ -42,10 +46,34 @@ type ChannelState =
       /** ID token the socket was authorized with; a refresh forces a reopen. */
       idToken: string
     }
-  | { status: "reconnecting"; timer: ReturnType<typeof setTimeout> }
+  | { status: "reconnecting"; timer: ReturnType<typeof setTimeout>; attempt: number }
 
 const listeners = new Map<string, Set<Listener>>()
 const channels = new Map<string, ChannelState>()
+/** Consecutive failed attempts per channel, used for exponential backoff. */
+const retryCounts = new Map<string, number>()
+/**
+ * Invalidates in-flight connects when a channel is closed or a newer attempt
+ * starts, so a late socket cannot resurrect a channel that was already dropped.
+ */
+const connectEpochs = new Map<string, number>()
+const reconnectListeners = new Set<() => void>()
+
+/**
+ * Last definitive NetInfo answer. While offline no reconnect timers are kept:
+ * the online transition rebuilds every active channel, which avoids a retry
+ * loop that cannot succeed.
+ */
+let networkOnline = true
+
+const isOnline = (state: NetInfoState) =>
+  state.isConnected === true && state.isInternetReachable === true
+const isOffline = (state: NetInfoState) =>
+  state.isConnected === false || state.isInternetReachable === false
+
+const notifyReconnected = () => {
+  reconnectListeners.forEach((listener) => listener())
+}
 
 /**
  * A valid Cognito **ID token** (AppSync Events rejects the access token in the
@@ -53,7 +81,7 @@ const channels = new Map<string, ChannelState>()
  * null, so a publish right after expiry still goes out on the first try.
  */
 const currentIdToken = async (): Promise<string> => {
-  if (!tokenRefreshService.ensureAccessToken()) {
+  if (!tokenRefreshService.ensureAccessToken() || tokenManager.isIdTokenExpired()) {
     await tokenRefreshService.refreshNow()
   }
 
@@ -68,6 +96,9 @@ const dispatch = (channel: string, event: RealtimeEvent) => {
 }
 
 const closeChannel = (channel: string) => {
+  // Any connect still in flight belongs to an older epoch and must not open.
+  connectEpochs.set(channel, (connectEpochs.get(channel) ?? 0) + 1)
+
   const state = channels.get(channel)
   if (!state) return
 
@@ -86,47 +117,99 @@ const closeChannel = (channel: string) => {
 
 const scheduleReconnect = (channel: string) => {
   if (!listeners.get(channel)?.size) {
+    retryCounts.delete(channel)
+    connectEpochs.delete(channel)
+    channels.delete(channel)
+    return
+  }
+
+  // Offline: wait for NetInfo's online transition instead of retrying blindly.
+  if (!networkOnline) {
     channels.delete(channel)
     return
   }
 
   if (channels.get(channel)?.status === "reconnecting") return
 
-  const timer = setTimeout(() => {
-    channels.delete(channel)
-    void ensureChannel(channel)
-  }, RECONNECT_DELAY_MS)
+  const attempt = (retryCounts.get(channel) ?? 0) + 1
+  retryCounts.set(channel, attempt)
+  const delay = Math.min(RECONNECT_BASE_DELAY_MS * 2 ** (attempt - 1), RECONNECT_MAX_DELAY_MS)
+  const timer = setTimeout(
+    () => {
+      channels.delete(channel)
+      void ensureChannel(channel)
+    },
+    delay + Math.random() * 500,
+  )
 
-  channels.set(channel, { status: "reconnecting", timer })
+  channels.set(channel, { status: "reconnecting", timer, attempt })
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms)
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
 }
 
 /** Opens (or joins) the single socket for a channel. */
 const ensureChannel = (channel: string): Promise<void> => {
+  if (!networkOnline) return Promise.resolve()
+
   const state = channels.get(channel)
   if (state?.status === "open") return Promise.resolve()
   if (state?.status === "connecting") return state.promise
   if (state?.status === "reconnecting") clearTimeout(state.timer)
 
+  const epoch = (connectEpochs.get(channel) ?? 0) + 1
+  connectEpochs.set(channel, epoch)
+
+  let connection: EventsChannel | undefined
+  let subscription: EventsSubscription | undefined
+
   const promise = (async () => {
     try {
       const idToken = await currentIdToken()
-      if (!listeners.get(channel)?.size) {
+      if (connectEpochs.get(channel) !== epoch) return
+      if (!networkOnline || !listeners.get(channel)?.size) {
         channels.delete(channel)
         return
       }
 
-      const connection = await events.connect(channel, {
+      const connectPromise = events.connect(channel, {
         authMode: "lambda",
         authToken: idToken,
       })
 
-      if (!listeners.get(channel)?.size) {
+      try {
+        connection = await withTimeout(
+          connectPromise,
+          CONNECT_TIMEOUT_MS,
+          "Realtime connection timed out",
+        )
+      } catch (error) {
+        // If the timeout won, a late connection must not be leaked.
+        void connectPromise.then((late) => late.close()).catch(() => undefined)
+        throw error
+      }
+
+      // A newer attempt or unsubscribe happened while the socket was opening.
+      if (connectEpochs.get(channel) !== epoch) {
+        connection.close()
+        return
+      }
+      if (!networkOnline || !listeners.get(channel)?.size) {
         connection.close()
         channels.delete(channel)
         return
       }
 
-      const subscription = connection.subscribe({
+      subscription = connection.subscribe({
         next: (frame: { event?: unknown }) => {
           if (frame?.event && typeof frame.event === "object") {
             dispatch(channel, frame.event as RealtimeEvent)
@@ -141,22 +224,43 @@ const ensureChannel = (channel: string): Promise<void> => {
 
       channels.set(channel, { status: "open", connection, subscription, idToken })
 
-      void subscription.ready
-        .then(() => console.log("[realtime] channel ready", { channel }))
-        .catch((error) => {
-          console.warn("[realtime] channel ready failed", { channel, error })
-          closeChannel(channel)
-          scheduleReconnect(channel)
-        })
+      await withTimeout(
+        subscription.ready,
+        READY_TIMEOUT_MS,
+        "Realtime subscription timed out",
+      )
+
+      // A newer attempt or an unsubscribe may have replaced this connection.
+      if (connectEpochs.get(channel) !== epoch) {
+        subscription.unsubscribe()
+        connection.close()
+        return
+      }
+      if (channels.get(channel)?.status !== "open") return
+
+      retryCounts.delete(channel)
+      console.log("[realtime] channel ready", { channel })
+      notifyReconnected()
     } catch (error) {
+      if (connectEpochs.get(channel) !== epoch) {
+        // Superseded mid-connect: only clean up this attempt's own socket.
+        subscription?.unsubscribe()
+        connection?.close()
+        return
+      }
+
       console.warn("[realtime] channel connect failed", { channel, error })
+      closeChannel(channel)
       scheduleReconnect(channel)
     } finally {
-      if (channels.get(channel)?.status === "connecting") channels.delete(channel)
+      const current = channels.get(channel)
+      if (current?.status === "connecting" && current.epoch === epoch) {
+        channels.delete(channel)
+      }
     }
   })()
 
-  channels.set(channel, { status: "connecting", promise })
+  channels.set(channel, { status: "connecting", promise, epoch })
   return promise
 }
 
@@ -165,6 +269,10 @@ interface RealtimeContextValue {
   publish: (channel: string, payload: unknown) => Promise<void>
   /** Receives every event on the channel; returns an unsubscribe. */
   subscribe: (channel: string, listener: Listener) => () => void
+  /** False while NetInfo reports no usable connection. */
+  online: boolean
+  /** Increments whenever a channel becomes ready (including reconnects). */
+  reconnectVersion: number
 }
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null)
@@ -177,6 +285,55 @@ export function RealtimeProvider({
   active?: boolean
   children: React.ReactNode
 }) {
+  const [online, setOnline] = useState(true)
+  const [reconnectVersion, setReconnectVersion] = useState(0)
+
+  useEffect(() => {
+    const listener = () => setReconnectVersion((value) => value + 1)
+    reconnectListeners.add(listener)
+    return () => {
+      reconnectListeners.delete(listener)
+    }
+  }, [])
+
+  // Connectivity is the source of truth for whether retrying makes sense.
+  // Losing the network closes the sockets immediately instead of waiting for
+  // Amplify to notice a half-open WebSocket. The listener also runs while
+  // signed out so the first signed-in screen sees the correct state.
+  useEffect(() => {
+    const apply = (state: NetInfoState) => {
+      if (isOffline(state)) {
+        if (!networkOnline) return
+        networkOnline = false
+        setOnline(false)
+        for (const channel of [...channels.keys()]) closeChannel(channel)
+        return
+      }
+
+      // `isInternetReachable` is often null while NetInfo re-checks; keep the
+      // current state instead of flapping offline/online.
+      if (!isOnline(state) || networkOnline) return
+
+      networkOnline = true
+      setOnline(true)
+      if (!active) return
+
+      for (const channel of listeners.keys()) {
+        // A fresh network gets an immediate attempt; backoff restarts if it
+        // still cannot connect.
+        retryCounts.delete(channel)
+        closeChannel(channel)
+        void ensureChannel(channel)
+      }
+    }
+
+    const unsubscribe = NetInfo.addEventListener(apply)
+    void NetInfo.fetch()
+      .then(apply)
+      .catch(() => undefined)
+    return unsubscribe
+  }, [active])
+
   useEffect(() => {
     if (!active) {
       for (const channel of [...channels.keys()]) closeChannel(channel)
@@ -220,13 +377,17 @@ export function RealtimeProvider({
       console.log("[realtime] unsubscribe", { channel, listeners: current.size })
       if (current.size === 0) {
         listeners.delete(channel)
+        retryCounts.delete(channel)
         closeChannel(channel)
+        connectEpochs.delete(channel)
       }
     }
   }, [])
 
   const publish = useCallback(async (channel: string, payload: unknown) => {
     console.log("[realtime] publish", { channel, payload })
+
+    if (!networkOnline) throw new Error("You're offline. Try again when connected.")
 
     // A publish is authorized with the token captured when the socket opened.
     // If the session rotated since, the socket must be rebuilt first.
@@ -272,7 +433,10 @@ export function RealtimeProvider({
     }
   }, [])
 
-  const value = useMemo<RealtimeContextValue>(() => ({ publish, subscribe }), [publish, subscribe])
+  const value = useMemo<RealtimeContextValue>(
+    () => ({ publish, subscribe, online, reconnectVersion }),
+    [online, publish, reconnectVersion, subscribe],
+  )
 
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>
 }

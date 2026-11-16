@@ -103,6 +103,14 @@ resource "aws_iam_role_policy" "api_lambda_policy" {
         ],
         Resource = ["*"]
       },
+      {
+        Sid : "Appsync",
+        Effect : "Allow",
+        Action : [
+          "appsync:EventPublish"
+        ],
+        Resource : ["*"]
+      }
     ]
   })
 }

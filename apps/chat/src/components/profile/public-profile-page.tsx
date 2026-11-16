@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Pressable, View } from "react-native"
 import { router } from "expo-router"
 import { ChevronLeft } from "lucide-react-native"
+import { eq } from "drizzle-orm"
+import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { format, formatDistanceToNow } from "date-fns"
 import { Button, SafeArea, Spinner, Text, useToast, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
 import { conversationsApi, type ConversationSummary } from "@/api/conversations.api"
 import { usersApi, type PublicUserProfile } from "@/api/users.api"
+import { cacheProfiles, profileFromRow, useLocalDb } from "@/db"
+import { profiles as profilesTable } from "@/db/schema"
 import { UserAvatar } from "@/components/user-avatar"
 
 /**
@@ -17,18 +21,44 @@ import { UserAvatar } from "@/components/user-avatar"
 export function PublicProfilePage({ username }: { username: string }) {
   const colors = useThemeColors()
   const { toast } = useToast()
+  const { db } = useLocalDb()
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [profile, setProfile] = useState<PublicUserProfile | null>(null)
+  const [fetchedProfile, setFetchedProfile] = useState<PublicUserProfile | null>(null)
   const [conversation, setConversation] = useState<ConversationSummary | null>(null)
   const [checkingConversation, setCheckingConversation] = useState(false)
   const [creating, setCreating] = useState(false)
+
+  const cachedQuery = useMemo(
+    () => db.select().from(profilesTable).where(eq(profilesTable.username, username)),
+    [db, username],
+  )
+  const { data: cachedRows } = useLiveQuery(cachedQuery, [cachedQuery])
+  const cachedProfile = useMemo(() => {
+    const row = cachedRows.find((item) => item.username === username)
+    return row ? profileFromRow(row) : null
+  }, [cachedRows, username])
+  const profile = fetchedProfile ?? cachedProfile
+
+  // Cached profile wins over a pending/failed network request.
+  const viewStatus = profile ? "ready" : status
+
+  // Reset network state during render when the link's username changes.
+  const [loadedUsername, setLoadedUsername] = useState(username)
+  if (loadedUsername !== username) {
+    setLoadedUsername(username)
+    setFetchedProfile(null)
+    setStatus("loading")
+  }
 
   const fetchProfile = useCallback(() => {
     return usersApi
       .getProfile(username.toLowerCase())
       .then((next) => {
-        setProfile(next)
+        setFetchedProfile(next)
         setStatus("ready")
+        void cacheProfiles(db, [next]).catch((error) => {
+          console.warn("[db] failed to cache profile", error)
+        })
 
         setCheckingConversation(true)
         void conversationsApi
@@ -38,7 +68,7 @@ export function PublicProfilePage({ username }: { username: string }) {
           .finally(() => setCheckingConversation(false))
       })
       .catch(() => setStatus("error"))
-  }, [username])
+  }, [db, username])
 
   useEffect(() => {
     void fetchProfile()
@@ -103,11 +133,11 @@ export function PublicProfilePage({ username }: { username: string }) {
           <Text className="ms-1 text-base font-semibold text-foreground">Profile</Text>
         </View>
 
-        {status === "loading" ? (
+        {viewStatus === "loading" ? (
           <View className="flex-1 items-center justify-center">
             <Spinner />
           </View>
-        ) : status === "error" || !profile ? (
+        ) : viewStatus === "error" || !profile ? (
           <View className="flex-1 items-center justify-center gap-4 px-8">
             <Text variant="h4" className="text-center">
               Profile not found

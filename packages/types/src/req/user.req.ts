@@ -1,10 +1,15 @@
 import z from "zod"
+import { compositeConversationId } from "../schema/conversation.schema"
 import { userId } from "../schema/user.schema"
 import { baseSchema } from "./base"
 import { MAX_PROFILE_LOOKUP } from "./conversations.req"
 
 export const PEER_USER_STATUS = ["ONLINE", "OFFLINE"] as const
 export type PeerUserStatus = (typeof PEER_USER_STATUS)[number]
+
+/** Presence the client reports when it opens, refreshes, or leaves a conversation. */
+export const CLIENT_CONVERSATION_STATUS = ["OPENED", "HEARTBEAT", "CLOSED"] as const
+export type ClientConversationStatus = (typeof CLIENT_CONVERSATION_STATUS)[number]
 
 /** Client → server presence event on `/user/<userId>`; the handler broadcasts it. */
 export const USER_EVENT = {
@@ -40,3 +45,12 @@ export const getUserProfilesReq = baseSchema.extend({
   }),
 })
 export type GetUserProfilesRequest = z.infer<typeof getUserProfilesReq>
+
+/** `POST /api/users/conversationMeta` — active conversation presence. */
+export const userActiveConversationReq = baseSchema.extend({
+  body: z.strictObject({
+    conversationId: compositeConversationId,
+    status: z.enum(CLIENT_CONVERSATION_STATUS),
+  }),
+})
+export type UserActiveConversationReq = z.infer<typeof userActiveConversationReq>

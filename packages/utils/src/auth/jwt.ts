@@ -7,6 +7,8 @@
  */
 export interface IdTokenClaims {
   sub: string
+  /** Standard JWT expiry, seconds since epoch. */
+  exp?: number
   "cognito:username"?: string
   "cognito:groups"?: string[]
   email?: string

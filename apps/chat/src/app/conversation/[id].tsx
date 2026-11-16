@@ -21,14 +21,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Text,
   useToast,
   useThemeColors,
 } from "@repo/ui"
 import * as Clipboard from "expo-clipboard"
+import { eq } from "drizzle-orm"
+import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { getPeerUserId, MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
 import type { PeerUserStatus } from "@repo/types/req"
 import { usersApi } from "@/api/users.api"
+import { cacheProfiles, profileFromRow, useLocalDb } from "@/db"
+import { profiles as profilesTable } from "@/db/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
+import { useRealtime } from "@/context/RealtimeContext"
 import {
   collectMedia,
   ConversationEmpty,
@@ -42,8 +48,10 @@ import {
   MessageComposer,
   TypingBubble,
   useConversationMessages,
+  useConversationMeta,
   useDocumentDownload,
   useMessageListScroll,
+  usePeerPresence,
   type ChatMessage,
 } from "@/components/messages"
 
@@ -88,9 +96,7 @@ export default function ConversationScreen() {
     notifyTyping,
     editMessage,
     deleteMessage,
-  } = useConversationMessages(conversationId, user?.userId ?? null, {
-    unreadCount: Number(params.unread) || 0,
-  })
+  } = useConversationMessages(conversationId, user?.userId ?? null)
 
   const { listRef, awayFromBottom, onScroll, onScrollBeginDrag, scrollToBottom, onLoad } =
     useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
@@ -130,6 +136,30 @@ export default function ConversationScreen() {
     () => (currentUserId ? getPeerUserId(conversationId, currentUserId) : null),
     [conversationId, currentUserId],
   )
+
+  const { db } = useLocalDb()
+  const { online } = useRealtime()
+  const peerProfileQuery = useMemo(
+    () => db.select().from(profilesTable).where(eq(profilesTable.userId, peerId ?? "")),
+    [db, peerId],
+  )
+  const { data: peerProfileRows } = useLiveQuery(peerProfileQuery, [peerProfileQuery])
+  const cachedPeer = useMemo(() => {
+    const row = peerProfileRows.find((item) => item.userId === peerId)
+    return row ? profileFromRow(row) : null
+  }, [peerId, peerProfileRows])
+
+  const {
+    status: livePeerStatus,
+    lastActiveAt: livePeerLastActiveAt,
+    statusRef: livePeerStatusRef,
+    lastActiveAtRef: livePeerLastActiveAtRef,
+  } = usePeerPresence(conversationId, currentUserId)
+  useConversationMeta(conversationId)
+  // Live presence wins; the cached profile keeps the header usable offline.
+  const headerPeer = peerPresence ?? cachedPeer
+  const peerStatus = livePeerStatus ?? peerPresence?.status ?? cachedPeer?.status
+  const peerLastActiveAt = livePeerLastActiveAt ?? headerPeer?.lastActiveAt
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** When the selection started; the edit window is measured from here. */
@@ -233,17 +263,33 @@ export default function ConversationScreen() {
   // Presence + last activity for the header, refreshed when the screen gains focus.
   useFocusEffect(
     useCallback(() => {
-      if (!peerId) return
+      if (!peerId || !online) return
       let cancelled = false
 
       void usersApi
         .getProfiles([peerId])
         .then(([profile]) => {
           if (cancelled || !profile) return
+
+          // A status event may have arrived while `/profiles` was in flight;
+          // keep the live values instead of overwriting them with the snapshot.
+          const nextStatus = livePeerStatusRef.current ?? profile.status
+          const nextLastActiveAt = livePeerLastActiveAtRef.current ?? profile.lastActiveAt
           setPeerPresence({
-            status: profile.status,
-            lastActiveAt: profile.lastActiveAt,
+            status: nextStatus,
+            lastActiveAt: nextLastActiveAt,
             username: profile.username,
+          })
+          void cacheProfiles(db, [
+            {
+              ...profile,
+              status: nextStatus,
+              ...(livePeerLastActiveAtRef.current !== null
+                ? { lastActiveAt: nextLastActiveAt }
+                : {}),
+            },
+          ]).catch((error) => {
+            console.warn("[db] failed to cache peer profile", error)
           })
         })
         .catch(() => undefined)
@@ -251,7 +297,7 @@ export default function ConversationScreen() {
       return () => {
         cancelled = true
       }
-    }, [peerId]),
+    }, [db, livePeerLastActiveAtRef, livePeerStatusRef, online, peerId]),
   )
 
   const selectMessage = useCallback((message: ChatMessage) => {
@@ -290,7 +336,18 @@ export default function ConversationScreen() {
   const emptyState =
     status === "loading" ? (
       <ConversationLoading />
-    ) : status === "error" ? null : (
+    ) : status === "error" ? (
+      <View className="items-center justify-center px-8 py-16">
+        <Text variant="large" className="text-center">
+          Couldn&apos;t load messages
+        </Text>
+        <Text variant="muted" className="mt-1 text-center">
+          {online
+            ? "Check your connection and try again."
+            : "You're offline. Messages will load when you reconnect."}
+        </Text>
+      </View>
+    ) : (
       <ConversationEmpty conversationId={conversationId} name={name} />
     )
 
@@ -305,12 +362,12 @@ export default function ConversationScreen() {
           <ConversationHeader
             name={name}
             avatar={avatar}
-            peerStatus={peerPresence?.status}
-            lastActiveAt={peerPresence?.lastActiveAt}
+            peerStatus={peerStatus}
+            lastActiveAt={peerLastActiveAt}
             typing={peerTyping}
             onPressProfile={
-              peerPresence
-                ? () => router.push(`/u/${encodeURIComponent(peerPresence.username)}`)
+              headerPeer
+                ? () => router.push(`/u/${encodeURIComponent(headerPeer.username)}`)
                 : undefined
             }
           />

@@ -1,4 +1,5 @@
 import * as SecureStore from "expo-secure-store"
+import type { AuthUser } from "./jwt"
 
 export interface TokenPair {
   accessToken: string
@@ -8,6 +9,7 @@ export interface TokenPair {
 const REFRESH_TOKEN_KEY = "refresh_token"
 const AUTH_CLIENT_KEY = "auth_client"
 const SESSION_ID_KEY = "session_id"
+const IDENTITY_KEY = "identity"
 
 class SecureStorageService {
   // Store refresh token securely using Keychain/Keystore
@@ -99,11 +101,51 @@ class SecureStorageService {
     }
   }
 
+  /**
+   * Last identity decoded from a valid ID token. Kept so an offline launch can
+   * open the cached app without a refresh round-trip; tokens are never stored.
+   */
+  async storeIdentity(identity: AuthUser): Promise<void> {
+    try {
+      await SecureStore.setItemAsync(IDENTITY_KEY, JSON.stringify(identity))
+    } catch (error) {
+      console.error("Failed to store identity:", error)
+    }
+  }
+
+  async getIdentity(): Promise<AuthUser | null> {
+    try {
+      const raw = await SecureStore.getItemAsync(IDENTITY_KEY)
+      if (!raw) return null
+      const parsed = JSON.parse(raw) as Partial<AuthUser>
+      if (!parsed.id || typeof parsed.id !== "string") return null
+      return {
+        id: parsed.id,
+        username: typeof parsed.username === "string" ? parsed.username : null,
+        email: typeof parsed.email === "string" ? parsed.email : null,
+        phone: typeof parsed.phone === "string" ? parsed.phone : null,
+        groups: Array.isArray(parsed.groups) ? parsed.groups.filter((g) => typeof g === "string") : [],
+      }
+    } catch (error) {
+      console.error("Failed to retrieve identity:", error)
+      return null
+    }
+  }
+
+  async removeIdentity(): Promise<void> {
+    try {
+      await SecureStore.deleteItemAsync(IDENTITY_KEY)
+    } catch (error) {
+      console.error("Failed to remove identity:", error)
+    }
+  }
+
   // Clear all authentication data
   async clearAllTokens(): Promise<void> {
     await this.removeRefreshToken()
     await this.removeAuthClient()
     await this.removeSessionId()
+    await this.removeIdentity()
   }
 }
 

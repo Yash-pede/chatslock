@@ -7,6 +7,7 @@ import type {
   GetPublicProfileRequest,
   GetUserProfilesRequest,
   UpdateSessionPushTokenRequest,
+  UserActiveConversationReq,
   UserOnboardingRequest,
 } from "@repo/types/req"
 import {
@@ -20,6 +21,7 @@ import {
   revokeUserSession,
   updateMyProfile,
   updateSessionPushToken,
+  userActiveConversationService,
 } from "./users.service"
 
 export const onboardingController = async (c: Context) => {
@@ -102,7 +104,20 @@ export const revokeSessionController = async (c: Context) => {
   return c.json({ message: "Session revoked" })
 }
 
-/** Public profile for `/u/<username>` and the chat list; also marks the caller active. */
+/** Reports the conversation currently on screen; CLOSED clears presence. */
+export const userConversationController = async (c: Context) => {
+  const { body }: UserActiveConversationReq = c.get("valid")
+
+  const peerStatus = await userActiveConversationService({
+    userId: c.get("userId"),
+    conversationId: body.conversationId,
+    status: body.status,
+  })
+
+  return c.json({ peerStatus })
+}
+
+/** Public profile for `/u/<username>` and the chat list. */
 export const getPublicProfileController = async (c: Context) => {
   const { query }: GetPublicProfileRequest = c.get("valid")
 
