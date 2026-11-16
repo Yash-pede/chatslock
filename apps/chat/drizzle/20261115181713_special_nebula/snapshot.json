@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "a4dae87c-6b33-4cc3-8947-ec077543f5e5",
-  "prevIds": [
-    "d3b9c1b7-0b85-4a1a-8275-4c1df56c209f"
-  ],
+  "prevIds": ["d3b9c1b7-0b85-4a1a-8275-4c1df56c209f"],
   "ddl": [
     {
       "name": "chats",
@@ -429,46 +427,35 @@
     {
       "table": "conversations",
       "name": "conversations_pk",
-      "columns": [
-        "owner_user_id",
-        "conversation_id"
-      ],
+      "columns": ["owner_user_id", "conversation_id"],
       "nameExplicit": false,
       "entityType": "pks"
     },
     {
       "table": "chats",
       "name": "chats_pk",
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "entityType": "pks"
     },
     {
       "table": "messages",
       "name": "messages_pk",
-      "columns": [
-        "message_id"
-      ],
+      "columns": ["message_id"],
       "nameExplicit": false,
       "entityType": "pks"
     },
     {
       "table": "profiles",
       "name": "profiles_pk",
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "nameExplicit": false,
       "entityType": "pks"
     },
     {
       "table": "self_profile",
       "name": "self_profile_pk",
-      "columns": [
-        "user_id"
-      ],
+      "columns": ["user_id"],
       "nameExplicit": false,
       "entityType": "pks"
     }

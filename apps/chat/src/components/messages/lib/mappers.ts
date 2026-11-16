@@ -123,4 +123,3 @@ export function cachedRowToChatMessage(
     ...(row.pendingId ? { pendingId: row.pendingId } : {}),
   }
 }
-

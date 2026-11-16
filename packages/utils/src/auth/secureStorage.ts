@@ -124,7 +124,9 @@ class SecureStorageService {
         username: typeof parsed.username === "string" ? parsed.username : null,
         email: typeof parsed.email === "string" ? parsed.email : null,
         phone: typeof parsed.phone === "string" ? parsed.phone : null,
-        groups: Array.isArray(parsed.groups) ? parsed.groups.filter((g) => typeof g === "string") : [],
+        groups: Array.isArray(parsed.groups)
+          ? parsed.groups.filter((g) => typeof g === "string")
+          : [],
       }
     } catch (error) {
       console.error("Failed to retrieve identity:", error)

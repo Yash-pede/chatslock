@@ -150,10 +150,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     if (cached) {
       // A connected-but-unreachable network can take 30s to fail; don't keep
       // the cached app behind the splash for that long.
-      next = await Promise.race([
-        loadProfile(),
-        delay(PROFILE_CACHE_TIMEOUT_MS).then(() => null),
-      ])
+      next = await Promise.race([loadProfile(), delay(PROFILE_CACHE_TIMEOUT_MS).then(() => null)])
       if (!next) {
         if (request !== inFlight.current || key !== sessionKey) return null
         return { status: "ready", profile: cached }

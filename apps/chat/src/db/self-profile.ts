@@ -41,14 +41,7 @@ export async function cacheSelfProfile(db: Database, profile: getUser): Promise<
 }
 
 /** The last cached `/me` profile, used when the app starts offline. */
-export async function getCachedSelfProfile(
-  db: Database,
-  userId: string,
-): Promise<getUser | null> {
-  const rows = await db
-    .select()
-    .from(selfProfile)
-    .where(eq(selfProfile.userId, userId))
-    .limit(1)
+export async function getCachedSelfProfile(db: Database, userId: string): Promise<getUser | null> {
+  const rows = await db.select().from(selfProfile).where(eq(selfProfile.userId, userId)).limit(1)
   return rows[0] ? selfProfileFromRow(rows[0]) : null
 }

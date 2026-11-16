@@ -220,11 +220,7 @@ function VideoPreview({
 
   if (!canLoad) {
     return (
-      <MediaOfflinePlaceholder
-        width={width}
-        height={height}
-        label="Video unavailable offline"
-      />
+      <MediaOfflinePlaceholder width={width} height={height} label="Video unavailable offline" />
     )
   }
 

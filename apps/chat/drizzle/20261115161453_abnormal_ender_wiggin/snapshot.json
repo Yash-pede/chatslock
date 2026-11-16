@@ -2,9 +2,7 @@
   "version": "7",
   "dialect": "sqlite",
   "id": "da8d38e3-e35d-4c50-bc88-97a60221fd2b",
-  "prevIds": [
-    "00000000-0000-0000-0000-000000000000"
-  ],
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "chats",
@@ -53,9 +51,7 @@
     {
       "table": "chats",
       "name": "chats_pk",
-      "columns": [
-        "id"
-      ],
+      "columns": ["id"],
       "nameExplicit": false,
       "entityType": "pks"
     }

@@ -140,7 +140,11 @@ export default function ConversationScreen() {
   const { db } = useLocalDb()
   const { online } = useRealtime()
   const peerProfileQuery = useMemo(
-    () => db.select().from(profilesTable).where(eq(profilesTable.userId, peerId ?? "")),
+    () =>
+      db
+        .select()
+        .from(profilesTable)
+        .where(eq(profilesTable.userId, peerId ?? "")),
     [db, peerId],
   )
   const { data: peerProfileRows } = useLiveQuery(peerProfileQuery, [peerProfileQuery])

@@ -1,11 +1,7 @@
 import { useCallback, useMemo, useRef, useState, type MutableRefObject } from "react"
 import { useFocusEffect } from "expo-router"
 import { getPeerUserId } from "@repo/types/schema"
-import {
-  USER_EVENT,
-  userPublishEnvelopeSchema,
-  type PeerUserStatus,
-} from "@repo/types/req"
+import { USER_EVENT, userPublishEnvelopeSchema, type PeerUserStatus } from "@repo/types/req"
 import { useRealtime } from "@/context/RealtimeContext"
 import { useLocalDb } from "@/db"
 import { updateCachedProfileStatus } from "@/db/profiles"
@@ -69,11 +65,9 @@ export function usePeerPresence(
         setLastActiveAt(offlineAt)
 
         // Keep the chat list's cached profile in sync with the live header.
-        void updateCachedProfileStatus(db, peerId, next, offlineAt ?? undefined).catch(
-          (error) => {
-            console.warn("[db] failed to update cached presence", error)
-          },
-        )
+        void updateCachedProfileStatus(db, peerId, next, offlineAt ?? undefined).catch((error) => {
+          console.warn("[db] failed to update cached presence", error)
+        })
       })
 
       return () => {

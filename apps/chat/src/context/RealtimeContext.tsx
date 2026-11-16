@@ -224,11 +224,7 @@ const ensureChannel = (channel: string): Promise<void> => {
 
       channels.set(channel, { status: "open", connection, subscription, idToken })
 
-      await withTimeout(
-        subscription.ready,
-        READY_TIMEOUT_MS,
-        "Realtime subscription timed out",
-      )
+      await withTimeout(subscription.ready, READY_TIMEOUT_MS, "Realtime subscription timed out")
 
       // A newer attempt or an unsubscribe may have replaced this connection.
       if (connectEpochs.get(channel) !== epoch) {

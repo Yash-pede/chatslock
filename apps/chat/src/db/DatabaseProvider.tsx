@@ -47,9 +47,7 @@ export function LocalDbProvider({
       })
       .catch((reason: unknown) => {
         if (!cancelled) {
-          setError(
-            reason instanceof Error ? reason.message : "Could not open the local database.",
-          )
+          setError(reason instanceof Error ? reason.message : "Could not open the local database.")
         }
       })
 

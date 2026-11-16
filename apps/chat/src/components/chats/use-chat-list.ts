@@ -108,8 +108,7 @@ export function useChatList(currentUserId: string | null): UseChatListResult {
   const loading = items.length === 0 && fetchStatus === "loading" && online
   const error =
     items.length === 0
-      ? (fetchError ??
-        (online ? null : "You're offline. Connect to load your chats."))
+      ? (fetchError ?? (online ? null : "You're offline. Connect to load your chats."))
       : null
 
   return useMemo(() => ({ items, loading, error, refresh: load }), [items, loading, error, load])

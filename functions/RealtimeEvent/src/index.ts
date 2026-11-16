@@ -126,14 +126,12 @@ app.onPublish("/user/*", async (payload, event) => {
 
     // Cognito clients may only publish to their own channel. The realtime
     // Lambda publishes presence for a user with its IAM role instead.
-    const identity = event.identity as
-      | {
-          sub?: string
-          claims?: { sub?: string }
-          userArn?: string
-          accountId?: string
-        }
-      | null
+    const identity = event.identity as {
+      sub?: string
+      claims?: { sub?: string }
+      userArn?: string
+      accountId?: string
+    } | null
     const cognitoUserId = identity?.claims?.sub ?? identity?.sub
 
     if (cognitoUserId) {

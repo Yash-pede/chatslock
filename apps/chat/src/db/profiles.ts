@@ -29,10 +29,7 @@ export function profileFromRow(row: CachedProfile): PublicUserProfile {
 }
 
 /** Upserts a batch of peer profiles. */
-export async function cacheProfiles(
-  db: Database,
-  batch: PublicUserProfile[],
-): Promise<void> {
+export async function cacheProfiles(db: Database, batch: PublicUserProfile[]): Promise<void> {
   if (batch.length === 0) return
 
   db.transaction((tx) => {

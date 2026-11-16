@@ -45,10 +45,7 @@ export function storedIdentity(): AuthUser | null {
 }
 
 /** Tokens are on the device: start refreshing and report them. */
-export function signedIn(
-  identity: AuthUser,
-  options: { startRefresh?: boolean } = {},
-): AuthState {
+export function signedIn(identity: AuthUser, options: { startRefresh?: boolean } = {}): AuthState {
   if (options.startRefresh !== false) tokenRefreshService.startAutoRefresh()
   return { status: "signedIn", identity }
 }
