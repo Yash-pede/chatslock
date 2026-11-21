@@ -321,24 +321,21 @@ export default function ConversationScreen() {
   const toggleStar = useCallback(() => {
     if (!user?.userId) return
     const next = !isStarred
-    void (next
-      ? starCachedConversation(db, user.userId, conversationId)
-      : unstarCachedConversation(db, user.userId, conversationId)
-    )
-      .catch(() => toast({ title: "Could not update chat", variant: "destructive" }))
+    void (
+      next
+        ? starCachedConversation(db, user.userId, conversationId)
+        : unstarCachedConversation(db, user.userId, conversationId)
+    ).catch(() => toast({ title: "Could not update chat", variant: "destructive" }))
   }, [conversationId, db, isStarred, toast, user])
 
   const toggleMessageStar = useCallback(() => {
     if (!selectedMessage) return
     clearSelection()
     const next = !isMessageStarred
-    void (next
-      ? starCachedMessage(db, selectedMessage.id)
-      : unstarCachedMessage(db, selectedMessage.id)
+    void (
+      next ? starCachedMessage(db, selectedMessage.id) : unstarCachedMessage(db, selectedMessage.id)
     )
-      .then(() =>
-        toast({ title: next ? "Message starred" : "Message unstarred" }),
-      )
+      .then(() => toast({ title: next ? "Message starred" : "Message unstarred" }))
       .catch(() => toast({ title: "Could not update message", variant: "destructive" }))
   }, [clearSelection, db, isMessageStarred, selectedMessage, toast])
 

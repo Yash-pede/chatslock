@@ -8,11 +8,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { Text, useThemeColors, useToast } from "@repo/ui"
 import * as Clipboard from "expo-clipboard"
-import {
-  unstarCachedMessage,
-  unstarConversationMessages,
-  useLocalDb,
-} from "@/db"
+import { unstarCachedMessage, unstarConversationMessages, useLocalDb } from "@/db"
 import { messages as messagesTable } from "@/db/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
 import {
@@ -50,10 +46,7 @@ export default function StarredMessagesScreen() {
         .select()
         .from(messagesTable)
         .where(
-          and(
-            eq(messagesTable.starred, true),
-            eq(messagesTable.conversationId, conversationId),
-          ),
+          and(eq(messagesTable.starred, true), eq(messagesTable.conversationId, conversationId)),
         )
         .orderBy(desc(messagesTable.createdAt)),
     [conversationId, db],
@@ -93,7 +86,12 @@ export default function StarredMessagesScreen() {
   const unstarAll = useCallback(() => {
     setMenuOpen(false)
     void unstarConversationMessages(db, conversationId)
-      .then(() => toast({ title: "Unstarred all messages", description: "All starred messages in this chat were unstarred." }))
+      .then(() =>
+        toast({
+          title: "Unstarred all messages",
+          description: "All starred messages in this chat were unstarred.",
+        }),
+      )
       .catch(() => toast({ title: "Could not unstar messages", variant: "destructive" }))
   }, [conversationId, db, toast])
 
