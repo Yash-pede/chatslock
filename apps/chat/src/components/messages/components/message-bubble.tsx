@@ -36,6 +36,7 @@ function AudioBubble({
   selected,
   failedClass,
   online,
+  starred = false,
 }: {
   voice: { url: string; durationSeconds: number; waveform: number[] }
   tint: string
@@ -46,6 +47,7 @@ function AudioBubble({
   selected?: boolean
   failedClass?: string
   online: boolean
+  starred?: boolean
 }) {
   const remote = voice.url.startsWith("http")
   const player = useAudioPlayer(remote && !online ? null : voice.url ? { uri: voice.url } : null)
@@ -68,6 +70,7 @@ function AudioBubble({
         variant={variant}
         timestamp={time}
         status={status}
+        starred={starred}
         className={cn(
           "w-[62%] max-w-[66%]",
           selected &&
@@ -100,6 +103,7 @@ function AudioBubble({
       variant={variant}
       timestamp={time}
       status={status}
+      starred={starred}
       className={cn(
         "w-[62%] max-w-[66%]",
         selected &&
@@ -265,6 +269,7 @@ export const MessageBubble = memo(function MessageBubble({
   const { online } = useRealtime()
   const variant = message.isMine ? "sent" : "received"
   const time = clock(message.createdAt)
+  const starred = message.starred === true
   const tint = message.isMine ? colors.primaryForeground : colors.secondaryForeground
   const subtle = message.isMine ? `${colors.primaryForeground}99` : colors.mutedForeground
   const failed = message.status === "failed"
@@ -294,6 +299,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
+          starred={starred}
           className={cn(selectedClass, failedClass)}
         >
           <View className="flex-row items-center gap-1.5">
@@ -329,6 +335,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
+          starred={starred}
           className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
         >
           <Pressable
@@ -370,6 +377,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
+          starred={starred}
           className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
         >
           <Pressable
@@ -401,6 +409,7 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           timestamp={time}
           status={message.status}
+          starred={starred}
           className={cn("w-[78%] max-w-[78%]", selectedClass, failedClass)}
         >
           <View className="flex-row items-center gap-3">
@@ -444,6 +453,7 @@ export const MessageBubble = memo(function MessageBubble({
           selected={selected}
           failedClass={failedClass}
           online={online}
+          starred={starred}
         />
       )
     }
@@ -453,6 +463,7 @@ export const MessageBubble = memo(function MessageBubble({
         variant={variant}
         timestamp={time}
         status={message.status}
+        starred={starred}
         className={cn(selectedClass, failedClass)}
       >
         <LinkifiedText

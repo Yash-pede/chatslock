@@ -70,6 +70,38 @@ export async function incrementCachedConversationUnread(
     )
 }
 
+export async function starCachedConversation(
+  db: Database,
+  ownerUserId: string,
+  conversationId: string,
+): Promise<void> {
+  await db
+    .update(conversations)
+    .set({ starred: true })
+    .where(
+      and(
+        eq(conversations.ownerUserId, ownerUserId),
+        eq(conversations.conversationId, conversationId),
+      ),
+    )
+}
+
+export async function unstarCachedConversation(
+  db: Database,
+  ownerUserId: string,
+  conversationId: string,
+): Promise<void> {
+  await db
+    .update(conversations)
+    .set({ starred: false })
+    .where(
+      and(
+        eq(conversations.ownerUserId, ownerUserId),
+        eq(conversations.conversationId, conversationId),
+      ),
+    )
+}
+
 /**
  * Writes one chat-list page into SQLite. Profiles are written first and in the
  * same transaction, so a conversation never renders without its peer.

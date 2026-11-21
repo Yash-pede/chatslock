@@ -124,6 +124,7 @@ export function cachedRowToChatMessage(
   return {
     ...toChatMessage(messageFromRow(row), currentUserId),
     status: (row.status as ChatMessage["status"] | null) ?? "sent",
+    starred: row.starred,
     ...(row.pendingId ? { pendingId: row.pendingId } : {}),
   }
 }

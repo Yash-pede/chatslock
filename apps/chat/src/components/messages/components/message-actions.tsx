@@ -1,4 +1,4 @@
-import { Copy, Download, Pencil, Trash2, X } from "lucide-react-native"
+import { Copy, Download, Pencil, Star, StarOff, Trash2, X } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { Text, useThemeColors } from "@repo/ui"
 
@@ -12,13 +12,13 @@ function Action({
   icon: React.ReactNode
   label: string
   tint: string
-  onPress: () => void
+  onPress?: () => void
   disabled?: boolean
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || !onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
       hitSlop={8}
@@ -43,8 +43,10 @@ export function MessageActions({
   canDownload,
   canEdit,
   canDelete,
+  starred,
   onCopy,
   onDownload,
+  onToggleStar,
   onEdit,
   onDelete,
   onCancel,
@@ -53,10 +55,12 @@ export function MessageActions({
   canDownload: boolean
   canEdit: boolean
   canDelete: boolean
-  onCopy: () => void
-  onDownload: () => void
-  onEdit: () => void
-  onDelete: () => void
+  starred: boolean
+  onCopy?: () => void
+  onDownload?: () => void
+  onToggleStar: () => void
+  onEdit?: () => void
+  onDelete?: () => void
   onCancel: () => void
 }) {
   const colors = useThemeColors()
@@ -80,6 +84,18 @@ export function MessageActions({
             onPress={onDownload}
           />
         ) : null}
+        <Action
+          icon={
+            starred ? (
+              <StarOff size={15} color={colors.foreground} />
+            ) : (
+              <Star size={15} color={colors.foreground} />
+            )
+          }
+          label={starred ? "Unstar" : "Star"}
+          tint={colors.foreground}
+          onPress={onToggleStar}
+        />
         {canEdit ? (
           <Action
             icon={<Pencil size={15} color={colors.foreground} />}

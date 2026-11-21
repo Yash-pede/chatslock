@@ -40,6 +40,7 @@ export const messages = sqliteTable(
     deletedAt: integer("deleted_at"),
     pendingId: text("pending_id"),
     status: text("status"),
+    starred: integer({ mode: "boolean" }).notNull().default(false),
   },
   (table) => ({
     conversationIdx: index("messages_conversation_id_idx").on(
@@ -72,6 +73,7 @@ export const conversations = sqliteTable(
     lastMessagePreview: text("lastMessagePreview"),
     lastMessageAt: integer("lastMessageAt"),
     position: integer("position").notNull(),
+    starred: integer({ mode: "boolean" }).notNull().default(false),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.ownerUserId, table.conversationId] }),

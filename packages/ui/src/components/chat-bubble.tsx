@@ -1,7 +1,7 @@
 import React from "react"
 import { View, Text as RNText } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Check, CheckCheck } from "lucide-react-native"
+import { Check, CheckCheck, Star } from "lucide-react-native"
 import { cn } from "../lib/utils"
 import { radius } from "../lib/radius"
 import { useThemeColors } from "./theme-provider"
@@ -35,6 +35,8 @@ export interface ChatBubbleProps
   children: React.ReactNode
   timestamp?: string
   status?: ChatBubbleStatus
+  /** Shows a small filled star beside the timestamp. */
+  starred?: boolean
 }
 
 /** AniUI chat bubble: sent (primary, right) and received (secondary, left). */
@@ -45,6 +47,7 @@ export function ChatBubble({
   children,
   timestamp,
   status,
+  starred = false,
   ...props
 }: ChatBubbleProps) {
   const isSent = variant === "sent"
@@ -71,6 +74,13 @@ export function ChatBubble({
             >
               {timestamp}
             </RNText>
+          ) : null}
+          {starred ? (
+            <Star
+              size={10}
+              color={isSent ? `${colors.primaryForeground}99` : colors.mutedForeground}
+              fill={isSent ? `${colors.primaryForeground}99` : colors.mutedForeground}
+            />
           ) : null}
           {status && isSent ? (
             status === "sent" || status === "sending" ? (

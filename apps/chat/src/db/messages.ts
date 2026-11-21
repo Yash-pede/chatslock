@@ -105,6 +105,7 @@ export async function markCachedMessageDeleted(
       attachment: null,
       body: null,
       deletedAt,
+      starred: false,
     })
     .where(eq(messages.messageId, messageId))
 }
@@ -129,4 +130,23 @@ export async function updateCachedMessageBody(
   body: string | null,
 ): Promise<void> {
   await db.update(messages).set({ body }).where(eq(messages.messageId, messageId))
+}
+
+export async function starCachedMessage(db: Database, messageId: string): Promise<void> {
+  await db.update(messages).set({ starred: true }).where(eq(messages.messageId, messageId))
+}
+
+export async function unstarCachedMessage(db: Database, messageId: string): Promise<void> {
+  await db.update(messages).set({ starred: false }).where(eq(messages.messageId, messageId))
+}
+
+/** Unstars every starred message in one conversation. */
+export async function unstarConversationMessages(
+  db: Database,
+  conversationId: string,
+): Promise<void> {
+  await db
+    .update(messages)
+    .set({ starred: false })
+    .where(and(eq(messages.starred, true), eq(messages.conversationId, conversationId)))
 }

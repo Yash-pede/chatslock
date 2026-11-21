@@ -52,6 +52,8 @@ export interface ChatMessage {
   isSystem?: boolean
   /** Tombstone for a message whose body/attachment was removed by the server. */
   isDeleted?: boolean
+  /** Local-only star state from the cache; renders a star beside the timestamp. */
+  starred?: boolean
 }
 
 /** A locally picked file ready to be uploaded and attached to a media message. */

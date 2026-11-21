@@ -26,13 +26,25 @@ import {
   useThemeColors,
 } from "@repo/ui"
 import * as Clipboard from "expo-clipboard"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { getPeerUserId, MESSAGE_ACTION_WINDOW_MS } from "@repo/types/schema"
 import type { PeerUserStatus } from "@repo/types/req"
 import { usersApi } from "@/api/users.api"
-import { cacheProfiles, profileFromRow, useLocalDb } from "@/db"
-import { profiles as profilesTable } from "@/db/schema"
+import {
+  cacheProfiles,
+  profileFromRow,
+  starCachedConversation,
+  starCachedMessage,
+  unstarCachedConversation,
+  unstarCachedMessage,
+  useLocalDb,
+} from "@/db"
+import {
+  conversations as conversationsTable,
+  messages as messagesTable,
+  profiles as profilesTable,
+} from "@/db/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
 import { useRealtime } from "@/context/RealtimeContext"
 import {
@@ -153,6 +165,22 @@ export default function ConversationScreen() {
     return row ? profileFromRow(row) : null
   }, [peerId, peerProfileRows])
 
+  const starredQuery = useMemo(
+    () =>
+      db
+        .select({ starred: conversationsTable.starred })
+        .from(conversationsTable)
+        .where(
+          and(
+            eq(conversationsTable.ownerUserId, currentUserId ?? ""),
+            eq(conversationsTable.conversationId, conversationId),
+          ),
+        ),
+    [conversationId, currentUserId, db],
+  )
+  const { data: starredRows } = useLiveQuery(starredQuery, [starredQuery])
+  const isStarred = starredRows[0]?.starred ?? false
+
   const {
     status: livePeerStatus,
     lastActiveAt: livePeerLastActiveAt,
@@ -174,6 +202,17 @@ export default function ConversationScreen() {
   const selectedMessage = selectedId
     ? (messages.find((message) => message.id === selectedId) ?? null)
     : null
+
+  const selectedStarredQuery = useMemo(
+    () =>
+      db
+        .select({ starred: messagesTable.starred })
+        .from(messagesTable)
+        .where(eq(messagesTable.messageId, selectedId ?? "")),
+    [db, selectedId],
+  )
+  const { data: selectedStarredRows } = useLiveQuery(selectedStarredQuery, [selectedStarredQuery])
+  const isMessageStarred = selectedId ? (selectedStarredRows[0]?.starred ?? false) : false
 
   // Edits are only offered within the window the backend enforces. The
   // selection time is captured in an event handler, never during render.
@@ -234,19 +273,32 @@ export default function ConversationScreen() {
     return null
   }, [selectedMessage])
 
+  const selectMessage = useCallback((message: ChatMessage) => {
+    // Copy/download are always available; edit/delete are gated separately.
+    setSelectedId(message.id)
+    setSelectedAt(Date.now())
+  }, [])
+
+  const clearSelection = useCallback(() => {
+    setSelectedId(null)
+    setSelectedAt(null)
+  }, [])
+
   const canCopy = Boolean(selectedMessage?.text?.trim())
   const canDownload = mediaToDownload !== null
 
   const copySelected = useCallback(() => {
     const text = selectedMessage?.text
     if (!text) return
+    clearSelection()
     void Clipboard.setStringAsync(text)
       .then(() => toast({ title: "Copied", description: "Message copied to clipboard." }))
       .catch(() => toast({ title: "Could not copy", variant: "destructive" }))
-  }, [selectedMessage, toast])
+  }, [clearSelection, selectedMessage, toast])
 
   const downloadSelected = useCallback(() => {
     if (!mediaToDownload) return
+    clearSelection()
     void download(mediaToDownload).then((outcome) => {
       if (outcome === "saved") {
         toast({ title: "Downloaded", description: `${mediaToDownload.fileName} saved` })
@@ -254,7 +306,7 @@ export default function ConversationScreen() {
         toast({ title: "Could not download", variant: "destructive" })
       }
     })
-  }, [download, mediaToDownload, toast])
+  }, [clearSelection, download, mediaToDownload, toast])
 
   const canDelete = Boolean(
     selectedMessage &&
@@ -265,6 +317,30 @@ export default function ConversationScreen() {
     selectedAt !== null &&
     selectedAt - selectedMessage.createdAt <= MESSAGE_ACTION_WINDOW_MS,
   )
+
+  const toggleStar = useCallback(() => {
+    if (!user?.userId) return
+    const next = !isStarred
+    void (next
+      ? starCachedConversation(db, user.userId, conversationId)
+      : unstarCachedConversation(db, user.userId, conversationId)
+    )
+      .catch(() => toast({ title: "Could not update chat", variant: "destructive" }))
+  }, [conversationId, db, isStarred, toast, user])
+
+  const toggleMessageStar = useCallback(() => {
+    if (!selectedMessage) return
+    clearSelection()
+    const next = !isMessageStarred
+    void (next
+      ? starCachedMessage(db, selectedMessage.id)
+      : unstarCachedMessage(db, selectedMessage.id)
+    )
+      .then(() =>
+        toast({ title: next ? "Message starred" : "Message unstarred" }),
+      )
+      .catch(() => toast({ title: "Could not update message", variant: "destructive" }))
+  }, [clearSelection, db, isMessageStarred, selectedMessage, toast])
 
   // Presence + last activity for the header, refreshed when the screen gains focus.
   useFocusEffect(
@@ -305,17 +381,6 @@ export default function ConversationScreen() {
       }
     }, [db, livePeerLastActiveAtRef, livePeerStatusRef, online, peerId]),
   )
-
-  const selectMessage = useCallback((message: ChatMessage) => {
-    // Copy/download are always available; edit/delete are gated separately.
-    setSelectedId(message.id)
-    setSelectedAt(Date.now())
-  }, [])
-
-  const clearSelection = useCallback(() => {
-    setSelectedId(null)
-    setSelectedAt(null)
-  }, [])
 
   const openMedia = useCallback((id: string) => {
     const index = mediaRef.current.findIndex((item) => item.id === id)
@@ -378,6 +443,14 @@ export default function ConversationScreen() {
                 ? () => router.push(`/u/${encodeURIComponent(headerPeer.username)}`)
                 : undefined
             }
+            starred={isStarred}
+            onToggleStar={toggleStar}
+            onViewStarred={() =>
+              router.push({
+                pathname: "/conversation/starred",
+                params: { id: conversationId, name },
+              })
+            }
           />
 
           {selectedMessage ? (
@@ -386,8 +459,10 @@ export default function ConversationScreen() {
               canDownload={canDownload}
               canEdit={canEdit}
               canDelete={canDelete}
+              starred={isMessageStarred}
               onCopy={copySelected}
               onDownload={downloadSelected}
+              onToggleStar={toggleMessageStar}
               onEdit={() => {
                 setEditTarget(selectedMessage)
                 clearSelection()
