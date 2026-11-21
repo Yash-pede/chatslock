@@ -16,6 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check-types": "turbo run check-types",
+    "precommit": "pnpm format && pnpm lint:fix && pnpm lint && pnpm check-types",
     "prepare": "lefthook install",
     "layer:build": "bash scripts/build-layer.sh --no-push",
     "layer:push": "bash scripts/build-layer.sh",

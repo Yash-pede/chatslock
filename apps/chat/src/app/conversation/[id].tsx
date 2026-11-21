@@ -68,9 +68,12 @@ import {
 } from "@/components/messages"
 
 const styles = StyleSheet.create({
-  listContent: { paddingHorizontal: 12, paddingBottom: 12 },
-  row: { paddingVertical: 3 },
+  listContent: { paddingBottom: 12 },
+  row: { paddingVertical: 3, paddingHorizontal: 12 },
 })
+
+/** Hard cap on multi-select so a forward request can never be unbounded. */
+const MAX_MESSAGE_SELECTION = 50
 
 // Prefer `pendingId`: it stays the same before and after the server ack, so a
 // just-sent row is reused instead of remounted (which would jump the list and
@@ -193,14 +196,18 @@ export default function ConversationScreen() {
   const peerStatus = livePeerStatus ?? peerPresence?.status ?? cachedPeer?.status
   const peerLastActiveAt = livePeerLastActiveAt ?? headerPeer?.lastActiveAt
 
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   /** When the selection started; the edit window is measured from here. */
   const [selectedAt, setSelectedAt] = useState<number | null>(null)
   const [editTarget, setEditTarget] = useState<ChatMessage | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null)
 
-  const selectedMessage = selectedId
-    ? (messages.find((message) => message.id === selectedId) ?? null)
+  const selectedCount = selectedIds.size
+  const selectionActive = selectedCount > 0
+  /** The single selected message; only meaningful when exactly one is picked. */
+  const singleSelectedId = selectedCount === 1 ? [...selectedIds][0] : null
+  const selectedMessage = singleSelectedId
+    ? (messages.find((message) => message.id === singleSelectedId) ?? null)
     : null
 
   const selectedStarredQuery = useMemo(
@@ -208,11 +215,11 @@ export default function ConversationScreen() {
       db
         .select({ starred: messagesTable.starred })
         .from(messagesTable)
-        .where(eq(messagesTable.messageId, selectedId ?? "")),
-    [db, selectedId],
+        .where(eq(messagesTable.messageId, singleSelectedId ?? "")),
+    [db, singleSelectedId],
   )
   const { data: selectedStarredRows } = useLiveQuery(selectedStarredQuery, [selectedStarredQuery])
-  const isMessageStarred = selectedId ? (selectedStarredRows[0]?.starred ?? false) : false
+  const isMessageStarred = singleSelectedId ? (selectedStarredRows[0]?.starred ?? false) : false
 
   // Edits are only offered within the window the backend enforces. The
   // selection time is captured in an event handler, never during render.
@@ -273,16 +280,46 @@ export default function ConversationScreen() {
     return null
   }, [selectedMessage])
 
-  const selectMessage = useCallback((message: ChatMessage) => {
-    // Copy/download are always available; edit/delete are gated separately.
-    setSelectedId(message.id)
-    setSelectedAt(Date.now())
-  }, [])
+  const selectMessage = useCallback(
+    (message: ChatMessage) => {
+      // Tap or long-press toggles membership; long-press on the first message
+      // opens the selection bar (edit window is measured from then).
+      if (selectedIds.has(message.id)) {
+        const next = new Set(selectedIds)
+        next.delete(message.id)
+        setSelectedIds(next)
+        if (next.size === 0) setSelectedAt(null)
+        return
+      }
+
+      if (selectedIds.size >= MAX_MESSAGE_SELECTION) {
+        toast({
+          title: "Limit reached",
+          description: `You can select up to ${MAX_MESSAGE_SELECTION} messages.`,
+        })
+        return
+      }
+
+      if (selectedIds.size === 0) setSelectedAt(Date.now())
+      setSelectedIds(new Set(selectedIds).add(message.id))
+    },
+    [selectedIds, toast],
+  )
 
   const clearSelection = useCallback(() => {
-    setSelectedId(null)
-    setSelectedAt(null)
+    // Bail out with the same references when nothing is selected, so the
+    // focus-time cleanup below never causes a pointless re-render.
+    setSelectedIds((current) => (current.size > 0 ? new Set() : current))
+    setSelectedAt((current) => (current !== null ? null : current))
   }, [])
+
+  // Returning to this screen (e.g. from the forward picker) drops the
+  // multi-selection so the header is shown instead of the actions bar.
+  useFocusEffect(
+    useCallback(() => {
+      clearSelection()
+    }, [clearSelection]),
+  )
 
   const canCopy = Boolean(selectedMessage?.text?.trim())
   const canDownload = mediaToDownload !== null
@@ -339,6 +376,15 @@ export default function ConversationScreen() {
       .catch(() => toast({ title: "Could not update message", variant: "destructive" }))
   }, [clearSelection, db, isMessageStarred, selectedMessage, toast])
 
+  const forwardSelected = useCallback(() => {
+    router.push({
+      pathname: "/forward",
+      params: {
+        ids: JSON.stringify([...selectedIds]),
+      },
+    })
+  }, [selectedIds])
+
   // Presence + last activity for the header, refreshed when the screen gains focus.
   useFocusEffect(
     useCallback(() => {
@@ -386,10 +432,14 @@ export default function ConversationScreen() {
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
-      <View style={styles.row}>
+      <View style={[styles.row, selectedIds.has(item.id) && { backgroundColor: colors.secondary }]}>
         <MessageBubble
           message={item}
-          selected={item.id === selectedId}
+          onPress={
+            selectionActive && !item.isSystem && !item.isDeleted && item.status !== "failed"
+              ? () => selectMessage(item)
+              : undefined
+          }
           onSelect={
             !item.isSystem && !item.isDeleted && item.status !== "failed"
               ? () => selectMessage(item)
@@ -400,7 +450,7 @@ export default function ConversationScreen() {
         />
       </View>
     ),
-    [openMedia, retry, selectMessage, selectedId],
+    [colors.secondary, openMedia, retry, selectMessage, selectedIds, selectionActive],
   )
 
   const emptyState =
@@ -429,29 +479,9 @@ export default function ConversationScreen() {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss} disabled={!Keyboard.isVisible()}>
         <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-          <ConversationHeader
-            name={name}
-            avatar={avatar}
-            peerStatus={peerStatus}
-            lastActiveAt={peerLastActiveAt}
-            typing={peerTyping}
-            onPressProfile={
-              headerPeer
-                ? () => router.push(`/u/${encodeURIComponent(headerPeer.username)}`)
-                : undefined
-            }
-            starred={isStarred}
-            onToggleStar={toggleStar}
-            onViewStarred={() =>
-              router.push({
-                pathname: "/conversation/starred",
-                params: { id: conversationId, name },
-              })
-            }
-          />
-
-          {selectedMessage ? (
+          {selectionActive ? (
             <MessageActions
+              count={selectedCount}
               canCopy={canCopy}
               canDownload={canDownload}
               canEdit={canEdit}
@@ -468,9 +498,31 @@ export default function ConversationScreen() {
                 setDeleteTarget(selectedMessage)
                 clearSelection()
               }}
+              onForward={forwardSelected}
               onCancel={clearSelection}
             />
-          ) : null}
+          ) : (
+            <ConversationHeader
+              name={name}
+              avatar={avatar}
+              peerStatus={peerStatus}
+              lastActiveAt={peerLastActiveAt}
+              typing={peerTyping}
+              onPressProfile={
+                headerPeer
+                  ? () => router.push(`/u/${encodeURIComponent(headerPeer.username)}`)
+                  : undefined
+              }
+              starred={isStarred}
+              onToggleStar={toggleStar}
+              onViewStarred={() =>
+                router.push({
+                  pathname: "/conversation/starred",
+                  params: { id: conversationId, name },
+                })
+              }
+            />
+          )}
 
           <FlashList
             ref={listRef}

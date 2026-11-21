@@ -19,8 +19,8 @@ import {
 } from "@/components/messages"
 
 const styles = StyleSheet.create({
-  listContent: { paddingHorizontal: 12, paddingBottom: 12 },
-  row: { paddingVertical: 3 },
+  listContent: { paddingBottom: 12 },
+  row: { paddingVertical: 3, paddingHorizontal: 12 },
 })
 
 const keyExtractor = (item: ChatMessage) => item.id
@@ -97,10 +97,10 @@ export default function StarredMessagesScreen() {
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
-      <View style={styles.row}>
+      <View style={[styles.row, item.id === selectedId && { backgroundColor: colors.secondary }]}>
         <MessageBubble
           message={item}
-          selected={item.id === selectedId}
+          onPress={item.id === selectedId ? clearSelection : undefined}
           onSelect={
             !item.isSystem && !item.isDeleted && item.status !== "failed"
               ? () => setSelectedId(item.id)
@@ -109,69 +109,14 @@ export default function StarredMessagesScreen() {
         />
       </View>
     ),
-    [selectedId],
+    [clearSelection, colors.secondary, selectedId],
   )
 
   return (
     <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
-      <View
-        className="flex-row items-center gap-2 border-b border-border px-2 py-2"
-        onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
-      >
-        <Pressable
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
-        >
-          <ChevronLeft size={24} color={colors.foreground} />
-        </Pressable>
-        <Text variant="large" numberOfLines={1} className="flex-1 text-base">
-          Starred messages
-        </Text>
-        <Pressable
-          onPress={() => setMenuOpen(true)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel="Starred messages options"
-          className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
-        >
-          <EllipsisVertical size={24} color={colors.foreground} />
-        </Pressable>
-
-        <Modal
-          visible={menuOpen}
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-          onRequestClose={() => setMenuOpen(false)}
-        >
-          <Pressable
-            className="flex-1"
-            onPress={() => setMenuOpen(false)}
-            accessibilityLabel="Close menu"
-          >
-            <View
-              className="absolute end-3 rounded-xl border border-border bg-card py-1 shadow-lg"
-              style={{ top: insets.top + headerHeight + 4, elevation: 4 }}
-            >
-              <Pressable
-                onPress={unstarAll}
-                accessibilityRole="button"
-                accessibilityLabel="Unstar all messages"
-                className="flex-row items-center gap-3 rounded-xl px-4 py-3 active:bg-secondary"
-              >
-                <StarOff size={20} color={colors.destructive} />
-                <Text className="text-base text-destructive">Unstar all messages</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
-      </View>
-
       {selectedMessage ? (
         <MessageActions
+          count={1}
           canCopy={canCopy}
           canDownload={false}
           canEdit={false}
@@ -181,7 +126,63 @@ export default function StarredMessagesScreen() {
           onToggleStar={unstarSelected}
           onCancel={clearSelection}
         />
-      ) : null}
+      ) : (
+        <View
+          className="flex-row items-center gap-2 border-b border-border px-2 py-2"
+          onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}
+        >
+          <Pressable
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+            className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
+          >
+            <ChevronLeft size={24} color={colors.foreground} />
+          </Pressable>
+          <Text variant="large" numberOfLines={1} className="flex-1 text-base">
+            Starred messages
+          </Text>
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="Starred messages options"
+            className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
+          >
+            <EllipsisVertical size={24} color={colors.foreground} />
+          </Pressable>
+
+          <Modal
+            visible={menuOpen}
+            transparent
+            animationType="fade"
+            statusBarTranslucent
+            onRequestClose={() => setMenuOpen(false)}
+          >
+            <Pressable
+              className="flex-1"
+              onPress={() => setMenuOpen(false)}
+              accessibilityLabel="Close menu"
+            >
+              <View
+                className="absolute end-3 rounded-xl border border-border bg-card py-1 shadow-lg"
+                style={{ top: insets.top + headerHeight + 4, elevation: 4 }}
+              >
+                <Pressable
+                  onPress={unstarAll}
+                  accessibilityRole="button"
+                  accessibilityLabel="Unstar all messages"
+                  className="flex-row items-center gap-3 rounded-xl px-4 py-3 active:bg-secondary"
+                >
+                  <StarOff size={20} color={colors.destructive} />
+                  <Text className="text-base text-destructive">Unstar all messages</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Modal>
+        </View>
+      )}
 
       <FlashList
         data={messages}

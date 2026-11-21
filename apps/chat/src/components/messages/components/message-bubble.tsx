@@ -1,7 +1,6 @@
 import { memo, useState } from "react"
 import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
-import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated"
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
 import { Ban, FileText, Pause, Play, WifiOff } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
@@ -33,7 +32,6 @@ function AudioBubble({
   variant,
   time,
   status,
-  selected,
   failedClass,
   online,
   starred = false,
@@ -44,7 +42,6 @@ function AudioBubble({
   variant: "sent" | "received"
   time: string
   status: ChatMessage["status"]
-  selected?: boolean
   failedClass?: string
   online: boolean
   starred?: boolean
@@ -71,14 +68,7 @@ function AudioBubble({
         timestamp={time}
         status={status}
         starred={starred}
-        className={cn(
-          "w-[62%] max-w-[66%]",
-          selected &&
-            (variant === "sent"
-              ? "border-2 border-primary-foreground/70 bg-primary/85"
-              : "border-2 border-primary bg-secondary/85"),
-          failedClass,
-        )}
+        className={cn("w-[62%] max-w-[66%]", failedClass)}
       >
         <View className="flex-row items-center gap-2.5">
           <View
@@ -104,14 +94,7 @@ function AudioBubble({
       timestamp={time}
       status={status}
       starred={starred}
-      className={cn(
-        "w-[62%] max-w-[66%]",
-        selected &&
-          (variant === "sent"
-            ? "border-2 border-primary-foreground/70 bg-primary/85"
-            : "border-2 border-primary bg-secondary/85"),
-        failedClass,
-      )}
+      className={cn("w-[62%] max-w-[66%]", failedClass)}
     >
       <View className="flex-row items-center gap-2.5">
         <Pressable
@@ -156,8 +139,8 @@ export interface MessageBubbleProps {
   onOpenMedia?: (id: string) => void
   /** Long-press selects the message for edit/delete. */
   onSelect?: () => void
-  /** Highlights the currently selected bubble. */
-  selected?: boolean
+  /** Tap on the bubble; used to toggle selection. */
+  onPress?: () => void
 }
 
 /** Photo bubble that shows a loader until the image has loaded. */
@@ -256,14 +239,15 @@ function VideoPreview({
 
 /**
  * Renders one message. Memoized and free of layout-affecting side effects so
- * FlashList can recycle rows without re-measuring.
+ * FlashList can recycle rows without re-measuring. Selection is visualized by
+ * the row's background, so the bubble itself never changes size.
  */
 export const MessageBubble = memo(function MessageBubble({
   message,
   onRetry,
   onOpenMedia,
   onSelect,
-  selected = false,
+  onPress,
 }: MessageBubbleProps) {
   const colors = useThemeColors()
   const { online } = useRealtime()
@@ -274,23 +258,6 @@ export const MessageBubble = memo(function MessageBubble({
   const subtle = message.isMine ? `${colors.primaryForeground}99` : colors.mutedForeground
   const failed = message.status === "failed"
   const failedClass = failed ? "border border-destructive/60 bg-destructive/10" : undefined
-  const selectedClass = selected
-    ? message.isMine
-      ? "border-2 border-primary-foreground/70 bg-primary/85"
-      : "border-2 border-primary bg-secondary/85"
-    : undefined
-  // Springy pop when the message is picked; the style worklet owns the animation.
-  const selectedStyle = useAnimatedStyle(() => ({
-    transform: [
-      {
-        scale: withSpring(selected ? 1.04 : 1, {
-          damping: 15,
-          stiffness: 260,
-          mass: 0.6,
-        }),
-      },
-    ],
-  }))
 
   const renderBubble = () => {
     if (message.isDeleted) {
@@ -300,7 +267,7 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
-          className={cn(selectedClass, failedClass)}
+          className={cn(failedClass)}
         >
           <View className="flex-row items-center gap-1.5">
             <Ban size={15} color={tint} />
@@ -336,7 +303,7 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
-          className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
+          className={cn("p-1 px-1 pb-1.5", failedClass)}
         >
           <Pressable
             onPress={() => onOpenMedia?.(message.id)}
@@ -378,7 +345,7 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
-          className={cn("p-1 px-1 pb-1.5", selectedClass, failedClass)}
+          className={cn("p-1 px-1 pb-1.5", failedClass)}
         >
           <Pressable
             onPress={() => onOpenMedia?.(message.id)}
@@ -410,7 +377,7 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
-          className={cn("w-[78%] max-w-[78%]", selectedClass, failedClass)}
+          className={cn("w-[78%] max-w-[78%]", failedClass)}
         >
           <View className="flex-row items-center gap-3">
             <View
@@ -450,7 +417,6 @@ export const MessageBubble = memo(function MessageBubble({
           variant={variant}
           time={time}
           status={message.status}
-          selected={selected}
           failedClass={failedClass}
           online={online}
           starred={starred}
@@ -464,7 +430,7 @@ export const MessageBubble = memo(function MessageBubble({
         timestamp={time}
         status={message.status}
         starred={starred}
-        className={cn(selectedClass, failedClass)}
+        className={cn(failedClass)}
       >
         <LinkifiedText
           text={message.text ?? ""}
@@ -480,7 +446,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   if (failed && onRetry) {
     return (
-      <Animated.View style={selectedStyle} className="items-end">
+      <View className="items-end">
         <Pressable
           onPress={onRetry}
           accessibilityRole="button"
@@ -490,16 +456,17 @@ export const MessageBubble = memo(function MessageBubble({
           {bubble}
         </Pressable>
         <Text className="me-1 mt-0.5 text-[10px] text-destructive">Not sent · tap to retry</Text>
-      </Animated.View>
+      </View>
     )
   }
 
-  if (!onSelect || failed) return <Animated.View style={selectedStyle}>{bubble}</Animated.View>
+  if (!onSelect || failed) return <View>{bubble}</View>
 
   return (
-    <Animated.View style={selectedStyle}>
+    <View>
       <Pressable
         onLongPress={onSelect}
+        onPress={onPress}
         delayLongPress={250}
         accessibilityRole="button"
         accessibilityLabel="Select message"
@@ -507,6 +474,6 @@ export const MessageBubble = memo(function MessageBubble({
       >
         {bubble}
       </Pressable>
-    </Animated.View>
+    </View>
   )
 })

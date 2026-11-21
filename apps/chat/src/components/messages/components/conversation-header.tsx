@@ -120,6 +120,18 @@ export function ConversationHeader({
             <Pressable
               onPress={() => {
                 closeMenu()
+                onViewStarred?.()
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="View starred messages"
+              className="flex-row items-center gap-3 px-4 py-3 active:bg-secondary"
+            >
+              <MessagesSquare size={20} color={colors.foreground} />
+              <Text className="text-base text-foreground">Starred messages</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                closeMenu()
                 onToggleStar?.()
               }}
               accessibilityRole="button"
@@ -134,18 +146,6 @@ export function ConversationHeader({
               <Text className="text-base text-foreground">
                 {starred ? "Unstar chat" : "Star chat"}
               </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                closeMenu()
-                onViewStarred?.()
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="View starred messages"
-              className="flex-row items-center gap-3 px-4 py-3 active:bg-secondary"
-            >
-              <MessagesSquare size={20} color={colors.foreground} />
-              <Text className="text-base text-foreground">Starred messages</Text>
             </Pressable>
             <Pressable
               disabled

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import { Pressable, View } from "react-native"
 import { BadgeCheck } from "lucide-react-native"
 import { Text, cn, useThemeColors } from "@repo/ui"
@@ -19,9 +20,11 @@ function formatConversationTime(ms: number): string {
 export interface ConversationRowProps {
   item: ChatListItem
   onPress?: (item: ChatListItem) => void
+  /** Optional right-side accessory, e.g. a selection indicator. */
+  trailing?: ReactNode
 }
 
-export function ConversationRow({ item, onPress }: ConversationRowProps) {
+export function ConversationRow({ item, onPress, trailing }: ConversationRowProps) {
   const colors = useThemeColors()
   const hasUnread = item.unreadCount > 0
   const name = item.peer?.fullName ?? item.peer?.username ?? "Unknown"
@@ -54,6 +57,15 @@ export function ConversationRow({ item, onPress }: ConversationRowProps) {
             <BadgeCheck size={15} color={colors.mutedForeground} strokeWidth={2} />
           ) : null}
           <View className="flex-1" />
+          {item.peer?.username ? (
+            <Text
+              variant="small"
+              numberOfLines={1}
+              className="shrink font-normal text-muted-foreground"
+            >
+              @{item.peer.username}
+            </Text>
+          ) : null}
         </View>
 
         <View className="flex-row items-center gap-1.5">
@@ -81,6 +93,8 @@ export function ConversationRow({ item, onPress }: ConversationRowProps) {
           ) : null}
         </View>
       </View>
+
+      {trailing ? <View className="justify-center">{trailing}</View> : null}
     </Pressable>
   )
 }
