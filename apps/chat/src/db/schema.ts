@@ -36,7 +36,6 @@ export const messages = sqliteTable(
     body: text("body"),
     attachment: text("attachment", { mode: "json" }).$type<NonNullable<Message["attachment"]>>(),
     createdAt: integer("created_at").notNull(),
-    updatedAt: integer("updated_at").notNull(),
     editedAt: integer("edited_at"),
     deletedAt: integer("deleted_at"),
     pendingId: text("pending_id"),
@@ -69,6 +68,9 @@ export const conversations = sqliteTable(
       .$type<UserMemberConversation["conversationType"]>()
       .notNull(),
     unreadCount: integer("unread_count").notNull().default(0),
+    lastMessageId: text("lastMessageId"),
+    lastMessagePreview: text("lastMessagePreview"),
+    lastMessageAt: integer("lastMessageAt"),
     position: integer("position").notNull(),
   },
   (table) => ({

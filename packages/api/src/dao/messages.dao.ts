@@ -42,9 +42,6 @@ const messageKey = (conversationId: ConversationId, messageId: MessageId) => ({
  */
 const MESSAGE_TTL_SECONDS = 30 * 24 * 60 * 60
 
-/** Hide rows past their TTL until the asynchronous sweep removes them. */
-const notExpired = "(attribute_not_exists(expiresAt) OR expiresAt > :now)"
-
 export const messagesDao = {
   createMessage: async (input: CreateMessageInput): Promise<Message> => {
     const data = parseOrThrow(createMessageSchema, input)
@@ -60,7 +57,6 @@ export const messagesDao = {
       body: data.body,
       attachment: data.attachment,
       createdAt: now,
-      updatedAt: now,
       expiresAt: Math.floor(now / 1000) + MESSAGE_TTL_SECONDS,
     })
 
@@ -99,21 +95,16 @@ export const messagesDao = {
   getMessagesByConversationId: async (input: {
     conversationId: ConversationId
     limit: number
-    includeDeleted?: false
     cursor?: MessageId
   }): Promise<Message[]> => {
     const result = await AWSManager.dbClient.send(
       new QueryCommand({
         TableName: TABLE_NAME,
         KeyConditionExpression: "#pk = :pk AND begins_with(#sk, :sk)",
-        FilterExpression: input.includeDeleted
-          ? notExpired
-          : `attribute_not_exists(deletedAt) AND ${notExpired}`,
         ExpressionAttributeNames: { "#pk": "PK", "#sk": "SK" },
         ExpressionAttributeValues: {
           ":pk": conversationPk(input.conversationId),
           ":sk": MESSAGE_SK_PREFIX,
-          ":now": Math.floor(Date.now() / 1000),
         },
         ScanIndexForward: false,
         ExclusiveStartKey: input.cursor
@@ -133,17 +124,15 @@ export const messagesDao = {
       new UpdateCommand({
         TableName: TABLE_NAME,
         Key: messageKey(data.conversationId, data.messageId),
-        UpdateExpression: "SET #body = :body, #updatedAt = :updatedAt, #editedAt = :editedAt",
+        UpdateExpression: "SET #body = :body, #editedAt = :editedAt",
         ConditionExpression: "attribute_exists(PK) AND #type = :text",
         ExpressionAttributeNames: {
           "#body": "body",
-          "#updatedAt": "updatedAt",
           "#editedAt": "editedAt",
           "#type": "type",
         },
         ExpressionAttributeValues: {
           ":body": data.body,
-          ":updatedAt": now,
           ":editedAt": now,
           ":text": MESSAGE_TYPE[0],
         },
@@ -159,15 +148,13 @@ export const messagesDao = {
       new UpdateCommand({
         TableName: TABLE_NAME,
         Key: messageKey(data.conversationId, data.messageId),
-        UpdateExpression: "SET #deletedAt = :deletedAt, #updatedAt = :updatedAt",
+        UpdateExpression: "SET #deletedAt = :deletedAt REMOVE attachment, body",
         ConditionExpression: "attribute_exists(PK) AND attribute_not_exists(#deletedAt)",
         ExpressionAttributeNames: {
           "#deletedAt": "deletedAt",
-          "#updatedAt": "updatedAt",
         },
         ExpressionAttributeValues: {
           ":deletedAt": now,
-          ":updatedAt": now,
         },
       }),
     )

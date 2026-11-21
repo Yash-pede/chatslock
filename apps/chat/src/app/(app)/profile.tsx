@@ -209,6 +209,10 @@ export default function ProfileScreen() {
         uri={avatar}
         name={name}
         onClose={() => setViewerOpen(false)}
+        onEdit={() => {
+          setViewerOpen(false)
+          void avatarUpload.pick()
+        }}
       />
     </SafeArea>
   )

@@ -42,8 +42,8 @@ app.use(withAuth)
 app.post("/onboarding", validateWithZod(userOnboardingSchema), onboardingController)
 app.get("/me", getUserByIdController)
 app.get("/profile", validateWithZod(getPublicProfileReq), getPublicProfileController)
-
 app.post("/profiles", validateWithZod(getUserProfilesReq), getPublicProfilesController)
+
 app.post("/avatar", validateWithZod(avatarImagePresignUrlSchema), getAvatarPresignedUrlController)
 app.post(
   "/avatar/confirm",

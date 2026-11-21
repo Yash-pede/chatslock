@@ -133,10 +133,7 @@ export const getPublicProfileController = async (c: Context) => {
 export const getPublicProfilesController = async (c: Context) => {
   const { body }: GetUserProfilesRequest = c.get("valid")
 
-  const profiles = await getPublicProfilesByIds({
-    viewerId: c.get("userId"),
-    userIds: body.userIds,
-  })
+  const profiles = await getPublicProfilesByIds({ userIds: body.userIds })
 
   return c.json({ profiles })
 }

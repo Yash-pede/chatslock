@@ -1,5 +1,6 @@
 import z from "zod"
 import { fullName, userId, username } from "./user.schema"
+import { PeerUserStatus } from "../req"
 
 export const TABLE_NAME = "chat"
 
@@ -17,3 +18,7 @@ export const conversationUserProfileSchema = z.object({
 
 /** A peer profile as returned by `POST /api/conversations/profiles`. */
 export type ConversationUserProfile = z.infer<typeof conversationUserProfileSchema>
+
+export type ConversationUserProfileWithStatus = z.infer<typeof conversationUserProfileSchema> & {
+  status: PeerUserStatus
+}

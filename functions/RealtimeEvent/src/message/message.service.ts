@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MESSAGE_ACTION_WINDOW_MS,
   getPeerUserId,
+  messagePreview,
   type ConversationId,
   type Message,
   type MessageId,
@@ -93,7 +94,7 @@ const notifyPeerIfNotViewing = async ({
   userId: UserId
   conversationId: ConversationId
   message: Message
-}): Promise<void> => {
+}): Promise<boolean | undefined> => {
   try {
     const peerId = getPeerUserId(conversationId, userId)
     if (!peerId) return
@@ -101,9 +102,10 @@ const notifyPeerIfNotViewing = async ({
     const peerActiveConversation = await conversationsDao.getUserActiveConversation({
       userId: peerId,
     })
-    if (peerActiveConversation === conversationId) return
+    if (peerActiveConversation === conversationId) return true
 
     await notifyPeer({ peerId, senderId: userId, message })
+    return false
   } catch (error) {
     logger.warn("Peer notification skipped", { error, conversationId })
   }
@@ -141,7 +143,24 @@ export const sendMessageService = async ({
       senderId,
     })
 
-    await notifyPeerIfNotViewing({ userId: senderId, conversationId, message: created })
+    const isPeerViewingCurrentConversation = await notifyPeerIfNotViewing({
+      userId: senderId,
+      conversationId,
+      message: created,
+    })
+
+    const lastMessage = {
+      lastMessageAt: created.createdAt,
+      lastMessageId: created.messageId,
+      lastMessagePreview: messagePreview(created),
+    }
+
+    await conversationsDao.updateUserConversationLastMessage({
+      senderId,
+      conversationId,
+      increaseUnread: !isPeerViewingCurrentConversation,
+      ...lastMessage,
+    })
 
     logger.info("Message stored", {
       senderId,
@@ -204,6 +223,25 @@ export const editMessageService = async ({
     const updated = await messagesDao.getMessageById(edit)
     if (!updated) throw new ApiException(404, { message: "Message not found" })
 
+    try {
+      const member = await conversationsDao
+        .getUserConversationMember({ userId: editorId, conversationId: edit.conversationId })
+        .catch(() => undefined)
+
+      if (member?.lastMessageId === edit.messageId) {
+        await conversationsDao.updateUserConversationLastMessage({
+          senderId: editorId,
+          conversationId: edit.conversationId,
+          increaseUnread: false,
+          lastMessageId: updated.messageId,
+          lastMessagePreview: messagePreview(updated),
+          lastMessageAt: updated.editedAt ?? updated.createdAt,
+        })
+      }
+    } catch (error) {
+      logger.warn("Could not update conversation last message on edit", { error })
+    }
+
     return updated
   } catch (error) {
     throw asApiError(error, `message.edit failed for ${editorId}`)
@@ -233,6 +271,32 @@ export const deleteMessageService = async ({
       conversationId: target.conversationId,
       messageId: target.messageId,
     })
+
+    try {
+      const member = await conversationsDao
+        .getUserConversationMember({ userId: deleterId, conversationId: target.conversationId })
+        .catch(() => undefined)
+
+      if (member?.lastMessageId === target.messageId) {
+        const peerId = getPeerUserId(target.conversationId, deleterId)
+        const peerActive = peerId
+          ? await conversationsDao
+              .getUserActiveConversation({ userId: peerId })
+              .catch(() => undefined)
+          : undefined
+
+        await conversationsDao.updateUserConversationLastMessage({
+          senderId: deleterId,
+          conversationId: target.conversationId,
+          increaseUnread: peerActive !== target.conversationId,
+          lastMessageId: target.messageId,
+          lastMessagePreview: "Message deleted",
+          lastMessageAt: Date.now(),
+        })
+      }
+    } catch (error) {
+      logger.warn("Could not update conversation last message on delete", { error })
+    }
 
     return { conversationId: target.conversationId, messageId: target.messageId }
   } catch (error) {

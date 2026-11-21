@@ -8,7 +8,8 @@ import { format, formatDistanceToNow } from "date-fns"
 import { Button, SafeArea, Spinner, Text, useToast, useThemeColors } from "@repo/ui"
 import { extractErrorMessage } from "@repo/utils"
 import { conversationsApi, type ConversationSummary } from "@/api/conversations.api"
-import { usersApi, type PublicUserProfile } from "@/api/users.api"
+import { usersApi } from "@/api/users.api"
+import type { ConversationUserProfileWithStatus } from "@repo/types/schema"
 import { cacheProfiles, profileFromRow, useLocalDb } from "@/db"
 import { profiles as profilesTable } from "@/db/schema"
 import { UserAvatar } from "@/components/user-avatar"
@@ -23,7 +24,9 @@ export function PublicProfilePage({ username }: { username: string }) {
   const { toast } = useToast()
   const { db } = useLocalDb()
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading")
-  const [fetchedProfile, setFetchedProfile] = useState<PublicUserProfile | null>(null)
+  const [fetchedProfile, setFetchedProfile] = useState<ConversationUserProfileWithStatus | null>(
+    null,
+  )
   const [conversation, setConversation] = useState<ConversationSummary | null>(null)
   const [checkingConversation, setCheckingConversation] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -38,9 +41,11 @@ export function PublicProfilePage({ username }: { username: string }) {
     return row ? profileFromRow(row) : null
   }, [cachedRows, username])
   const profile = fetchedProfile ?? cachedProfile
+  // The server rejects usernames outside these bounds with a 400.
+  const validUsername = username.length >= 3 && username.length <= 20
 
   // Cached profile wins over a pending/failed network request.
-  const viewStatus = profile ? "ready" : status
+  const viewStatus = profile ? "ready" : validUsername ? status : "error"
 
   // Reset network state during render when the link's username changes.
   const [loadedUsername, setLoadedUsername] = useState(username)
@@ -51,6 +56,10 @@ export function PublicProfilePage({ username }: { username: string }) {
   }
 
   const fetchProfile = useCallback(() => {
+    // Invalid usernames never reach the server; the derived view status above
+    // already shows the error state for them.
+    if (!validUsername) return Promise.resolve()
+
     return usersApi
       .getProfile(username.toLowerCase())
       .then((next) => {
@@ -68,7 +77,7 @@ export function PublicProfilePage({ username }: { username: string }) {
           .finally(() => setCheckingConversation(false))
       })
       .catch(() => setStatus("error"))
-  }, [db, username])
+  }, [db, username, validUsername])
 
   useEffect(() => {
     void fetchProfile()

@@ -1,11 +1,11 @@
-import type { PublicUserProfile } from "@/api/users.api"
 import type { PeerUserStatus } from "@repo/types/req"
+import type { ConversationUserProfileWithStatus } from "@repo/types/schema"
 import { and, eq, ne } from "drizzle-orm"
 import type { Database } from "./client"
 import { profiles, type CachedProfile, type ProfileRow } from "./schema"
 
 /** Maps the API's public profile to its cache row. */
-export function profileRowFromApi(profile: PublicUserProfile): ProfileRow {
+export function profileRowFromApi(profile: ConversationUserProfileWithStatus): ProfileRow {
   return {
     userId: profile.userId,
     username: profile.username,
@@ -17,7 +17,7 @@ export function profileRowFromApi(profile: PublicUserProfile): ProfileRow {
 }
 
 /** Rebuilds the API's public profile shape from a cache row. */
-export function profileFromRow(row: CachedProfile): PublicUserProfile {
+export function profileFromRow(row: CachedProfile): ConversationUserProfileWithStatus {
   return {
     userId: row.userId,
     username: row.username,
@@ -29,7 +29,10 @@ export function profileFromRow(row: CachedProfile): PublicUserProfile {
 }
 
 /** Upserts a batch of peer profiles. */
-export async function cacheProfiles(db: Database, batch: PublicUserProfile[]): Promise<void> {
+export async function cacheProfiles(
+  db: Database,
+  batch: ConversationUserProfileWithStatus[],
+): Promise<void> {
   if (batch.length === 0) return
 
   db.transaction((tx) => {

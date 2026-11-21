@@ -1,10 +1,20 @@
 import { Pressable, View } from "react-native"
 import { BadgeCheck } from "lucide-react-native"
-import { Text, useThemeColors } from "@repo/ui"
+import { Text, cn, useThemeColors } from "@repo/ui"
 import type { ChatListItem } from "@/components/chats/chat-list"
 import { UserAvatar } from "@/components/user-avatar"
 
 const AVATAR_SIZE = 54
+
+/** Compact timestamp for the last message: today shows time, older shows date. */
+function formatConversationTime(ms: number): string {
+  const date = new Date(ms)
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  return sameDay
+    ? date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : date.toLocaleDateString(undefined, { month: "short", day: "numeric" })
+}
 
 export interface ConversationRowProps {
   item: ChatListItem
@@ -15,6 +25,7 @@ export function ConversationRow({ item, onPress }: ConversationRowProps) {
   const colors = useThemeColors()
   const hasUnread = item.unreadCount > 0
   const name = item.peer?.fullName ?? item.peer?.username ?? "Unknown"
+  const preview = item.lastMessagePreview ?? "Get started — say hello"
 
   return (
     <Pressable
@@ -45,12 +56,24 @@ export function ConversationRow({ item, onPress }: ConversationRowProps) {
           <View className="flex-1" />
         </View>
 
-        <View className="flex-row items-center gap-1">
-          <Text variant="small" numberOfLines={1} className="flex-1 text-primary">
-            Get started — say hello
+        <View className="flex-row items-center gap-1.5">
+          <Text
+            variant="small"
+            numberOfLines={1}
+            className={cn(
+              "flex-1",
+              hasUnread ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+          >
+            {preview}
           </Text>
+          {item.lastMessageAt != null ? (
+            <Text variant="small" className="shrink-0 text-muted-foreground">
+              {formatConversationTime(item.lastMessageAt)}
+            </Text>
+          ) : null}
           {hasUnread ? (
-            <View className="me-4 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5">
+            <View className="min-w-5 items-center justify-center rounded-full bg-primary px-1.5 py-0.5">
               <Text variant="small" className="text-xs font-semibold text-primary-foreground">
                 {item.unreadCount > 99 ? "99+" : item.unreadCount}
               </Text>

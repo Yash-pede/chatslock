@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFocusEffect } from "expo-router"
-import { and, asc, eq, isNull } from "drizzle-orm"
+import { asc, eq } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { MAX_MESSAGE_LENGTH, MESSAGE_ACTION_WINDOW_MS, type Message } from "@repo/types/schema"
 import {
@@ -17,10 +17,13 @@ import {
   cacheMessages,
   cacheOptimisticMessage,
   cacheServerMessage,
+  conversationPreview,
   failPendingMessage,
   findCachedMessage,
+  markCachedMessageDeleted,
   removeCachedMessage,
   restoreCachedMessage,
+  updateCachedConversationLastMessage,
   updateCachedMessageBody,
   useLocalDb,
 } from "@/db"
@@ -114,9 +117,7 @@ export function useConversationMessages(
       db
         .select()
         .from(messagesTable)
-        .where(
-          and(eq(messagesTable.conversationId, conversationId), isNull(messagesTable.deletedAt)),
-        )
+        .where(eq(messagesTable.conversationId, conversationId))
         .orderBy(asc(messagesTable.messageId)),
     [conversationId, db],
   )
@@ -187,8 +188,22 @@ export function useConversationMessages(
       void cacheServerMessage(db, message, clientId).catch((error) => {
         console.warn("[db] failed to cache message", error)
       })
+
+      // Keep the home list's last-message preview/time in step with new and
+      // edited messages without waiting for a chat-page refetch.
+      if (currentUserId) {
+        void updateCachedConversationLastMessage(db, {
+          ownerUserId: currentUserId,
+          conversationId: message.conversationId,
+          lastMessageId: message.messageId,
+          lastMessagePreview: conversationPreview(message),
+          lastMessageAt: message.editedAt ?? message.createdAt,
+        }).catch((error) => {
+          console.warn("[db] failed to update conversation last message", error)
+        })
+      }
     },
-    [conversationId, db, settleMutation],
+    [conversationId, currentUserId, db, settleMutation],
   )
 
   /** One page via the correlated `list` request; rejects on error/timeout. */
@@ -326,15 +341,29 @@ export function useConversationMessages(
           onDeleted: (event) => {
             if (event.conversationId !== conversationId) return
             settleMutation(event.messageId)
-            void removeCachedMessage(db, event.messageId).catch((error) => {
+            void markCachedMessageDeleted(db, event.messageId).catch((error) => {
               console.warn("[db] failed to remove cached message", error)
             })
+
+            // The deletion is the conversation's latest activity.
+            if (currentUserId) {
+              void updateCachedConversationLastMessage(db, {
+                ownerUserId: currentUserId,
+                conversationId: event.conversationId,
+                lastMessageId: event.messageId,
+                lastMessagePreview: "Message deleted",
+                lastMessageAt: Date.now(),
+              }).catch((error) => {
+                console.warn("[db] failed to update conversation last message", error)
+              })
+            }
           },
           onTyping: handlePeerTyping,
         }),
       [
-        conversationId,
+        currentUserId,
         db,
+        conversationId,
         handlePeerTyping,
         settleMutation,
         subscribeToMessages,
@@ -405,7 +434,6 @@ export function useConversationMessages(
         type: "TEXT",
         body: text,
         createdAt: now,
-        updatedAt: now,
       }
       stopTyping()
 
@@ -476,7 +504,6 @@ export function useConversationMessages(
           fileName: media.fileName,
         },
         createdAt: now,
-        updatedAt: now,
       }
 
       void (async () => {
@@ -564,7 +591,6 @@ export function useConversationMessages(
           durationMs: audio.durationMs,
         },
         createdAt: now,
-        updatedAt: now,
       }
 
       void (async () => {
@@ -635,7 +661,6 @@ export function useConversationMessages(
         type: "TEXT",
         body: text,
         createdAt: now,
-        updatedAt: now,
       }
 
       void (async () => {
@@ -736,7 +761,7 @@ export function useConversationMessages(
             return
           }
 
-          await removeCachedMessage(db, message.id)
+          await markCachedMessageDeleted(db, message.id)
           await api.remove({
             conversationId,
             messageId: message.id,

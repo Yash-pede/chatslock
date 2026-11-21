@@ -1,5 +1,5 @@
 import Expo, { type ExpoPushMessage, type ExpoPushTicket } from "expo-server-sdk"
-import type { Message } from "@repo/types/schema"
+import { MEDIA_PREVIEW_LABEL, type Message } from "@repo/types/schema"
 
 /** Optional; only needed when Expo push security is enabled. */
 const expo = new Expo({ accessToken: process.env.EXPO_ACCESS_TOKEN })
@@ -59,11 +59,7 @@ export const sendPushNotification = async ({
   }
 }
 
-const MEDIA_BODY = {
-  IMAGE: "Sent a photo",
-  AUDIO: "Sent a voice message",
-  DOC: "Sent a document",
-} as const
+export const MEDIA_BODY = MEDIA_PREVIEW_LABEL
 
 /**
  * Push content for a stored message. The sender's username is the title; text

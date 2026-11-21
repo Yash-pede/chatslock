@@ -3,7 +3,6 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
 import { ApiException, AWSManager, parseOrThrow, publishAppSyncEvent } from "@repo/api/utils"
 import {
-  ConversationUserProfile,
   conversationUserProfileSchema,
   getPeerUserId,
   type ConversationId,
@@ -278,6 +277,15 @@ export const userActiveConversationService = async ({
       usersDao.updateUser({ userId, lastActiveAt: Date.now() }),
     ])
 
+    // Opening the conversation means its messages are seen.
+    if (status === "OPENED") {
+      await conversationsDao
+        .resetUserConversationUnread({ userId, conversationId })
+        .catch((error) => {
+          console.warn("Failed to reset unread", error)
+        })
+    }
+
     // Heartbeats only refresh the cache TTL; only an actual open announces
     // ONLINE to peers.
     if (status === "HEARTBEAT") return undefined
@@ -325,52 +333,23 @@ export const userActiveConversationService = async ({
   return undefined
 }
 
-/**
- * Public profile shown on `/u/<username>` and in the chat list. Fetching it
- * also marks the caller active, which is what powers the online indicator.
- */
-const markViewerActive = (viewerId: UserId) =>
-  usersDao.updateUser({ userId: viewerId, lastActiveAt: Date.now() }).catch(() => undefined)
-
-const withPresence = async (profile: ConversationUserProfile) => {
-  const activeConversation = await conversationsDao.getUserActiveConversation({
-    userId: profile.userId,
-  })
-
-  const status: PeerUserStatus = activeConversation ? "ONLINE" : "OFFLINE"
-
-  return { ...profile, status }
-}
-
-/** `/u/<username>`: resolve the handle, then return the public profile. */
 export const getPublicProfileByUsername = async ({
-  viewerId,
   username,
 }: {
   viewerId: UserId
   username: string
 }) => {
-  // await markViewerActive(viewerId)
-
   const [match] =
     (await usersDao.getUserByUsername({ username: username.trim().toLowerCase() })) ?? []
   if (!match) throw new HTTPException(404, { message: "User not found" })
 
   // The schema is non-strict, so this also strips phone, role and auth fields.
   const profile = parseOrThrow(conversationUserProfileSchema, match)
-  return await withPresence(profile)
+  return await usersDao.withPresence(profile)
 }
 
-/** Batch profiles for the chat list (by user id). */
-export const getPublicProfilesByIds = async ({
-  viewerId,
-  userIds,
-}: {
-  viewerId: UserId
-  userIds: string[]
-}) => {
-  // await markViewerActive(viewerId)
-
+/** Batch public profiles for the chat list (by user id). */
+export const getPublicProfilesByIds = async ({ userIds }: { userIds: string[] }) => {
   const profiles = await usersDao.getPublicProfilesByIds({ userIds })
-  return Promise.all(profiles.map((profile) => withPresence(profile)))
+  return Promise.all(profiles.map((profile) => usersDao.withPresence(profile)))
 }

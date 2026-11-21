@@ -1,7 +1,7 @@
 import { Image } from "expo-image"
 import { Modal, Pressable, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { X } from "lucide-react-native"
+import { Pencil, X } from "lucide-react-native"
 import { Text } from "@repo/ui"
 
 export interface AvatarViewerProps {
@@ -9,11 +9,18 @@ export interface AvatarViewerProps {
   uri?: string | null
   name: string
   onClose: () => void
+  /** Opens the avatar picker; the viewer closes itself before calling it. */
+  onEdit?: () => void
 }
 
 /** Full-screen avatar preview on a scrim; tap the backdrop or the close button to dismiss. */
-export function AvatarViewer({ visible, uri, name, onClose }: AvatarViewerProps) {
+export function AvatarViewer({ visible, uri, name, onClose, onEdit }: AvatarViewerProps) {
   const insets = useSafeAreaInsets()
+
+  const startEdit = () => {
+    onClose()
+    onEdit?.()
+  }
 
   return (
     <Modal
@@ -53,6 +60,19 @@ export function AvatarViewer({ visible, uri, name, onClose }: AvatarViewerProps)
         ) : (
           <Text className="text-white">No photo to show</Text>
         )}
+
+        {onEdit ? (
+          <Pressable
+            onPress={startEdit}
+            accessibilityRole="button"
+            accessibilityLabel="Edit photo"
+            className="absolute flex-row items-center gap-1.5 rounded-full bg-white/15 px-4 py-2 active:opacity-70"
+            style={{ bottom: insets.bottom + 72 }}
+          >
+            <Pencil size={16} color="#ffffff" />
+            <Text className="text-sm font-medium text-white">Edit photo</Text>
+          </Pressable>
+        ) : null}
 
         <View
           className="absolute inset-x-0 items-center px-8"

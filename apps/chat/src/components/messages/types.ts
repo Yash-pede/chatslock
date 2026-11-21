@@ -50,6 +50,8 @@ export interface ChatMessage {
   pendingId?: string
   /** System notices (date chips, "X joined") render centered without a bubble. */
   isSystem?: boolean
+  /** Tombstone for a message whose body/attachment was removed by the server. */
+  isDeleted?: boolean
 }
 
 /** A locally picked file ready to be uploaded and attached to a media message. */

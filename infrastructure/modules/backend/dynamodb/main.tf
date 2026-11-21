@@ -20,10 +20,10 @@ resource "aws_dynamodb_table" "environment" {
     type = "S"
   }
 
-  # attribute {
-  #   name = "userMember"
-  #   type = "S"
-  # }
+  attribute {
+    name = "lastMessageAt"
+    type = "N"
+  }
 
   global_secondary_index {
     name            = "SK_username_GSI"
@@ -40,6 +40,20 @@ resource "aws_dynamodb_table" "environment" {
     }
   }
 
+  global_secondary_index {
+    name            = "ConversationsMemberList_GSI"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "PK"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "lastMessageAt"
+      key_type       = "RANGE"
+    }
+  }
 
   lifecycle {
     #    prevent_destroy = true

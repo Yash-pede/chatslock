@@ -7,7 +7,6 @@ import React, {
   useRef,
   useState,
 } from "react"
-import { discardSession, tokenRefreshService } from "@repo/utils"
 import NetInfo from "@react-native-community/netinfo"
 import { usersApi, type OnboardingForm, type Profile } from "@/api/users.api"
 import { cacheSelfProfile, getCachedSelfProfile, useLocalDb } from "@/db"
@@ -42,20 +41,13 @@ interface ProfileContextValue {
 
 const ProfileContext = createContext<ProfileContextValue | null>(null)
 
-/** Cached profile is shown if `/me` has not answered within this window. */
-const PROFILE_CACHE_TIMEOUT_MS = 4_000
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const { auth, phone, signOut } = useAuth()
   const { db } = useLocalDb()
   const { status: networkStatus } = useNetworkStatus()
   const signedIn = auth.status === "signedIn"
   const identity = auth.status === "signedIn" ? auth.identity : null
-  const staff = identity !== null && identity.groups.length > 0
+  const staff = identity !== null && identity.groups.includes("agent")
 
   /** Identifies the session the current `/me` state belongs to. */
   const sessionKey = identity ? `${identity.id}:${identity.username ?? ""}` : null
@@ -119,6 +111,30 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     }
   }, [flow])
 
+  /** Applies a `/me` result to state. */
+  const applyProfile = useCallback(
+    async (next: ProfileState | null) => {
+      if (!next) return null
+
+      logProfile("state", { status: next.status })
+      setProfile(next)
+      if (staff) setStaffResolved(true)
+
+      // Already onboarded: a stored invite is stale.
+      if (next.status === "ready" && pendingAgentRef.current) setPendingAgentId(null)
+
+      if (next.status === "rejected") {
+        setStaffResolved(false)
+        // Logout has exactly one owner: the token refresh path. A refused
+        // request only surfaces the gate here; if the session is truly dead,
+        // the next authenticated request triggers a refresh whose rejection
+        // clears tokens, the cache, and signs out.
+      }
+      return next
+    },
+    [staff, setPendingAgentId],
+  )
+
   /** Loads `/me` for the current session; `null` when it no longer applies. */
   const fetchProfile = useCallback(async (): Promise<ProfileState | null> => {
     const request = ++inFlight.current
@@ -146,59 +162,41 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           }
     }
 
-    let next: ProfileState | null
+    // Cached profile: paint the normal screens immediately, then refresh `/me`
+    // in the background. The fresh result takes over when it lands (and a
+    // rejection still signs out); a transport failure keeps the cached view.
     if (cached) {
-      // A connected-but-unreachable network can take 30s to fail; don't keep
-      // the cached app behind the splash for that long.
-      next = await Promise.race([loadProfile(), delay(PROFILE_CACHE_TIMEOUT_MS).then(() => null)])
-      if (!next) {
-        if (request !== inFlight.current || key !== sessionKey) return null
-        return { status: "ready", profile: cached }
-      }
-    } else {
-      next = await loadProfile()
-    }
-    if (!next) return null
+      void loadProfile()
+        .then((fresh) => {
+          if (request !== inFlight.current || key !== sessionKey) return
 
-    // A late result from a previous session must not be applied to this one.
+          if (fresh.status === "ready") {
+            void cacheSelfProfile(db, fresh.profile).catch((error) => {
+              console.warn("[db] failed to cache own profile", error)
+            })
+            void applyProfile({ status: "ready", profile: fresh.profile })
+          } else if (fresh.status === "missing" || fresh.status === "rejected") {
+            void applyProfile(fresh)
+          }
+        })
+        .catch((error) => {
+          console.warn("[profile] background refresh failed", error)
+        })
+
+      return { status: "ready", profile: cached }
+    }
+
+    // No cache: nothing to paint, so wait for `/me` to decide the flow.
+    const next = await loadProfile()
     if (request !== inFlight.current || key !== sessionKey) return null
 
     if (next.status === "ready") {
       await cacheSelfProfile(db, next.profile).catch((error) => {
         console.warn("[db] failed to cache own profile", error)
       })
-      return next
     }
-
-    // A transport failure should not hide an account we already know about.
-    if (next.status === "error" && cached) return { status: "ready", profile: cached }
     return next
-  }, [db, identity, sessionKey])
-
-  /** Applies a `/me` result to state, dropping the session when refused. */
-  const applyProfile = useCallback(
-    async (next: ProfileState | null) => {
-      if (!next) return null
-
-      logProfile("state", { status: next.status })
-      setProfile(next)
-      if (staff) setStaffResolved(true)
-
-      // Already onboarded: a stored invite is stale.
-      if (next.status === "ready" && pendingAgentRef.current) setPendingAgentId(null)
-
-      if (next.status === "rejected") {
-        setStaffResolved(false)
-        // The server refuses this token: sign out instead of showing a gate
-        // the user can never pass.
-        await discardSession()
-        tokenRefreshService.stopAutoRefresh()
-        await signOut()
-      }
-      return next
-    },
-    [staff, signOut, setPendingAgentId],
-  )
+  }, [applyProfile, db, identity, sessionKey])
 
   useEffect(() => {
     if (!signedIn || sessionKey === null) {

@@ -19,7 +19,7 @@ export default function ChatsScreen() {
   const identity = useIdentity()
   const currentUserId = identity?.id ?? null
 
-  const { items, loading, error, refresh } = useChatList(currentUserId)
+  const { items, loading, error, refresh, loadingOlder, loadOlder } = useChatList(currentUserId)
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<ChatFilter>("all")
 
@@ -75,6 +75,8 @@ export default function ChatsScreen() {
             stickySectionHeadersEnabled={false}
             contentContainerClassName="pb-8"
             showsVerticalScrollIndicator={false}
+            onEndReached={loadOlder}
+            onEndReachedThreshold={0.5}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -97,12 +99,18 @@ export default function ChatsScreen() {
             }
             ListFooterComponent={
               filter === "all" && items.length > 0 ? (
-                <Text
-                  variant="small"
-                  className="py-4 text-center font-normal text-muted-foreground"
-                >
-                  {items.length} conversations
-                </Text>
+                loadingOlder ? (
+                  <View className="items-center py-4">
+                    <Spinner />
+                  </View>
+                ) : (
+                  <Text
+                    variant="small"
+                    className="py-4 text-center font-normal text-muted-foreground"
+                  >
+                    {items.length} conversations
+                  </Text>
+                )
               ) : undefined
             }
           />

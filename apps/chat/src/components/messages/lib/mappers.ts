@@ -29,8 +29,13 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
     createdAt: message.createdAt,
   }
 
-  if (message.deletedAt) {
-    return { ...base, type: "TEXT", text: "This message was deleted", isSystem: true }
+  if (message.deletedAt != null) {
+    return {
+      ...base,
+      type: "TEXT",
+      text: "This message was deleted",
+      isDeleted: true,
+    }
   }
 
   // Keep the original attachment (not just the image thumbnail / voice URL) so
@@ -106,7 +111,6 @@ export function messageFromRow(row: CachedMessage): Message {
     ...(row.body !== null ? { body: row.body } : {}),
     ...(row.attachment !== null ? { attachment: row.attachment } : {}),
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
     ...(row.editedAt !== null ? { editedAt: row.editedAt } : {}),
     ...(row.deletedAt !== null ? { deletedAt: row.deletedAt } : {}),
   }

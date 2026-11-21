@@ -1,5 +1,6 @@
 import z from "zod"
 import { PREFIXES } from "./keys"
+import { ulid } from "./ulid.schema"
 
 const zodTimestamp = z.number().int().nonnegative()
 
@@ -54,6 +55,12 @@ export const conversationItem = z.strictObject({
  * Non-strict, so a full DynamoDB item can be parsed directly: `PK`/`SK` are dropped.
  */
 export const conversationSchema = z.object(conversationItem.omit({ PK: true, SK: true }).shape)
+export const conversationUpdateSchema = z
+  .object(conversationItem.omit({ PK: true, SK: true, updatedAt: true }).shape)
+  .partial()
+  .extend({
+    conversationId,
+  })
 
 /** A user's membership row for a conversation, stored under `USER#<userId>`. */
 export const userMember_conversationItem = z.strictObject({
@@ -61,6 +68,9 @@ export const userMember_conversationItem = z.strictObject({
   SK: conversationKey,
   userMember: z.string(),
   unreadCount: z.int().default(0),
+  lastMessageId: z.optional(ulid),
+  lastMessagePreview: z.optional(z.string()),
+  lastMessageAt: z.optional(zodTimestamp),
 })
 
 /**
@@ -85,6 +95,7 @@ export const CONVERSATIONS_MEMBERLIST_GSI = "ConversationsMemberList_GSI"
 export type Conversation = z.infer<typeof conversationSchema>
 /** A conversation metadata row exactly as stored in DynamoDB. */
 export type ConversationItem = z.infer<typeof conversationItem>
+export type UpdateConversation = z.infer<typeof conversationUpdateSchema>
 
 /** A membership row as returned by the DAO and exposed through the API. */
 export type UserMemberConversation = z.infer<typeof userMember_conversationSchema>

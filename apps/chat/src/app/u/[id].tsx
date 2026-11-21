@@ -26,7 +26,7 @@ export default function PublicProfileLinkScreen() {
 
   if (flow === "ready") {
     if (isOwnProfile) return <Redirect href="/profile" />
-    if (!username) return <Redirect href="/" />
+    if (!isLinkable) return <Redirect href="/" />
     return <PublicProfilePage username={username} />
   }
 

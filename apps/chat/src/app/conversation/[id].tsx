@@ -159,7 +159,7 @@ export default function ConversationScreen() {
     statusRef: livePeerStatusRef,
     lastActiveAtRef: livePeerLastActiveAtRef,
   } = usePeerPresence(conversationId, currentUserId)
-  useConversationMeta(conversationId)
+  useConversationMeta(conversationId, currentUserId)
   // Live presence wins; the cached profile keeps the header usable offline.
   const headerPeer = peerPresence ?? cachedPeer
   const peerStatus = livePeerStatus ?? peerPresence?.status ?? cachedPeer?.status
@@ -180,6 +180,7 @@ export default function ConversationScreen() {
   const canEdit = Boolean(
     selectedMessage &&
     selectedMessage.isMine &&
+    !selectedMessage.isDeleted &&
     selectedMessage.type === "TEXT" &&
     !selectedMessage.isSystem &&
     selectedMessage.status !== "failed" &&
@@ -258,6 +259,7 @@ export default function ConversationScreen() {
   const canDelete = Boolean(
     selectedMessage &&
     selectedMessage.isMine &&
+    !selectedMessage.isDeleted &&
     !selectedMessage.isSystem &&
     selectedMessage.status !== "failed" &&
     selectedAt !== null &&
@@ -327,7 +329,9 @@ export default function ConversationScreen() {
           message={item}
           selected={item.id === selectedId}
           onSelect={
-            !item.isSystem && item.status !== "failed" ? () => selectMessage(item) : undefined
+            !item.isSystem && !item.isDeleted && item.status !== "failed"
+              ? () => selectMessage(item)
+              : undefined
           }
           onRetry={item.status === "failed" ? () => retry(item) : undefined}
           onOpenMedia={openMedia}

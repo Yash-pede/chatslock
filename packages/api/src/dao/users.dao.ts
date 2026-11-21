@@ -29,9 +29,10 @@ import {
   authSessionSchema,
   type AuthSession,
 } from "@repo/types/schema"
-import { MAX_PROFILE_LOOKUP } from "@repo/types/req"
+import { MAX_PROFILE_LOOKUP, PeerUserStatus } from "@repo/types/req"
 import z from "zod"
 import { AWSManager, buildKey, definedEntries, parseOrThrow } from "../utils"
+import { conversationsDao } from "./conversations.dao"
 
 const userKey = (userId: UserId, sk?: UserSK) => ({
   PK: buildKey(PREFIXES.USER, userId),
@@ -305,5 +306,19 @@ export const usersDao = {
         }),
       ),
     )
+  },
+  /**
+   *
+   * @param profile
+   * @returns profile with user active status "ONLINE" or "OFFLINE"
+   */
+  withPresence: async (profile: ConversationUserProfile) => {
+    const activeConversation = await conversationsDao.getUserActiveConversation({
+      userId: profile.userId,
+    })
+
+    const status: PeerUserStatus = activeConversation ? "ONLINE" : "OFFLINE"
+
+    return { ...profile, status }
   },
 }

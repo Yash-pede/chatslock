@@ -1,6 +1,10 @@
 import { File as ExpoFile } from "expo-file-system"
 import { apiClient } from "@/api/client"
-import type { Message, UserMemberConversation } from "@repo/types/schema"
+import type {
+  ConversationUserProfileWithStatus,
+  Message,
+  UserMemberConversation,
+} from "@repo/types/schema"
 import type { MediaContentType } from "@repo/types/req"
 
 /** A media upload target returned by `POST /api/conversations/media` (presigned POST). */
@@ -20,6 +24,9 @@ export const CHAT_PAGE_SIZE = 25
 /** `GET /api/conversations/chat` — one page of the caller's conversations. */
 export interface ChatPage {
   conversations: UserMemberConversation[]
+  profiles: ConversationUserProfileWithStatus[]
+  /** Base64url cursor for the next page; absent on the last page. */
+  nextKey?: string
 }
 
 /** A single direct conversation as returned by the direct-chat endpoints. */
@@ -66,10 +73,16 @@ export const conversationsApi = {
     return unwrap<ConversationSummary>(data)
   },
 
-  /** `GET /api/conversations/chat?pageSize=` — caller's conversation memberships. */
-  getChatPage: async (input: { pageSize?: number } = {}): Promise<ChatPage> => {
+  /** `GET /api/conversations/chat?pageSize=&startKey=` — caller's conversation memberships. */
+  getChatPage: async (input: {
+    pageSize?: number
+    startKey?: string
+  } = {}): Promise<ChatPage> => {
     const { data } = await apiClient.get("/api/conversations/chat", {
-      params: { pageSize: input.pageSize ?? CHAT_PAGE_SIZE },
+      params: {
+        pageSize: input.pageSize ?? CHAT_PAGE_SIZE,
+        ...(input.startKey ? { startKey: input.startKey } : {}),
+      },
     })
     return unwrap<ChatPage>(data)
   },

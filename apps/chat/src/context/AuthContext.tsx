@@ -81,29 +81,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false
 
     void (async () => {
-      // Avoid a 30s refresh timeout on a cold start that NetInfo already knows
-      // is offline; the stored identity is enough to open cached screens.
-      const net = await NetInfo.fetch().catch(() => null)
-      const offline = net?.isConnected === false || net?.isInternetReachable === false
+      const [identity, refreshToken] = await Promise.all([
+        secureStorage.getIdentity(),
+        tokenManager.getRefreshToken(),
+      ])
+      if (cancelled) return
 
-      if (offline) {
-        const [identity, refreshToken] = await Promise.all([
-          secureStorage.getIdentity(),
-          tokenManager.getRefreshToken(),
-        ])
-        if (cancelled) return
-        if (identity && refreshToken) {
-          setAuth(signedIn(identity, { startRefresh: false }))
-          return
-        }
+      if (identity && refreshToken) {
+        setAuth(signedIn(identity, { startRefresh: false }))
+        // A rejected refresh logs out via the auth event bus; a network
+        // failure keeps the cached session and retries (same as offline).
+        void tokenRefreshService.refreshNow().catch(() => undefined)
+        return
       }
 
       const silent = await silentAuthService.attemptSilentAuth()
       if (cancelled) return
 
-      const identity = silent.user ?? (silent.isAuthenticated ? storedIdentity() : null)
-      if (identity) {
-        setAuth(signedIn(identity, { startRefresh: !silent.offline }))
+      const silentIdentity = silent.user ?? (silent.isAuthenticated ? storedIdentity() : null)
+      if (silentIdentity) {
+        setAuth(signedIn(silentIdentity, { startRefresh: !silent.offline }))
       } else {
         setAuth({ status: "signedOut", error: silent.error })
       }

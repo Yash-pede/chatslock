@@ -86,6 +86,7 @@ export default function UserLoginScreen() {
 
         <View className="items-center">
           <SaveButton
+            key="phone-send"
             label="Send code"
             savedLabel="Code sent"
             onSave={login.sendCode}
@@ -100,18 +101,11 @@ export default function UserLoginScreen() {
     )
   }
 
-  // The first send runs in the background: show that the code is still on its way.
-  const requestPending = login.requesting
-
   return (
     <AuthScreen
       back
       title="Enter your code"
-      subtitle={
-        requestPending
-          ? `Sending a 6-digit code to ${login.otpPhone}…`
-          : `We sent a 6-digit code to ${login.otpPhone}.`
-      }
+      subtitle={`We sent a 6-digit code to ${login.otpPhone}.`}
       footer={
         <View className="items-center gap-2">
           <Pressable onPress={login.changeNumber} accessibilityRole="button" hitSlop={8}>
@@ -135,11 +129,12 @@ export default function UserLoginScreen() {
 
       <View className="items-center">
         <SaveButton
+          key="otp-verify"
           label="Verify"
           savedLabel="Signed in"
           onSave={login.verify}
           minLoading={600}
-          disabled={login.otp.length !== 6 || login.verifying || login.requesting}
+          disabled={login.otp.length !== 6 || login.verifying}
           contract
           className="min-w-40"
         />

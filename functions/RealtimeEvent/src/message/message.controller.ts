@@ -56,5 +56,3 @@ export const deleteMessageController = async (
     data: { ...result, ...clientIdOf(target) },
   })
 }
-
-/** Read receipts have no payload; returning nothing also skips the broadcast. */

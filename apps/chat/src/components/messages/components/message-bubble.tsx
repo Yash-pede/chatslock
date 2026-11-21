@@ -3,7 +3,7 @@ import { Image } from "expo-image"
 import { Pressable, View } from "react-native"
 import Animated, { useAnimatedStyle, withSpring } from "react-native-reanimated"
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio"
-import { FileText, Pause, Play, WifiOff } from "lucide-react-native"
+import { Ban, FileText, Pause, Play, WifiOff } from "lucide-react-native"
 import { ChatBubble, Spinner, Text, Waveform, cn, useThemeColors } from "@repo/ui"
 import { useRealtime } from "@/context/RealtimeContext"
 import { DownloadButton } from "./download-button"
@@ -288,6 +288,24 @@ export const MessageBubble = memo(function MessageBubble({
   }))
 
   const renderBubble = () => {
+    if (message.isDeleted) {
+      return (
+        <ChatBubble
+          variant={variant}
+          timestamp={time}
+          status={message.status}
+          className={cn(selectedClass, failedClass)}
+        >
+          <View className="flex-row items-center gap-1.5">
+            <Ban size={15} color={tint} />
+            <Text className="text-base leading-5" style={{ color: tint }}>
+              Message deleted
+            </Text>
+          </View>
+        </ChatBubble>
+      )
+    }
+
     if (message.isSystem) {
       return (
         <View className="items-center py-2">

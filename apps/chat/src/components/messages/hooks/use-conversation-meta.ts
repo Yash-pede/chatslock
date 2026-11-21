@@ -3,6 +3,7 @@ import { AppState } from "react-native"
 import { useFocusEffect } from "expo-router"
 import type { ClientConversationStatus } from "@repo/types/req"
 import { usersApi } from "@/api/users.api"
+import { resetCachedConversationUnread, useLocalDb } from "@/db"
 import { useRealtime } from "@/context/RealtimeContext"
 
 /** Refreshes the server's 10-minute active-conversation TTL without re-announcing. */
@@ -12,12 +13,14 @@ const OPENED_HEARTBEAT_MS = 5 * 60_000
  * Reports whether this conversation is actually on screen.
  *
  * OPENED stores the server-side active conversation (profiles + push
- * suppression). CLOSED clears it and makes the users Lambda publish OFFLINE to
- * the user's channel. The heartbeat keeps long sessions alive; force-kills and
- * network loss fall back to the active-conversation TTL.
+ * suppression) and resets the unread count. CLOSED clears it and makes the
+ * users Lambda publish OFFLINE to the user's channel. The heartbeat keeps long
+ * sessions alive; force-kills and network loss fall back to the
+ * active-conversation TTL.
  */
-export function useConversationMeta(conversationId: string): void {
+export function useConversationMeta(conversationId: string, ownerUserId: string | null): void {
   const { online } = useRealtime()
+  const { db } = useLocalDb()
   const focused = useRef(false)
   const appActive = useRef(AppState.currentState === "active")
   const onlineRef = useRef(online)
@@ -48,11 +51,19 @@ export function useConversationMeta(conversationId: string): void {
       focused.current = true
       if (appActive.current && onlineRef.current) notify("OPENED")
 
+      // Viewing the conversation clears its local unread badge immediately;
+      // the OPENED request above also resets it server-side.
+      if (ownerUserId) {
+        void resetCachedConversationUnread(db, ownerUserId, conversationId).catch((error) => {
+          console.warn("[db] failed to reset conversation unread", error)
+        })
+      }
+
       return () => {
         focused.current = false
         notify("CLOSED")
       }
-    }, [notify]),
+    }, [conversationId, db, notify, ownerUserId]),
   )
 
   // Backgrounding the app should show the user offline; foregrounding while

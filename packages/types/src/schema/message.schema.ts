@@ -6,6 +6,9 @@ import {
   type ConversationType,
 } from "./conversation.schema"
 import { userId } from "./user.schema"
+import { ulid } from "./ulid.schema"
+
+export { ulid }
 
 const zodTimestamp = z.number().int().nonnegative()
 
@@ -17,8 +20,6 @@ export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 /** Editing and deleting are only allowed this long after the message was created. */
 export const MESSAGE_ACTION_WINDOW_MS = 15 * 60 * 1000
 
-/** Crockford base32 ULID: 10 chars of timestamp + 16 chars of randomness. */
-export const ulid = z.string().regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, "Invalid ULID")
 /** Message identifier — a ULID so sort keys order chronologically. */
 export type MessageId = z.infer<typeof ulid>
 
@@ -103,7 +104,6 @@ const messageItemBase = z.strictObject({
   body: z.string().min(1).max(MAX_MESSAGE_LENGTH).optional(),
   attachment: messageAttachment.optional(),
   createdAt: zodTimestamp,
-  updatedAt: zodTimestamp,
   editedAt: zodTimestamp.optional(),
   /** Soft-delete marker; deleted messages keep their storage row for history sync. */
   deletedAt: zodTimestamp.optional(),

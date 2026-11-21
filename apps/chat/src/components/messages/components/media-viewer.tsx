@@ -366,7 +366,7 @@ export function MediaViewer({ items, initialIndex, visible, onClose }: MediaView
               hitSlop={12}
               accessibilityRole="button"
               accessibilityLabel="Close"
-              className="absolute end-5 h-10 w-10 items-center justify-center rounded-full bg-white/10 active:opacity-70"
+              className="absolute end-5 h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/65 shadow-md active:opacity-70"
               style={{ top: insets.top + 12 }}
             >
               <X size={22} color="#ffffff" />

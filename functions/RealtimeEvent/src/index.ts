@@ -24,6 +24,7 @@ import {
   editMessageController,
   sendMessageController,
 } from "./message/message.controller"
+import { conversationsDao } from "@repo/api/dao"
 
 const { logger, metrics, tracer } = AWSManager
 
@@ -110,8 +111,17 @@ app.onSubscribe("/conversation/*", async (event) => {
 
   const namespace = event.info.channelNamespace.name
 
-  // The full channel path has unbounded cardinality, so it is a log field, not
-  // a metric dimension; the namespace is the bounded dimension.
+  try {
+    const { userId } = identityOf(event)
+    conversationsDao.resetUserConversationUnreadCount({
+      userId,
+      conversationId,
+    })
+  } catch (err) {
+    logger.error({
+      message: "Unable to reset unread count on conversation subscribe.",
+    })
+  }
   metrics.addDimension("channelNamespace", namespace)
   metrics.addMetric("Connections", MetricUnit.Count, 1)
   logger.info("Subscription created", { conversationId, channelNamespace: namespace })

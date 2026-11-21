@@ -3,6 +3,7 @@ import {
   ApiException,
   AWSManager,
   buildConversationId,
+  encodeLastEvaluatedKey,
   generateUlid,
   parseConversationId,
 } from "@repo/api/utils"
@@ -13,12 +14,15 @@ import {
   mediaFileExtension,
   normalizeMediaContentType,
 } from "@repo/types/req"
-import type {
-  ConversationId,
-  Message,
-  MessageId,
-  UserId,
-  UserMemberConversation,
+import {
+  ConversationUserProfile,
+  ConversationUserProfileWithStatus,
+  getPeerUserId,
+  type ConversationId,
+  type Message,
+  type MessageId,
+  type UserId,
+  type UserMemberConversation,
 } from "@repo/types/schema"
 import { MAX_MEDIA_FILE_SIZE } from "@repo/types/req"
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post"
@@ -84,14 +88,31 @@ export const listMessagesService = async ({
 export const chatPageConversationsService = async ({
   userId,
   pageSize,
+  startKey,
 }: {
   userId: string
   pageSize: number
   startKey?: string
-}): Promise<{ conversations: UserMemberConversation[] }> => {
-  const conversations = await conversationsDao.getConversationsByUserId(userId)
+  }): Promise<{ conversations: UserMemberConversation[]; profiles: ConversationUserProfileWithStatus[]; nextKey?: string }> => {
+  const { conversations, lastEvaluatedKey } = await conversationsDao.getConversationsByUserId(
+    userId,
+    pageSize,
+    startKey,
+  )
 
-  return { conversations: conversations.slice(0, pageSize) }
+  const peerIds = conversations
+    .map((item) => getPeerUserId(item.conversationId, userId))
+    .filter((peerId): peerId is string => Boolean(peerId))
+
+  const peerProfiles = await usersDao
+    .getPublicProfilesByIds({ userIds: peerIds })
+    .then((profiles) => Promise.all(profiles.map((profile) => usersDao.withPresence(profile))))
+
+  return {
+    conversations,
+    profiles: peerProfiles,
+    nextKey: encodeLastEvaluatedKey(lastEvaluatedKey),
+  }
 }
 
 /**
