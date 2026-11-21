@@ -148,8 +148,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       // A push can arrive while the app is backgrounded, so there is no
       // realtime event to keep the chat list's last-message row current.
       const data = next.request.content.data as
-        | { conversationId?: unknown; messageId?: unknown; messageType?: unknown }
-        | undefined
+        { conversationId?: unknown; messageId?: unknown; messageType?: unknown } | undefined
       const conversationId =
         typeof data?.conversationId === "string" && data.conversationId.length > 0
           ? data.conversationId

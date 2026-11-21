@@ -74,10 +74,12 @@ export const conversationsApi = {
   },
 
   /** `GET /api/conversations/chat?pageSize=&startKey=` — caller's conversation memberships. */
-  getChatPage: async (input: {
-    pageSize?: number
-    startKey?: string
-  } = {}): Promise<ChatPage> => {
+  getChatPage: async (
+    input: {
+      pageSize?: number
+      startKey?: string
+    } = {},
+  ): Promise<ChatPage> => {
     const { data } = await apiClient.get("/api/conversations/chat", {
       params: {
         pageSize: input.pageSize ?? CHAT_PAGE_SIZE,

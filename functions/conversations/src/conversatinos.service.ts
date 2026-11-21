@@ -93,7 +93,11 @@ export const chatPageConversationsService = async ({
   userId: string
   pageSize: number
   startKey?: string
-  }): Promise<{ conversations: UserMemberConversation[]; profiles: ConversationUserProfileWithStatus[]; nextKey?: string }> => {
+}): Promise<{
+  conversations: UserMemberConversation[]
+  profiles: ConversationUserProfileWithStatus[]
+  nextKey?: string
+}> => {
   const { conversations, lastEvaluatedKey } = await conversationsDao.getConversationsByUserId(
     userId,
     pageSize,

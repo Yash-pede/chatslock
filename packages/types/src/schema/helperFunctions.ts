@@ -26,9 +26,7 @@ export function truncatePreview(text: string): string {
 }
 
 /** Chat-list preview for a stored message (same format on client and server). */
-export function messagePreview(
-  message: Pick<Message, "type" | "body" | "deletedAt">,
-): string {
+export function messagePreview(message: Pick<Message, "type" | "body" | "deletedAt">): string {
   if (message.deletedAt != null) return "Message deleted"
 
   const text =
