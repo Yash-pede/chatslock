@@ -6,7 +6,7 @@ export interface TokenSet {
   /** Seconds until the access token expires (Cognito `ExpiresIn`). */
   expiresIn: number
   idToken?: string
-  refreshToken?: string
+  refreshToken: string
 }
 
 interface TokenState {
@@ -36,8 +36,12 @@ class TokenManager {
     user: null,
   }
 
-  /** Store a full token set from a login/verify/refresh response. */
-  setTokens(tokens: TokenSet): void {
+  /**
+   * Store a full token set from a login/verify/refresh response. The refresh
+   * token is persisted to secure storage (it is rotated on every use, so the
+   * one just returned must replace the one just spent).
+   */
+  async setTokens(tokens: TokenSet): Promise<void> {
     this.state.accessToken = tokens.accessToken
     // `expiresIn` is in seconds — convert to ms (the old code multiplied by
     // 1500, which made tokens look valid for 25 minutes).
@@ -47,6 +51,8 @@ class TokenManager {
       this.state.idToken = tokens.idToken
       this.state.user = claimsToUser(decodeJwt<IdTokenClaims>(tokens.idToken))
     }
+
+    await this.setRefreshToken(tokens.refreshToken)
     this.notifyChange()
   }
 

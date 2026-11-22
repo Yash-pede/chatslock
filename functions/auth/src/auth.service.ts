@@ -120,10 +120,9 @@ export async function getCognitoUserGroups(username: string) {
 }
 
 export async function cognitoRefreshCall(refreshToken: string, client: AuthClient = "otp") {
-  return await authDao.initiateAuth({
-    authFlow: "REFRESH_TOKEN_AUTH",
-    authParameters: { REFRESH_TOKEN: refreshToken },
+  return await authDao.GetTokensFromRefreshToken({
     client,
+    refreshtoken: refreshToken,
   })
 }
 
@@ -152,19 +151,15 @@ export function subFromToken(token: string | undefined): string | undefined {
  */
 export async function recordAuthSession({
   idToken,
-  refreshToken,
   client,
   deviceName,
   platform,
 }: {
   idToken: string | undefined
-  refreshToken: string | undefined
   client: AuthClient
   deviceName?: string
   platform?: "ios" | "android" | "web"
 }): Promise<string | undefined> {
-  if (!refreshToken) return undefined
-
   const userId = subFromToken(idToken)
   if (!userId) {
     console.error("[auth] could not read sub from token; session not recorded")
@@ -179,26 +174,15 @@ export async function recordAuthSession({
   if (activeSessions.length >= MAX_USER_SESSIONS) {
     const oldest = activeSessions.reduce((acc, cur) => (cur.createdAt < acc.createdAt ? cur : acc))
 
-    try {
-      await authDao.revokeToken({
-        refreshToken: oldest.refreshToken,
-        client: oldest.client,
-      })
-    } catch (error) {
-      // Even if Cognito refuses (already expired/revoked), drop our session row
-      // so it stops counting toward the limit.
-      console.error("[auth] failed to revoke oldest refresh token", error)
-    }
-
     await usersDao.deleteAuthSession({
       userId,
-      refreshTokenHash: oldest.refreshTokenHash,
+      sessionId: oldest.sessionId,
     })
   }
 
   return await usersDao.createAuthSession({
     userId,
-    refreshToken,
+    sessionId: crypto.randomUUID(),
     client,
     ...(deviceName ? { deviceName } : {}),
     ...(platform ? { platform } : {}),

@@ -53,6 +53,7 @@ export const refreshOtpSchema = baseSchema.extend({
   body: z.strictObject({
     refreshToken: z.string(),
     client: z.enum(AUTH_CLIENTS).optional().default("otp"),
+    sessionId: z.string(),
   }),
 })
 

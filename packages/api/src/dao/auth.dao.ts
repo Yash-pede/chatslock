@@ -7,6 +7,7 @@ import {
   AdminInitiateAuthCommand,
   AdminListGroupsForUserCommand,
   AdminSetUserPasswordCommand,
+  GetTokensFromRefreshTokenCommand,
   GlobalSignOutCommand,
   InitiateAuthCommand,
   ListUsersCommand,
@@ -135,6 +136,20 @@ export const authDao = {
         AuthFlow: authFlow,
         ClientId: await getClientId(client),
         AuthParameters: authParameters,
+      }),
+    )
+  },
+  GetTokensFromRefreshToken: async ({
+    refreshtoken,
+    client = "otp",
+  }: {
+    refreshtoken: string
+    client?: AuthClient
+  }) => {
+    return await AWSManager.cognitoClient.send(
+      new GetTokensFromRefreshTokenCommand({
+        ClientId: await getClientId(client),
+        RefreshToken: refreshtoken,
       }),
     )
   },

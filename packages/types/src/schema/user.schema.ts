@@ -97,8 +97,7 @@ export const usersk = Object.fromEntries(USER_SK.map((key) => [key, key])) as {
 export const authSessionItem = z.strictObject({
   PK: userKeys.shape.PK,
   SK: z.string().regex(new RegExp(`^${AUTH_SESSION_PREFIX}[^#]+$`), "Invalid auth session SK"),
-  refreshToken: str(1, 4096),
-  refreshTokenHash: str(1, 128),
+  sessionId: z.uuid(),
   client: z.enum(["otp", "userpass"]),
   expoPushToken: str(1, 255).optional(),
   deviceName: str(1, 120).optional(),

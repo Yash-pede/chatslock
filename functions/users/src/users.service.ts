@@ -1,6 +1,6 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
-import { usersDao, authDao, conversationsDao, revokeAuthSession } from "@repo/api/dao"
+import { usersDao, authDao, conversationsDao } from "@repo/api/dao"
 import { ApiException, AWSManager, parseOrThrow, publishAppSyncEvent } from "@repo/api/utils"
 import {
   conversationUserProfileSchema,
@@ -200,15 +200,15 @@ export const updateSessionPushToken = async ({
   sessionId: string
   expoPushToken: string
 }): Promise<void> => {
-  const session = await usersDao.getAuthSessionByHash({
+  const session = await usersDao.getAuthSessionBySessionId({
     userId,
-    refreshTokenHash: sessionId,
+    sessionId,
   })
   if (!session) throw new HTTPException(404, { message: "Session not found" })
 
   await usersDao.updateAuthSessionPushToken({
     userId,
-    refreshTokenHash: session.refreshTokenHash,
+    sessionId,
     expoPushToken,
   })
 }
@@ -234,7 +234,7 @@ export const getUserSessions = async ({
     .filter((session) => session.expiresAt > now)
     .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
     .map((session) => ({
-      id: session.refreshTokenHash,
+      id: session.sessionId,
       deviceName: session.deviceName ?? "Unknown device",
       platform: session.platform ?? null,
       createdAt: session.createdAt,
@@ -248,13 +248,18 @@ export const getUserSessions = async ({
  */
 export const revokeUserSession = async ({
   userId,
-  refreshTokenHash,
+  sessionId,
 }: {
   userId: string
-  refreshTokenHash: string
+  sessionId: string
 }): Promise<void> => {
-  const revoked = await revokeAuthSession({ userId, refreshTokenHash })
-  if (!revoked) throw new HTTPException(404, { message: "Session not found" })
+  const session = await usersDao.getAuthSessionBySessionId({ userId, sessionId })
+  if (session) {
+    await usersDao.deleteAuthSession({
+      userId,
+      sessionId,
+    })
+  }
 }
 
 /**

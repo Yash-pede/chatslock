@@ -22,7 +22,7 @@ import {
 import { AWSManager } from "@repo/api/utils"
 import { HTTPException } from "hono/http-exception"
 import { cognitoErrorName } from "./auth.service"
-import { revokeAuthSession, usersDao } from "@repo/api/dao"
+import { usersDao } from "@repo/api/dao"
 
 export const otpController = async (c: Context) => {
   const { body }: InitiateOtpRequest = c.get("valid")
@@ -53,7 +53,6 @@ export const verifyOtpController = async (c: Context) => {
 
   const sessionId = await recordAuthSession({
     idToken: resp.AuthenticationResult?.IdToken,
-    refreshToken: resp.AuthenticationResult?.RefreshToken,
     client: "otp",
     deviceName: body.deviceName,
     platform: body.platform,
@@ -120,7 +119,6 @@ export const loginController = async (c: Context) => {
 
     const sessionId = await recordAuthSession({
       idToken: response.AuthenticationResult?.IdToken,
-      refreshToken: RefreshToken,
       client: "userpass",
       deviceName: body.deviceName,
       platform: body.platform,
@@ -183,36 +181,32 @@ export const refreshController = async (c: Context) => {
     resp.AuthenticationResult?.IdToken ?? resp.AuthenticationResult?.AccessToken,
   )
 
-  if (!userId) {
+  if (!userId || !resp.AuthenticationResult?.RefreshToken) {
     throw new HTTPException(401, { message: "Session expired. Sign in again." })
   }
 
-  const session = await usersDao.getAuthSession({
+  const session = await usersDao.getAuthSessionBySessionId({
     userId,
-    refreshToken: body.refreshToken,
+    sessionId: body.sessionId,
   })
 
-  // A missing row means the session was evicted by the 4-session limit (or
-  // predates it); do not let it refresh back into a valid session.
   if (!session || session.expiresAt <= Math.floor(Date.now() / 1000)) {
     throw new HTTPException(401, { message: "Session expired. Sign in again." })
   }
 
-  await usersDao.rotateAuthSession({
-    userId,
-    oldRefreshToken: body.refreshToken,
-    newRefreshToken: resp.AuthenticationResult?.RefreshToken ?? body.refreshToken,
-    client: body.client,
-    deviceName: session.deviceName,
-    platform: session.platform,
-    createdAt: session.createdAt,
-  })
+  // Best effort: a failed metadata write must not kill a valid refresh.
+  await usersDao
+    .updateAuthSessionLastUsedAt({ userId, sessionId: session.sessionId })
+    .catch((error) => {
+      console.warn("[auth] failed to bump session lastUsedAt", { userId, error })
+    })
 
   return c.json({
     accessToken: resp.AuthenticationResult?.AccessToken,
     idToken: resp.AuthenticationResult?.IdToken,
     expiresIn: resp.AuthenticationResult?.ExpiresIn,
-    sessionId: session.refreshTokenHash,
+    sessionId: session.sessionId,
+    refreshToken: resp.AuthenticationResult.RefreshToken,
   })
 }
 
@@ -224,15 +218,19 @@ export const logOutUserController = async (c: Context) => {
 
   const body = await c.req.json().catch(() => null)
   const sessionId = typeof body?.sessionId === "string" ? body.sessionId : undefined
-
-  // The session id is the refresh-token hash. Current clients send it so only
-  // this device is logged out.
-  if (sessionId && /^[a-f0-9]{64}$/.test(sessionId)) {
-    await revokeAuthSession({ userId, refreshTokenHash: sessionId })
+  if (!sessionId)
+    return c.json({
+      message: "no session id found",
+    })
+  const session = await usersDao.getAuthSessionBySessionId({ userId, sessionId })
+  if (session) {
+    await usersDao.deleteAuthSession({
+      userId,
+      sessionId,
+    })
     return c.json({ message: "Logged out" })
   }
 
-  // Legacy clients did not send a hash; keep the old global sign-out.
   const accessToken = c.req.header("Authorization")?.split(" ")[1]
   if (!accessToken) throw new HTTPException(400, { message: "Missing access token" })
 

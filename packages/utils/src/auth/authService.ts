@@ -24,12 +24,12 @@ export type AuthClient = "otp" | "userpass"
 
 export interface AuthTokens {
   accessToken: string
-  idToken?: string
-  refreshToken?: string
+  idToken: string
+  refreshToken: string
   expiresIn: number
   client?: AuthClient
   /** Server-side auth session id, used by the sessions screen. */
-  sessionId?: string
+  sessionId: string
 }
 
 export interface OtpChallenge {
@@ -103,16 +103,14 @@ export function extractErrorMessage(error: unknown): string {
 }
 
 async function persist(data: AuthTokens): Promise<AuthTokens> {
-  tokenManager.setTokens({
+  await tokenManager.setTokens({
     accessToken: data.accessToken,
     idToken: data.idToken,
     expiresIn: data.expiresIn,
+    refreshToken: data.refreshToken,
   })
-  if (data.refreshToken) {
-    await tokenManager.setRefreshToken(data.refreshToken)
-    // Remember the issuing client so /refresh can present the same one.
-    await secureStorage.storeAuthClient(data.client ?? "otp")
-  }
+  // Remember the issuing client so /refresh can present the same one.
+  await secureStorage.storeAuthClient(data.client ?? "otp")
   if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
   const user = tokenManager.getUser()
   if (user) await secureStorage.storeIdentity(user)
@@ -245,8 +243,10 @@ export async function loginAsAgent(params: {
 }
 
 /**
- * Exchange the stored refresh token for a fresh access token. Cognito keeps
- * the refresh token the same here, so the caller's stored one stays valid.
+ * Exchange the stored refresh token for a fresh access token. With refresh
+ * token rotation enabled, Cognito spends the presented token and returns a new
+ * one — the new token must be persisted or the next refresh (and every cold
+ * start) would present an already-used token and the session would die.
  */
 export async function refresh(): Promise<AuthTokens> {
   const refreshToken = await tokenManager.getRefreshToken()
@@ -258,6 +258,7 @@ export async function refresh(): Promise<AuthTokens> {
   const { data: raw } = await http.post<unknown>("/refresh", {
     refreshToken,
     client: client ?? "otp",
+    sessionId: await secureStorage.getSessionId(),
   })
   const data = unwrap<AuthTokens>(raw)
   // Cognito only returns an access token here — the ID token rides along as
@@ -266,15 +267,16 @@ export async function refresh(): Promise<AuthTokens> {
   if (!data?.accessToken || !data?.idToken) {
     throw new Error("Refresh response did not include usable tokens")
   }
-  tokenManager.setTokens({
+  await tokenManager.setTokens({
     accessToken: data.accessToken,
     idToken: data.idToken,
     expiresIn: data.expiresIn,
+    refreshToken: data.refreshToken,
   })
   if (data.sessionId) await secureStorage.storeSessionId(data.sessionId)
   const user = tokenManager.getUser()
   if (user) await secureStorage.storeIdentity(user)
-  return { ...data, refreshToken }
+  return data
 }
 
 /**

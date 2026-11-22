@@ -100,7 +100,7 @@ export const getSessionsController = async (c: Context) => {
 export const revokeSessionController = async (c: Context) => {
   const { params }: RevokeSessionRequest = c.get("valid")
 
-  await revokeUserSession({ userId: c.get("userId"), refreshTokenHash: params.id })
+  await revokeUserSession({ userId: c.get("userId"), sessionId: params.id })
   return c.json({ message: "Session revoked" })
 }
 

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto"
 import {
   BatchGetCommand,
   GetCommand,
@@ -39,13 +38,9 @@ const userKey = (userId: UserId, sk?: UserSK) => ({
   SK: sk ? sk : usersk.PROFILE,
 })
 
-/** Auth-session rows live as long as the Cognito refresh token. */
-const hashRefreshToken = (refreshToken: string) =>
-  createHash("sha256").update(refreshToken).digest("hex")
-
-const authSessionKey = (userId: UserId, refreshTokenHash: string) => ({
+const authSessionKey = (userId: UserId, sessionId: string) => ({
   PK: buildKey(PREFIXES.USER, userId),
-  SK: `${AUTH_SESSION_PREFIX}${refreshTokenHash}`,
+  SK: `${AUTH_SESSION_PREFIX}${sessionId}`,
 })
 
 export const usersDao = {
@@ -171,37 +166,28 @@ export const usersDao = {
 
     return (resp.Items ?? []).map((item) => parseOrThrow(authSessionSchema, item))
   },
-  getAuthSessionByHash: async (input: {
+  getAuthSessionBySessionId: async (input: {
     userId: UserId
-    refreshTokenHash: string
+    sessionId: string
   }): Promise<AuthSession | undefined> => {
     const resp = await AWSManager.dbClient.send(
       new GetCommand({
         TableName: TABLE_NAME,
-        Key: authSessionKey(input.userId, input.refreshTokenHash),
+        Key: authSessionKey(input.userId, input.sessionId),
       }),
     )
 
     return resp.Item ? parseOrThrow(authSessionSchema, resp.Item) : undefined
   },
-  getAuthSession: async (input: {
-    userId: UserId
-    refreshToken: string
-  }): Promise<AuthSession | undefined> => {
-    return await usersDao.getAuthSessionByHash({
-      userId: input.userId,
-      refreshTokenHash: hashRefreshToken(input.refreshToken),
-    })
-  },
   updateAuthSessionPushToken: async (input: {
     userId: UserId
-    refreshTokenHash: string
+    sessionId: string
     expoPushToken: string
   }): Promise<void> => {
     await AWSManager.dbClient.send(
       new UpdateCommand({
         TableName: TABLE_NAME,
-        Key: authSessionKey(input.userId, input.refreshTokenHash),
+        Key: authSessionKey(input.userId, input.sessionId),
         UpdateExpression: "SET expoPushToken = :expoPushToken",
         ConditionExpression: "attribute_exists(PK)",
         ExpressionAttributeValues: {
@@ -210,20 +196,34 @@ export const usersDao = {
       }),
     )
   },
+  updateAuthSessionLastUsedAt: async (input: {
+    userId: UserId
+    sessionId: string
+  }): Promise<void> => {
+    await AWSManager.dbClient.send(
+      new UpdateCommand({
+        TableName: TABLE_NAME,
+        Key: authSessionKey(input.userId, input.sessionId),
+        UpdateExpression: "SET lastUsedAt = :lastUsedAt",
+        ConditionExpression: "attribute_exists(PK)",
+        ExpressionAttributeValues: {
+          ":lastUsedAt": Date.now(),
+        },
+      }),
+    )
+  },
   createAuthSession: async (input: {
     userId: UserId
-    refreshToken: string
+    sessionId: string
     client: AuthSession["client"]
     deviceName?: string
     platform?: AuthSession["platform"]
   }): Promise<string> => {
     const now = Date.now()
-    const refreshTokenHash = hashRefreshToken(input.refreshToken)
 
     const item = parseOrThrow(authSessionItem, {
-      ...authSessionKey(input.userId, refreshTokenHash),
-      refreshToken: input.refreshToken,
-      refreshTokenHash,
+      ...authSessionKey(input.userId, input.sessionId),
+      sessionId: input.sessionId,
       client: input.client,
       ...(input.deviceName ? { deviceName: input.deviceName } : {}),
       ...(input.platform ? { platform: input.platform } : {}),
@@ -239,60 +239,13 @@ export const usersDao = {
       }),
     )
 
-    return refreshTokenHash
+    return input.sessionId
   },
-  rotateAuthSession: async (input: {
-    userId: UserId
-    oldRefreshToken: string
-    newRefreshToken: string
-    client: AuthSession["client"]
-    deviceName?: string
-    platform?: AuthSession["platform"]
-    createdAt: number
-  }): Promise<void> => {
-    const now = Date.now()
-    const oldHash = hashRefreshToken(input.oldRefreshToken)
-    const newHash = hashRefreshToken(input.newRefreshToken)
-    const expiresAt = Math.floor(now / 1000) + SESSION_TTL_SECONDS
-
-    if (oldHash === newHash) {
-      await AWSManager.dbClient.send(
-        new UpdateCommand({
-          TableName: TABLE_NAME,
-          Key: authSessionKey(input.userId, oldHash),
-          UpdateExpression: "SET lastUsedAt = :lastUsedAt, expiresAt = :expiresAt",
-          ExpressionAttributeValues: {
-            ":lastUsedAt": now,
-            ":expiresAt": expiresAt,
-          },
-        }),
-      )
-      return
-    }
-
-    await usersDao.deleteAuthSession({ userId: input.userId, refreshTokenHash: oldHash })
-    await AWSManager.dbClient.send(
-      new PutCommand({
-        TableName: TABLE_NAME,
-        Item: parseOrThrow(authSessionItem, {
-          ...authSessionKey(input.userId, newHash),
-          refreshToken: input.newRefreshToken,
-          refreshTokenHash: newHash,
-          client: input.client,
-          ...(input.deviceName ? { deviceName: input.deviceName } : {}),
-          ...(input.platform ? { platform: input.platform } : {}),
-          createdAt: input.createdAt,
-          lastUsedAt: now,
-          expiresAt,
-        }),
-      }),
-    )
-  },
-  deleteAuthSession: async (input: { userId: UserId; refreshTokenHash: string }): Promise<void> => {
+  deleteAuthSession: async (input: { userId: UserId; sessionId: string }): Promise<void> => {
     await AWSManager.dbClient.send(
       new DeleteCommand({
         TableName: TABLE_NAME,
-        Key: authSessionKey(input.userId, input.refreshTokenHash),
+        Key: authSessionKey(input.userId, input.sessionId),
       }),
     )
   },
@@ -302,7 +255,7 @@ export const usersDao = {
       sessions.map((session) =>
         usersDao.deleteAuthSession({
           userId: input.userId,
-          refreshTokenHash: session.refreshTokenHash,
+          sessionId: session.sessionId,
         }),
       ),
     )

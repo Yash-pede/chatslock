@@ -1,8 +1,8 @@
-  module "lambdas" {
-  source               = "./lambda"
-  user_pool_arn        = aws_cognito_user_pool.chat_user_pool.arn
-  vpc_id               = var.vpc_id
-  private_subnet_ids   = var.private_subnet_ids
+module "lambdas" {
+  source                  = "./lambda"
+  user_pool_arn           = aws_cognito_user_pool.chat_user_pool.arn
+  vpc_id                  = var.vpc_id
+  private_subnet_ids      = var.private_subnet_ids
   auth_lambda_secret_name = var.auth_lambda_secret_name
   auth_lambda_secret_arn  = var.auth_lambda_secret_arn
 }
@@ -41,12 +41,17 @@ resource "aws_cognito_user_pool_client" "users" {
 
   explicit_auth_flows = [
     "ALLOW_CUSTOM_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH"
+    # "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 
-  access_token_validity  = 15
-  id_token_validity      = 15
-  refresh_token_validity = 30
+  refresh_token_rotation {
+    feature                    = "ENABLED"
+    retry_grace_period_seconds = 10
+  }
+
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 90
 
   token_validity_units {
     access_token  = "minutes"
@@ -64,12 +69,17 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   explicit_auth_flows = [
     "ALLOW_ADMIN_USER_PASSWORD_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH"
+    # "ALLOW_REFRESH_TOKEN_AUTH"
   ]
 
-  access_token_validity  = 15
-  id_token_validity      = 15
-  refresh_token_validity = 30
+  refresh_token_rotation {
+    feature                    = "ENABLED"
+    retry_grace_period_seconds = 10
+  }
+
+  access_token_validity  = 60
+  id_token_validity      = 60
+  refresh_token_validity = 90
 
   token_validity_units {
     access_token  = "minutes"
