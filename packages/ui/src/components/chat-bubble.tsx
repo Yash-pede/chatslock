@@ -1,7 +1,7 @@
 import React from "react"
 import { View, Text as RNText } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Check, CheckCheck, Star } from "lucide-react-native"
+import { Check, CheckCheck, Pin } from "lucide-react-native"
 import { cn } from "../lib/utils"
 import { radius } from "../lib/radius"
 import { useThemeColors } from "./theme-provider"
@@ -35,7 +35,7 @@ export interface ChatBubbleProps
   children: React.ReactNode
   timestamp?: string
   status?: ChatBubbleStatus
-  /** Shows a small filled star beside the timestamp. */
+  /** Shows a small filled pin beside the timestamp. */
   starred?: boolean
 }
 
@@ -76,7 +76,7 @@ export function ChatBubble({
             </RNText>
           ) : null}
           {starred ? (
-            <Star
+            <Pin
               size={10}
               color={isSent ? `${colors.primaryForeground}99` : colors.mutedForeground}
               fill={isSent ? `${colors.primaryForeground}99` : colors.mutedForeground}

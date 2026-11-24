@@ -74,7 +74,9 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow chatslock to access your photos so you can choose a profile picture."
+          "photosPermission": "Allow chatslock to access your photos so you can choose a profile picture.",
+          "cameraPermission": "Allow chatslock to use your camera to take photos and videos.",
+          "microphonePermission": "Allow chatslock to use the microphone to record videos with audio."
         }
       ],
       "expo-font",

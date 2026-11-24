@@ -28,7 +28,7 @@ export function sectionsFor(items: ChatListItem[], filter: ChatFilter) {
   }
   if (filter === "starred") {
     const starred = items.filter((item) => item.starred).sort(byLastMessageDesc)
-    return [{ title: "Starred", data: starred }]
+    return [{ title: "Pinned", data: starred }]
   }
   return [{ title: "All chats", data: items }]
 }

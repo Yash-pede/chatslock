@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Copy, Download, Forward, Pencil, Star, StarOff, Trash2, X } from "lucide-react-native"
+import { Copy, Download, Forward, Pencil, Pin, PinOff, Trash2, X } from "lucide-react-native"
 import { Pressable, View } from "react-native"
 import { Text, useThemeColors } from "@repo/ui"
 
@@ -75,7 +75,7 @@ export function MessageActions({
   canDownload?: boolean
   canEdit?: boolean
   canDelete?: boolean
-  /** Whether the single selected message is starred in the local cache. */
+  /** Whether the single selected message is pinned in the local cache. */
   starred?: boolean
   onCopy?: () => void
   onDownload?: () => void
@@ -116,12 +116,12 @@ export function MessageActions({
             <Action
               icon={
                 starred ? (
-                  <StarOff size={18} color={colors.foreground} />
+                  <PinOff size={18} color={colors.foreground} />
                 ) : (
-                  <Star size={18} color={colors.foreground} />
+                  <Pin size={18} color={colors.foreground} />
                 )
               }
-              label={starred ? "Unstar" : "Star"}
+              label={starred ? "Unpin" : "Pin"}
               onPress={onToggleStar}
             />
             {canEdit ? (

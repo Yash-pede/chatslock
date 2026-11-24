@@ -372,7 +372,7 @@ export default function ConversationScreen() {
     void (
       next ? starCachedMessage(db, selectedMessage.id) : unstarCachedMessage(db, selectedMessage.id)
     )
-      .then(() => toast({ title: next ? "Message starred" : "Message unstarred" }))
+      .then(() => toast({ title: next ? "Message pinned" : "Message unpinned" }))
       .catch(() => toast({ title: "Could not update message", variant: "destructive" }))
   }, [clearSelection, db, isMessageStarred, selectedMessage, toast])
 

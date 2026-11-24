@@ -11,7 +11,7 @@ export const getChatPageConversationSchema = baseSchema.extend({
       .number()
       .int("Page size must be a whole number")
       .min(1, "Page size must be at least 1")
-      .max(25, "Page size cannot exceed 25")
+      .max(50, "Page size cannot exceed 25")
       .optional()
       .default(10),
     startKey: z

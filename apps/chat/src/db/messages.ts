@@ -150,3 +150,15 @@ export async function unstarConversationMessages(
     .set({ starred: false })
     .where(and(eq(messages.starred, true), eq(messages.conversationId, conversationId)))
 }
+
+/**
+ * Deletes failed rows for one conversation. Media failures need a fresh pick
+ * and text failures need a retype, so the rows cannot be retried in place;
+ * they are pruned the next time the conversation is viewed instead of staying
+ * on screen forever.
+ */
+export async function removeFailedMessages(db: Database, conversationId: string): Promise<void> {
+  await db
+    .delete(messages)
+    .where(and(eq(messages.conversationId, conversationId), eq(messages.status, "failed")))
+}

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { router, useLocalSearchParams } from "expo-router"
-import { ChevronLeft, EllipsisVertical, StarOff } from "lucide-react-native"
+import { ChevronLeft, EllipsisVertical, PinOff } from "lucide-react-native"
 import { FlashList, type ListRenderItem } from "@shopify/flash-list"
 import { Modal, Pressable, StyleSheet, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -25,7 +25,7 @@ const styles = StyleSheet.create({
 
 const keyExtractor = (item: ChatMessage) => item.id
 
-/** Starred messages for one conversation from the local cache, newest first. */
+/** Pinned messages for one conversation from the local cache, newest first. */
 export default function StarredMessagesScreen() {
   const colors = useThemeColors()
   const insets = useSafeAreaInsets()
@@ -79,8 +79,8 @@ export default function StarredMessagesScreen() {
     if (!selectedMessage) return
     clearSelection()
     void unstarCachedMessage(db, selectedMessage.id)
-      .then(() => toast({ title: "Message unstarred" }))
-      .catch(() => toast({ title: "Could not unstar message", variant: "destructive" }))
+      .then(() => toast({ title: "Message unpinned" }))
+      .catch(() => toast({ title: "Could not unpin message", variant: "destructive" }))
   }, [clearSelection, db, selectedMessage, toast])
 
   const unstarAll = useCallback(() => {
@@ -88,11 +88,11 @@ export default function StarredMessagesScreen() {
     void unstarConversationMessages(db, conversationId)
       .then(() =>
         toast({
-          title: "Unstarred all messages",
-          description: "All starred messages in this chat were unstarred.",
+          title: "Unpinned all messages",
+          description: "All pinned messages in this chat were unpinned.",
         }),
       )
-      .catch(() => toast({ title: "Could not unstar messages", variant: "destructive" }))
+      .catch(() => toast({ title: "Could not unpin messages", variant: "destructive" }))
   }, [conversationId, db, toast])
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
@@ -141,13 +141,13 @@ export default function StarredMessagesScreen() {
             <ChevronLeft size={24} color={colors.foreground} />
           </Pressable>
           <Text variant="large" numberOfLines={1} className="flex-1 text-base">
-            Starred messages
+            Pinned messages
           </Text>
           <Pressable
             onPress={() => setMenuOpen(true)}
             hitSlop={10}
             accessibilityRole="button"
-            accessibilityLabel="Starred messages options"
+            accessibilityLabel="Pinned messages options"
             className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
           >
             <EllipsisVertical size={24} color={colors.foreground} />
@@ -172,11 +172,19 @@ export default function StarredMessagesScreen() {
                 <Pressable
                   onPress={unstarAll}
                   accessibilityRole="button"
-                  accessibilityLabel="Unstar all messages"
+                  accessibilityLabel="Unpin all messages"
                   className="flex-row items-center gap-3 rounded-xl px-4 py-3 active:bg-secondary"
+                  disabled={starredRows.length <= 0}
                 >
-                  <StarOff size={20} color={colors.destructive} />
-                  <Text className="text-base text-destructive">Unstar all messages</Text>
+                  <PinOff
+                    size={20}
+                    color={starredRows.length <= 0 ? colors.border : colors.destructive}
+                  />
+                  <Text
+                    className={`text-base ${starredRows.length <= 0 ? "text-border" : "text-destructive"}`}
+                  >
+                    Unpin all messages
+                  </Text>
                 </Pressable>
               </View>
             </Pressable>
@@ -193,10 +201,10 @@ export default function StarredMessagesScreen() {
         ListEmptyComponent={
           <View className="items-center justify-center px-8 py-16">
             <Text variant="large" className="text-center">
-              No starred messages
+              No pinned messages
             </Text>
             <Text variant="muted" className="mt-1 text-center">
-              Star a message to find it here.
+              Pin a message to find it here.
             </Text>
           </View>
         }

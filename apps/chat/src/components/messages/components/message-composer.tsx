@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context"
 import * as ImagePicker from "expo-image-picker"
 import * as DocumentPicker from "expo-document-picker"
 import {
+  Camera,
   FileText,
   Image as ImageIcon,
   Mic,
@@ -124,6 +125,28 @@ export function MessageComposer({
     )
   }
 
+  const openCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (!permission.granted) {
+      Alert.alert("Camera access needed", "Allow camera access to send photos.")
+      return
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["images", "videos"],
+      allowsEditing: true,
+      quality: 1,
+    })
+    const asset = result.canceled ? undefined : result.assets[0]
+    if (!asset) return
+    emitMedia(
+      asset.uri,
+      asset.fileName ?? "camera",
+      asset.mimeType ?? "image/jpeg",
+      asset.fileSize ?? 0,
+      { width: asset.width, height: asset.height },
+    )
+  }
+
   const pickDocument = async () => {
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
@@ -222,6 +245,17 @@ export function MessageComposer({
               cursorColor={colors.primary}
               keyboardAppearance={dark ? "dark" : "light"}
             />
+            {value.length === 0 && onSendMedia ? (
+              <Pressable
+                onPress={() => void openCamera()}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Open camera"
+                className="ms-1 items-center justify-center"
+              >
+                <Camera size={20} color={colors.mutedForeground} />
+              </Pressable>
+            ) : null}
           </View>
         )}
 

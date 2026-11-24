@@ -6,8 +6,9 @@ import {
   ChevronLeft,
   EllipsisVertical,
   MessagesSquare,
-  Star,
-  StarOff,
+  Pin,
+  PinOff,
+  Search,
 } from "lucide-react-native"
 import { Modal, Pressable, View } from "react-native"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -35,19 +36,20 @@ export function ConversationHeader({
   lastActiveAt?: number
   /** Takes precedence over the online/offline label. */
   typing?: boolean
-  /** Whether the conversation is starred in the local chat cache. */
+  /** Whether the conversation is pinned in the local chat cache. */
   starred?: boolean
   /** Opens the peer's public profile (`/u/<username>`). */
   onPressProfile?: () => void
-  /** Stars or unstars the conversation in the local chat cache. */
+  /** Pins or unpins the conversation in the local chat cache. */
   onToggleStar?: () => void
-  /** Opens this conversation's starred messages screen. */
+  /** Opens this conversation's pinned messages screen. */
   onViewStarred?: () => void
 }) {
   const colors = useThemeColors()
   const insets = useSafeAreaInsets()
   const [menuOpen, setMenuOpen] = useState(false)
   const [headerHeight, setHeaderHeight] = useState(0)
+  const [, setIsSearching] = useState(false)
   const closeMenu = () => setMenuOpen(false)
   const statusLabel = typing
     ? "typing…"
@@ -96,6 +98,16 @@ export function ConversationHeader({
       </Pressable>
 
       <Pressable
+        onPress={() => setIsSearching((s) => !s)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Search options"
+        className="h-10 w-10 items-center justify-center rounded-full active:bg-secondary"
+      >
+        <Search size={24} color={colors.foreground} />
+      </Pressable>
+
+      <Pressable
         onPress={() => setMenuOpen(true)}
         hitSlop={10}
         accessibilityRole="button"
@@ -123,11 +135,11 @@ export function ConversationHeader({
                 onViewStarred?.()
               }}
               accessibilityRole="button"
-              accessibilityLabel="View starred messages"
+              accessibilityLabel="View pinned messages"
               className="flex-row items-center gap-3 px-4 py-3 active:bg-secondary"
             >
               <MessagesSquare size={20} color={colors.foreground} />
-              <Text className="text-base text-foreground">Starred messages</Text>
+              <Text className="text-base text-foreground">Pinned messages</Text>
             </Pressable>
             <Pressable
               onPress={() => {
@@ -135,16 +147,16 @@ export function ConversationHeader({
                 onToggleStar?.()
               }}
               accessibilityRole="button"
-              accessibilityLabel={starred ? "Unstar chat" : "Star chat"}
+              accessibilityLabel={starred ? "Unpin chat" : "Pin chat"}
               className="flex-row items-center gap-3 rounded-t-xl px-4 py-3 active:bg-secondary"
             >
               {starred ? (
-                <StarOff size={20} color={colors.foreground} />
+                <PinOff size={20} color={colors.foreground} />
               ) : (
-                <Star size={20} color={colors.foreground} />
+                <Pin size={20} color={colors.foreground} />
               )}
               <Text className="text-base text-foreground">
-                {starred ? "Unstar chat" : "Star chat"}
+                {starred ? "Unpin chat" : "Pin chat"}
               </Text>
             </Pressable>
             <Pressable

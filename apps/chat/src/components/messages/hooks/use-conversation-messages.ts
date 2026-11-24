@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFocusEffect } from "expo-router"
 import { asc, eq } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
+import { File } from "expo-file-system"
 import { MAX_MESSAGE_LENGTH, MESSAGE_ACTION_WINDOW_MS, type Message } from "@repo/types/schema"
 import {
   MAX_MEDIA_FILE_SIZE,
@@ -22,6 +23,7 @@ import {
   findCachedMessage,
   markCachedMessageDeleted,
   removeCachedMessage,
+  removeFailedMessages,
   restoreCachedMessage,
   updateCachedConversationLastMessage,
   updateCachedMessageBody,
@@ -54,7 +56,7 @@ export interface UseConversationMessagesResult {
   deleteMessage: (message: ChatMessage) => void
 }
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = 50
 
 /**
  * AppSync resolves `channel.publish` even when the Lambda rejects the event
@@ -76,6 +78,21 @@ const newClientId = () => `${Date.now().toString(36)}-${Math.random().toString(3
 function mediaObjectUrl(origin: string, key: string): string {
   const encodedKey = key.split("/").map(encodeURIComponent).join("/")
   return `${origin}/${encodedKey}`
+}
+
+/**
+ * Best-effort removal of a picker/camera/recording temp file after its upload
+ * succeeded. The S3 URL in the message row is the durable copy, so the local
+ * cache file is safe to drop — without this the app cache grows forever.
+ */
+async function removeLocalMediaFile(uri: string): Promise<void> {
+  if (!uri.startsWith("file:")) return
+  try {
+    const file = new File(uri)
+    if (file.exists) file.delete()
+  } catch (error) {
+    console.warn("[media] failed to delete local file", { uri, error })
+  }
 }
 
 /**
@@ -134,6 +151,18 @@ export function useConversationMessages(
   // Cached rows are enough to render, so they win over a pending/error fetch.
   const status: MessagesStatus =
     messages.length > 0 ? "ready" : !online ? "error" : liveError ? "error" : fetchStatus
+
+  // Failed rows are pruned when the conversation is (re)viewed: media needs a
+  // fresh pick and text needs a retype, so there is nothing to retry in place.
+  // A failure that happens while the screen is open stays visible until the
+  // next visit, so a mid-session error never vanishes under the user.
+  useFocusEffect(
+    useCallback(() => {
+      void removeFailedMessages(db, conversationId).catch((error) => {
+        console.warn("[db] failed to prune failed messages", error)
+      })
+    }, [conversationId, db]),
+  )
 
   // Reset paging state during render when the conversation changes, so the
   // load effect never has to setState synchronously in its body.
@@ -539,6 +568,7 @@ export function useConversationMessages(
             },
             clientId,
           })
+          await removeLocalMediaFile(media.uri)
           watchDelivery(clientId)
         } catch {
           toast({ title: "Could not send the file", variant: "destructive" })
@@ -627,6 +657,7 @@ export function useConversationMessages(
             },
             clientId,
           })
+          await removeLocalMediaFile(audio.uri)
           watchDelivery(clientId)
         } catch {
           toast({ title: "Could not send the audio", variant: "destructive" })
