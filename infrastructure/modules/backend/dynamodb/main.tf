@@ -25,6 +25,11 @@ resource "aws_dynamodb_table" "environment" {
     type = "N"
   }
 
+  attribute {
+    name = "messageId"
+    type = "N"
+  }
+
   global_secondary_index {
     name            = "SK_username_GSI"
     projection_type = "ALL"
@@ -51,6 +56,21 @@ resource "aws_dynamodb_table" "environment" {
 
     key_schema {
       attribute_name = "lastMessageAt"
+      key_type       = "RANGE"
+    }
+  }
+
+  global_secondary_index {
+    name            = "MessageIdSequence_GSI"
+    projection_type = "ALL"
+
+    key_schema {
+      attribute_name = "PK"
+      key_type       = "HASH"
+    }
+
+    key_schema {
+      attribute_name = "messageId"
       key_type       = "RANGE"
     }
   }

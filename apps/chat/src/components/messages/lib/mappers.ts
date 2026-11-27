@@ -1,10 +1,9 @@
-import type { Message } from "@repo/types/schema"
 import type { CachedMessage } from "@/db/schema"
 import type { ChatMessage } from "../types"
 
 /**
  * Deterministic pseudo-waveform for voice bubbles: the server stores only the
- * duration, so bars are derived from the message id to keep rendering stable
+ * duration, so bars are derived from the message uid to keep rendering stable
  * across re-renders and reloads.
  */
 export function waveformFrom(seed: string, bars = 24): number[] {
@@ -16,48 +15,48 @@ export function waveformFrom(seed: string, bars = 24): number[] {
 }
 
 /**
- * Maps a backend message into the bubble shape. Deleted messages keep their
- * slot as a tombstone so the list order stays stable. Image dimensions are not
- * part of the payload yet, so a square preview ratio is assumed.
+ * Builds the bubble shape straight from the cache row. Deleted messages keep
+ * their slot as a tombstone so the list order stays stable. Image dimensions are
+ * not part of the payload yet, so a square preview ratio is assumed.
  */
-export function toChatMessage(message: Message, currentUserId: string | null): ChatMessage {
-  const base = {
-    id: message.messageId,
-    conversationId: message.conversationId,
-    senderId: message.senderId,
-    isMine: message.senderId === currentUserId,
-    createdAt: message.createdAt,
+export function cachedRowToChatMessage(
+  row: CachedMessage,
+  currentUserId: string | null,
+): ChatMessage {
+  // The row's wire attachment/status/pendingId are replaced below with their
+  // presentation shapes, so they are destructured out before the spread.
+  const { attachment: wireAttachment, status, pendingId, ...rest } = row
+  const base: ChatMessage = {
+    ...rest,
+    isMine: row.senderId === currentUserId,
+    status: (status as ChatMessage["status"] | null) ?? "sent",
+    pendingId: pendingId ?? undefined,
   }
 
-  if (message.deletedAt != null) {
-    return {
-      ...base,
-      type: "TEXT",
-      text: "This message was deleted",
-      isDeleted: true,
-    }
+  if (row.deletedAt != null) {
+    return { ...base, text: "This message was deleted", isDeleted: true }
   }
 
   // Keep the original attachment (not just the image thumbnail / voice URL) so
   // the selection actions can download the media instead of only previewing it.
-  const attachment = message.attachment
+  const attachment = wireAttachment
     ? {
-        id: message.messageId,
-        url: message.attachment.url,
-        fileName: message.attachment.fileName ?? `${message.messageId}`,
-        sizeBytes: message.attachment.sizeBytes,
-        mimeType: message.attachment.mimeType,
+        id: row.uid,
+        url: wireAttachment.url,
+        fileName: wireAttachment.fileName ?? `${row.messageId}`,
+        sizeBytes: wireAttachment.sizeBytes,
+        mimeType: wireAttachment.mimeType,
       }
     : undefined
 
-  switch (message.type) {
+  switch (row.type) {
     case "IMAGE":
       return {
         ...base,
         type: "IMAGE",
-        text: message.body,
+        text: row.body ?? undefined,
         image: {
-          url: message.attachment?.thumbnailUrl ?? message.attachment?.url ?? "",
+          url: wireAttachment?.thumbnailUrl ?? wireAttachment?.url ?? "",
           width: 600,
           height: 600,
         },
@@ -68,63 +67,32 @@ export function toChatMessage(message: Message, currentUserId: string | null): C
         ...base,
         type: "AUDIO",
         voice: {
-          url: message.attachment?.url ?? "",
-          durationSeconds: Math.max(1, Math.round((message.attachment?.durationMs ?? 0) / 1000)),
-          waveform: waveformFrom(message.messageId),
+          url: wireAttachment?.url ?? "",
+          durationSeconds: Math.max(1, Math.round((wireAttachment?.durationMs ?? 0) / 1000)),
+          waveform: waveformFrom(row.uid),
         },
         attachment,
       }
     case "DOC": {
-      const mimeType = message.attachment?.mimeType ?? "application/octet-stream"
-      const doc = {
+      const mimeType = wireAttachment?.mimeType ?? "application/octet-stream"
+      const doc: ChatMessage = {
         ...base,
-        type: "DOC" as const,
-        text: message.body,
+        type: "DOC",
+        text: row.body ?? undefined,
         attachment: {
-          id: message.messageId,
-          url: message.attachment?.url ?? "",
-          fileName: message.attachment?.fileName ?? "document",
-          sizeBytes: message.attachment?.sizeBytes ?? 0,
+          id: row.uid,
+          url: wireAttachment?.url ?? "",
+          fileName: wireAttachment?.fileName ?? "document",
+          sizeBytes: wireAttachment?.sizeBytes ?? 0,
           mimeType,
         },
       }
       // A video is stored as `DOC` but should render as a playable preview.
       return mimeType.startsWith("video/")
-        ? { ...doc, video: { url: message.attachment?.url ?? "", width: 600, height: 600 } }
+        ? { ...doc, video: { url: wireAttachment?.url ?? "", width: 600, height: 600 } }
         : doc
     }
     default:
-      return { ...base, type: "TEXT", text: message.body ?? "" }
-  }
-}
-
-/**
- * Rebuilds the wire-shaped message from a cache row. Local-only columns
- * (`pendingId`, `status`) are intentionally dropped.
- */
-export function messageFromRow(row: CachedMessage): Message {
-  return {
-    messageId: row.messageId,
-    conversationId: row.conversationId,
-    senderId: row.senderId,
-    type: row.type,
-    ...(row.body !== null ? { body: row.body } : {}),
-    ...(row.attachment !== null ? { attachment: row.attachment } : {}),
-    createdAt: row.createdAt,
-    ...(row.editedAt !== null ? { editedAt: row.editedAt } : {}),
-    ...(row.deletedAt !== null ? { deletedAt: row.deletedAt } : {}),
-  }
-}
-
-/** A cached row in bubble shape, including its local send status. */
-export function cachedRowToChatMessage(
-  row: CachedMessage,
-  currentUserId: string | null,
-): ChatMessage {
-  return {
-    ...toChatMessage(messageFromRow(row), currentUserId),
-    status: (row.status as ChatMessage["status"] | null) ?? "sent",
-    starred: row.starred,
-    ...(row.pendingId ? { pendingId: row.pendingId } : {}),
+      return { ...base, type: "TEXT", text: row.body ?? "" }
   }
 }

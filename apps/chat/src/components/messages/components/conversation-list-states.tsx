@@ -15,17 +15,19 @@ function emojiFor(conversationId: string): string {
 export function ConversationListHeader({
   name,
   avatar,
-  hasOlder,
+  reachedStart,
   loadingOlder,
 }: {
   name: string
   avatar?: string
-  hasOlder: boolean
+  reachedStart: boolean
   loadingOlder: boolean
 }) {
   // Keep the paging row at a constant height. Inserting/removing the spinner
   // directly as the list header changes its height and shifts every message.
-  if (hasOlder || loadingOlder) {
+  // The beginning block only renders once a fetch has proven nothing older
+  // exists (`reachedStart`), so it can never flash during paging.
+  if (!reachedStart || loadingOlder) {
     return (
       <View className="h-11 items-center justify-center">
         {loadingOlder ? <Spinner size="sm" /> : null}

@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useFocusEffect } from "expo-router"
-import { asc, eq } from "drizzle-orm"
+import { and, eq, sql } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { File } from "expo-file-system"
-import { MAX_MESSAGE_LENGTH, MESSAGE_ACTION_WINDOW_MS, type Message } from "@repo/types/schema"
+import {
+  getPeerUserId,
+  MAX_MESSAGE_LENGTH,
+  MESSAGE_ACTION_WINDOW_MS,
+  type Message,
+} from "@repo/types/schema"
 import {
   MAX_MEDIA_FILE_SIZE,
   normalizeMediaContentType,
@@ -14,6 +19,7 @@ import { useToast } from "@repo/ui"
 import { conversationsApi, uploadMediaToBucket } from "@/api/conversations.api"
 import { useMessagesApi } from "@/api/messages.api"
 import { useRealtime } from "@/context/RealtimeContext"
+import { playMessageFeedback, playMessageHaptic } from "@/lib/message-feedback"
 import {
   cacheMessages,
   cacheOptimisticMessage,
@@ -39,52 +45,39 @@ export type MessagesStatus = "loading" | "ready" | "error"
 export interface UseConversationMessagesResult {
   messages: ChatMessage[]
   status: MessagesStatus
-  hasOlder: boolean
+  /** True once a fetch proved no older messages exist on the server. */
+  reachedStart: boolean
   loadingOlder: boolean
+  /** Reveals the next older page from the local cache. */
   loadOlder: () => void
-  send: (text: string) => boolean
-  sendMedia: (media: PickedMedia) => void
-  sendAudio: (audio: RecordedAudio & { fileName: string; mimeType: string }) => void
+  send: (text: string, replyTo?: string) => boolean
+  sendMedia: (media: PickedMedia, replyTo?: string) => void
+  sendAudio: (
+    audio: RecordedAudio & { fileName: string; mimeType: string },
+    replyTo?: string,
+  ) => void
   retry: (message: ChatMessage) => void
-  /** The peer is typing on this conversation. */
   peerTyping: boolean
-  /** Call on every non-empty composer change; throttles START/STOP for us. */
   notifyTyping: () => void
-  /** Replaces the text of an existing message (own messages only). */
   editMessage: (message: ChatMessage, body: string) => void
-  /** Removes a message (own messages only). */
   deleteMessage: (message: ChatMessage) => void
 }
 
 const PAGE_SIZE = 50
 
-/**
- * AppSync resolves `channel.publish` even when the Lambda rejects the event
- * (the error is only listed in `publish_success.failed`), so a row that never
- * receives its broadcast is marked failed after this timeout.
- */
+const RENDER_STEP = 50
+
 const DELIVERY_TIMEOUT_MS = 10_000
 
-/** Unique per request; the server echoes it so replies stay correlated. */
+const RECENT_FETCH_WINDOW_MS = 3_000
+
 const newClientId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 
-/**
- * Builds the stored object URL from the bucket origin and the raw S3 key.
- * The key can contain characters that would break a URL (a DIRECT
- * conversation id looks like `DIRECT#u1#u2`, and `#` starts a fragment), so
- * each path segment is percent-encoded before it is stored as the message
- * attachment URL.
- */
 function mediaObjectUrl(origin: string, key: string): string {
   const encodedKey = key.split("/").map(encodeURIComponent).join("/")
   return `${origin}/${encodedKey}`
 }
 
-/**
- * Best-effort removal of a picker/camera/recording temp file after its upload
- * succeeded. The S3 URL in the message row is the durable copy, so the local
- * cache file is safe to drop — without this the app cache grows forever.
- */
 async function removeLocalMediaFile(uri: string): Promise<void> {
   if (!uri.startsWith("file:")) return
   try {
@@ -95,12 +88,6 @@ async function removeLocalMediaFile(uri: string): Promise<void> {
   }
 }
 
-/**
- * Owns one conversation's messages. SQLite is the single source of truth:
- * history and realtime events are written to the cache, and `useLiveQuery`
- * re-renders the list from it. Outgoing messages are inserted as local
- * optimistic rows and replaced by the server row when its ack arrives.
- */
 export function useConversationMessages(
   conversationId: string,
   currentUserId: string | null,
@@ -111,13 +98,37 @@ export function useConversationMessages(
   const { online, reconnectVersion } = useRealtime()
 
   const [fetchStatus, setFetchStatus] = useState<MessagesStatus>("loading")
-  const [hasOlder, setHasOlder] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  /** Number of newest messages rendered; grows as older pages are revealed. */
+  const [visibleCount, setVisibleCount] = useState(RENDER_STEP)
+  /** True once a partial/empty fetch page proves the true start is fully cached. */
+  const [reachedStart, setReachedStart] = useState(false)
 
   const cursorRef = useRef<string | undefined>(undefined)
   const loadingOlderRef = useRef(false)
+  /**
+   * Oldest messageId of a partial page that proved the true start; the
+   * `reachedStart` flip is deferred until that row is actually rendered so the
+   * beginning-of-conversation header never flashes a frame ahead of the list.
+   * `oldestId: null` marks an empty page (nothing to wait for).
+   */
+  const pendingStartRef = useRef<{ conversationId: string; oldestId: string | null } | undefined>(
+    undefined,
+  )
   const activeRef = useRef(true)
   const handledReconnectRef = useRef(reconnectVersion)
+  /**
+   * Latest API handle in a ref, so fetch effects keyed on `fetchPage` are not
+   * re-run when the api object identity changes (for example when the profile
+   * finishes loading and `currentUserId` flips from null). That change used to
+   * trigger a duplicate initial page fetch.
+   */
+  const apiRef = useRef(api)
+  useEffect(() => {
+    apiRef.current = api
+  }, [api])
+  /** Timestamp of the last successful page fetch. */
+  const lastFetchAtRef = useRef(0)
   const [peerTyping, setPeerTyping] = useState(false)
   const typingSentRef = useRef(false)
   const typingStopTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -126,36 +137,35 @@ export function useConversationMessages(
   const pendingMutations = useRef(
     new Map<string, { timer: ReturnType<typeof setTimeout>; rollback: () => void }>(),
   )
+  const peerUserId = getPeerUserId(conversationId, currentUserId)!
 
-  // The query is memoized so the live subscription is rebuilt only when the
-  // conversation (or database instance) changes; table changes re-run it.
-  const liveQuery = useMemo(
-    () =>
-      db
-        .select()
-        .from(messagesTable)
-        .where(eq(messagesTable.conversationId, conversationId))
-        .orderBy(asc(messagesTable.messageId)),
-    [conversationId, db],
+  const { data: rows, error: liveError } = useLiveQuery(
+    db
+      .select()
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, conversationId))
+      .orderBy(
+        sql`CASE WHEN ${messagesTable.messageId} GLOB '[0-9]*' THEN 0 ELSE 1 END DESC`,
+        sql`CAST(${messagesTable.messageId} AS INTEGER) DESC`,
+      )
+      .limit(visibleCount),
+    [conversationId, visibleCount],
   )
-  const { data: rows, error: liveError } = useLiveQuery(liveQuery, [liveQuery])
 
   const messages = useMemo(
     () =>
-      rows
+      [...rows]
+        .reverse()
         .filter((row) => row.conversationId === conversationId)
         .map((row) => cachedRowToChatMessage(row, currentUserId)),
     [rows, conversationId, currentUserId],
   )
 
-  // Cached rows are enough to render, so they win over a pending/error fetch.
+  // Offline is not an error state: cached rows still render, and an empty
+  // cache falls through to the default empty screen instead of a failure.
   const status: MessagesStatus =
-    messages.length > 0 ? "ready" : !online ? "error" : liveError ? "error" : fetchStatus
+    messages.length > 0 || !online ? "ready" : liveError ? "error" : fetchStatus
 
-  // Failed rows are pruned when the conversation is (re)viewed: media needs a
-  // fresh pick and text needs a retype, so there is nothing to retry in place.
-  // A failure that happens while the screen is open stays visible until the
-  // next visit, so a mid-session error never vanishes under the user.
   useFocusEffect(
     useCallback(() => {
       void removeFailedMessages(db, conversationId).catch((error) => {
@@ -164,15 +174,30 @@ export function useConversationMessages(
     }, [conversationId, db]),
   )
 
-  // Reset paging state during render when the conversation changes, so the
-  // load effect never has to setState synchronously in its body.
   const [loadedConversationId, setLoadedConversationId] = useState(conversationId)
   if (loadedConversationId !== conversationId) {
     setLoadedConversationId(conversationId)
     setFetchStatus("loading")
-    setHasOlder(false)
+    setVisibleCount(RENDER_STEP)
+    setReachedStart(false)
     setLoadingOlder(false)
   }
+
+  useEffect(() => {
+    const pending = pendingStartRef.current
+    if (pending === undefined) return
+    if (pending.conversationId !== conversationId) {
+      pendingStartRef.current = undefined
+      return
+    }
+    if (
+      pending.oldestId === null ||
+      messages.some((message) => message.messageId === pending.oldestId)
+    ) {
+      pendingStartRef.current = undefined
+      setReachedStart(true)
+    }
+  }, [conversationId, messages])
 
   const settleMutation = useCallback((id: string) => {
     const pending = pendingMutations.current.get(id)
@@ -198,6 +223,7 @@ export function useConversationMessages(
   const watchDelivery = useCallback(
     (clientId: string) => {
       setTimeout(() => {
+        playMessageHaptic("error")
         void failPendingMessage(db, clientId).catch((error) => {
           console.warn("[db] failed to mark message failed", error)
         })
@@ -206,20 +232,14 @@ export function useConversationMessages(
     [db],
   )
 
-  /**
-   * Persists a server message. `clientId` makes the sender's echo exact: the
-   * optimistic row is removed in the same transaction as the server row insert.
-   */
   const upsertServerMessage = useCallback(
     (message: Message, clientId?: string) => {
       if (message.conversationId !== conversationId) return
-      settleMutation(message.messageId)
+      settleMutation(message.uid)
       void cacheServerMessage(db, message, clientId).catch((error) => {
         console.warn("[db] failed to cache message", error)
       })
 
-      // Keep the home list's last-message preview/time in step with new and
-      // edited messages without waiting for a chat-page refetch.
       if (currentUserId) {
         void updateCachedConversationLastMessage(db, {
           ownerUserId: currentUserId,
@@ -235,32 +255,35 @@ export function useConversationMessages(
     [conversationId, currentUserId, db, settleMutation],
   )
 
-  /** One page via the correlated `list` request; rejects on error/timeout. */
   const fetchPage = useCallback(
     (cursor: string | undefined, limit: number) =>
-      api.list({
+      apiRef.current.list({
         conversationId,
         ...(cursor ? { cursor } : {}),
         limit,
       }),
-    [api, conversationId],
+    [conversationId],
   )
 
-  /** Initial history page from REST; the cache update drives the UI. */
   useEffect(() => {
     if (!conversationId) return
 
     let cancelled = false
     cursorRef.current = undefined
     loadingOlderRef.current = false
+    // Mark the attempt up front so the channel-ready reconnect bump that can
+    // arrive while this fetch is in flight is absorbed by the reconnect effect
+    // instead of firing a duplicate page-1 request.
+    lastFetchAtRef.current = Date.now()
 
     void (async () => {
       try {
         const page = await fetchPage(undefined, PAGE_SIZE)
         if (cancelled) return
+        lastFetchAtRef.current = Date.now()
         await cacheMessages(db, page.messages)
         cursorRef.current = page.nextCursor
-        setHasOlder(Boolean(page.nextCursor))
+        setReachedStart(!page.nextCursor)
         setFetchStatus("ready")
       } catch {
         if (!cancelled) setFetchStatus("error")
@@ -272,15 +295,14 @@ export function useConversationMessages(
     }
   }, [conversationId, db, fetchPage])
 
-  /**
-   * Realtime delivery is ephemeral: anything published while the socket was
-   * down is gone. Re-fetching the newest page after the channel becomes ready
-   * backfills those messages from durable storage. The cache/live query makes
-   * the merge idempotent.
-   */
   useEffect(() => {
     if (reconnectVersion === handledReconnectRef.current) return
     handledReconnectRef.current = reconnectVersion
+
+    // The first channel-ready bump arrives right after the initial page fetch;
+    // absorbing it keeps opening a conversation to a single request. A real
+    // reconnect always happens later than this window.
+    if (Date.now() - lastFetchAtRef.current < RECENT_FETCH_WINDOW_MS) return
 
     let cancelled = false
     void (async () => {
@@ -288,13 +310,12 @@ export function useConversationMessages(
         const page = await fetchPage(undefined, PAGE_SIZE)
         if (cancelled || !activeRef.current) return
 
+        lastFetchAtRef.current = Date.now()
         await cacheMessages(db, page.messages)
-        // Do not reset pagination if the user already paged back; only fill the
-        // initial cursor if the first load never succeeded (offline launch).
         if (!cursorRef.current) {
           cursorRef.current = page.nextCursor
-          setHasOlder(Boolean(page.nextCursor))
         }
+        setReachedStart(!page.nextCursor)
         setFetchStatus("ready")
       } catch {
         // Cached rows remain; the next reconnect retries.
@@ -324,7 +345,7 @@ export function useConversationMessages(
     typingStopTimer.current = setTimeout(() => {
       typingSentRef.current = false
       setTyping("STOP")
-    }, 2_000)
+    }, 4_000)
   }, [setTyping])
 
   const stopTyping = useCallback(() => {
@@ -338,7 +359,6 @@ export function useConversationMessages(
     }
   }, [setTyping])
 
-  /** Peer typing auto-clears in case the STOP frame is lost. */
   const handlePeerTyping = useCallback(
     (event: MessageTypingData) => {
       if (event.userId === currentUserId) return
@@ -359,18 +379,21 @@ export function useConversationMessages(
     [currentUserId],
   )
 
-  // Focus-scoped so a conversation screen left in the stack (profile push,
-  // another chat opened on top) does not keep a second channel listener.
   useFocusEffect(
     useCallback(
       () =>
         subscribeToMessages({
-          onCreated: upsertServerMessage,
+          onCreated: (message, clientId) => {
+            if (currentUserId && message.senderId !== currentUserId) {
+              playMessageFeedback("received")
+            }
+            upsertServerMessage(message, clientId)
+          },
           onUpdated: upsertServerMessage,
           onDeleted: (event) => {
             if (event.conversationId !== conversationId) return
-            settleMutation(event.messageId)
-            void markCachedMessageDeleted(db, event.messageId).catch((error) => {
+            settleMutation(event.uid)
+            void markCachedMessageDeleted(db, event.uid).catch((error) => {
               console.warn("[db] failed to remove cached message", error)
             })
 
@@ -401,7 +424,6 @@ export function useConversationMessages(
     ),
   )
 
-  // Do not repopulate the cache after sign-out cleared it.
   useEffect(() => {
     activeRef.current = true
     return () => {
@@ -409,8 +431,6 @@ export function useConversationMessages(
     }
   }, [])
 
-  // Leaving the screen must not leave the peer stuck on "typing…", and pending
-  // edit/delete rollback timers must not fire after unmount.
   useEffect(() => {
     const pending = pendingMutations.current
     return () => {
@@ -421,31 +441,81 @@ export function useConversationMessages(
   }, [stopTyping])
 
   const loadOlder = useCallback(() => {
-    // The ref guard makes repeated scroll events in the same frame harmless.
-    if (loadingOlderRef.current || !hasOlder || !cursorRef.current) return
-
+    if (loadingOlderRef.current) return
     loadingOlderRef.current = true
-    setLoadingOlder(true)
-    void fetchPage(cursorRef.current, PAGE_SIZE)
-      .then(async (page) => {
-        if (!activeRef.current) return
-        await cacheMessages(db, page.messages)
-        cursorRef.current = page.nextCursor
-        setHasOlder(Boolean(page.nextCursor))
-      })
-      .catch(() => {
-        // keep hasOlder so the next scroll retries
-      })
-      .finally(() => {
+
+    void (async () => {
+      try {
+        // Oldest rendered row; optimistic rows are non-numeric and sort last,
+        // so the top of the ascending list is a numeric sequence id.
+        const top = messages.find((message) => /^\d+$/.test(message.messageId))
+        const lowestId = top ? Number(top.messageId) : NaN
+        if (!Number.isFinite(lowestId)) return
+
+        // 1. Next RENDER_STEP older cached ids, newest first. Non-numeric rows
+        // are excluded: their CAST would otherwise collapse them to 0.
+        let contiguous = false
+        try {
+          const olderRows = await db
+            .select({ messageId: messagesTable.messageId })
+            .from(messagesTable)
+            .where(
+              and(
+                eq(messagesTable.conversationId, conversationId),
+                sql`${messagesTable.messageId} GLOB '[0-9]*'`,
+                sql`CAST(${messagesTable.messageId} AS INTEGER) < ${lowestId}`,
+              ),
+            )
+            .orderBy(sql`CAST(${messagesTable.messageId} AS INTEGER) DESC`)
+            .limit(RENDER_STEP)
+
+          const olderIds = olderRows.map((row) => Number(row.messageId))
+          contiguous =
+            olderIds.length === RENDER_STEP &&
+            olderIds.every((id, index) => id === lowestId - 1 - index)
+        } catch (error) {
+          console.warn("[db] failed to check older messages", error)
+        }
+
+        // 2. Contiguous cache — or the true start already reached, in which
+        // case the remaining holes are server-side gaps: reveal locally.
+        if (contiguous || reachedStart) {
+          setVisibleCount((count) => count + RENDER_STEP)
+          return
+        }
+
+        // 3. Gap or cache boundary: fetch the page strictly older than the
+        // oldest rendered message, cache it, and reveal the next step.
+        setLoadingOlder(true)
+        try {
+          const page = await fetchPage(String(lowestId), PAGE_SIZE)
+          if (!activeRef.current) return
+          lastFetchAtRef.current = Date.now()
+          await cacheMessages(db, page.messages)
+          if (!page.nextCursor) {
+            // Defer the flip: wait until the fetched rows have rendered.
+            pendingStartRef.current = {
+              conversationId,
+              oldestId: page.messages.at(-1)?.messageId ?? null,
+            }
+          }
+          setVisibleCount((count) => count + RENDER_STEP)
+        } catch {
+          // Keep the current state so the next scroll retries the same page.
+        } finally {
+          setLoadingOlder(false)
+        }
+      } finally {
         loadingOlderRef.current = false
-        setLoadingOlder(false)
-      })
-  }, [db, fetchPage, hasOlder])
+      }
+    })()
+  }, [conversationId, db, fetchPage, messages, reachedStart])
 
   const send = useCallback(
-    (text: string): boolean => {
+    (text: string, replyTo?: string): boolean => {
       if (!text || !currentUserId) return false
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to send messages.",
@@ -454,15 +524,21 @@ export function useConversationMessages(
         return false
       }
 
+      playMessageFeedback("sent")
       const clientId = newClientId()
       const now = Date.now()
       const optimistic: Message = {
+        uid: `optimistic-${clientId}`,
         messageId: `optimistic-${clientId}`,
         conversationId,
         senderId: currentUserId,
         type: "TEXT",
         body: text,
         createdAt: now,
+        isForwarded: false,
+        ...(replyTo ? { replyTo } : {}),
+        peerId: peerUserId,
+        version: 1,
       }
       stopTyping()
 
@@ -474,9 +550,16 @@ export function useConversationMessages(
         }
 
         try {
-          await api.send({ conversationId, type: "TEXT", body: text, clientId })
+          await api.send({
+            conversationId,
+            type: "TEXT",
+            body: text,
+            clientId,
+            ...(replyTo ? { replyTo } : {}),
+          })
           watchDelivery(clientId)
         } catch {
+          playMessageHaptic("error")
           await failPendingMessage(db, clientId).catch((error) => {
             console.warn("[db] failed to mark message failed", error)
           })
@@ -485,18 +568,14 @@ export function useConversationMessages(
 
       return true
     },
-    [api, conversationId, currentUserId, db, online, stopTyping, toast, watchDelivery],
+    [api, conversationId, currentUserId, db, online, stopTyping, toast, watchDelivery, peerUserId],
   )
 
-  /**
-   * Sends a media message. A local row is written first so the picked file is
-   * visible immediately, then the file is uploaded and the server ack replaces
-   * it with the stored URL.
-   */
   const sendMedia = useCallback(
-    (media: PickedMedia) => {
+    (media: PickedMedia, replyTo?: string) => {
       if (!media || !currentUserId) return
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to send files.",
@@ -505,8 +584,7 @@ export function useConversationMessages(
         return
       }
 
-      // Pickers often report `application/octet-stream` or `image/jpg`; resolve
-      // it from the extension so PDFs/documents/images all get a valid type.
+      playMessageFeedback("sent")
       const contentType = normalizeMediaContentType(media.fileName, media.mimeType)
       if (!contentType) {
         toast({ title: "File type not supported", variant: "destructive" })
@@ -522,6 +600,7 @@ export function useConversationMessages(
       const clientId = newClientId()
       const now = Date.now()
       const optimistic: Message = {
+        uid: `optimistic-${clientId}`,
         messageId: `optimistic-${clientId}`,
         conversationId,
         senderId: currentUserId,
@@ -533,6 +612,10 @@ export function useConversationMessages(
           fileName: media.fileName,
         },
         createdAt: now,
+        peerId: peerUserId,
+        isForwarded: false,
+        ...(replyTo ? { replyTo } : {}),
+        version: 1,
       }
 
       void (async () => {
@@ -567,26 +650,25 @@ export function useConversationMessages(
               fileName: media.fileName,
             },
             clientId,
+            ...(replyTo ? { replyTo } : {}),
           })
           await removeLocalMediaFile(media.uri)
           watchDelivery(clientId)
         } catch {
+          playMessageHaptic("error")
           toast({ title: "Could not send the file", variant: "destructive" })
           await failPendingMessage(db, clientId).catch(() => undefined)
         }
       })()
     },
-    [api, conversationId, currentUserId, db, online, toast, watchDelivery],
+    [api, conversationId, currentUserId, db, online, toast, watchDelivery, peerUserId],
   )
 
-  /**
-   * Sends a recorded voice note. The local row plays from the recorded file
-   * immediately, then the upload replaces it with the stored URL.
-   */
   const sendAudio = useCallback(
-    (audio: RecordedAudio & { fileName: string; mimeType: string }) => {
+    (audio: RecordedAudio & { fileName: string; mimeType: string }, replyTo?: string) => {
       if (!audio?.uri || !currentUserId) return
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to send voice messages.",
@@ -606,9 +688,11 @@ export function useConversationMessages(
       }
 
       const sizeBytes = Math.max(audio.sizeBytes, 1)
+      playMessageFeedback("sent")
       const clientId = newClientId()
       const now = Date.now()
       const optimistic: Message = {
+        uid: `optimistic-${clientId}`,
         messageId: `optimistic-${clientId}`,
         conversationId,
         senderId: currentUserId,
@@ -621,6 +705,10 @@ export function useConversationMessages(
           durationMs: audio.durationMs,
         },
         createdAt: now,
+        peerId: peerUserId,
+        isForwarded: false,
+        ...(replyTo ? { replyTo } : {}),
+        version: 1,
       }
 
       void (async () => {
@@ -656,25 +744,26 @@ export function useConversationMessages(
               durationMs: audio.durationMs,
             },
             clientId,
+            ...(replyTo ? { replyTo } : {}),
           })
           await removeLocalMediaFile(audio.uri)
           watchDelivery(clientId)
         } catch {
+          playMessageHaptic("error")
           toast({ title: "Could not send the audio", variant: "destructive" })
           await failPendingMessage(db, clientId).catch(() => undefined)
         }
       })()
     },
-    [api, conversationId, currentUserId, db, online, toast, watchDelivery],
+    [api, conversationId, currentUserId, db, online, toast, watchDelivery, peerUserId],
   )
 
   const retry = useCallback(
     (message: ChatMessage) => {
-      // Only text can be retried: a failed media row needs a fresh upload, and
-      // resending it as empty text would be rejected.
       const text = message.text
       if (message.type !== "TEXT" || !text) return
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to send messages.",
@@ -683,19 +772,25 @@ export function useConversationMessages(
         return
       }
 
+      playMessageFeedback("sent")
       const clientId = newClientId()
       const now = Date.now()
       const optimistic: Message = {
+        uid: `optimistic-${clientId}`,
         messageId: `optimistic-${clientId}`,
         conversationId,
         senderId: message.senderId,
         type: "TEXT",
         body: text,
         createdAt: now,
+        peerId: peerUserId,
+        isForwarded: false,
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        version: 1,
       }
 
       void (async () => {
-        await removeCachedMessage(db, message.id).catch((error) => {
+        await removeCachedMessage(db, message.uid).catch((error) => {
           console.warn("[db] failed to replace failed message", error)
         })
         await cacheOptimisticMessage(db, optimistic, clientId).catch((error) => {
@@ -703,14 +798,21 @@ export function useConversationMessages(
         })
 
         try {
-          await api.send({ conversationId, type: "TEXT", body: text, clientId })
+          await api.send({
+            conversationId,
+            type: "TEXT",
+            body: text,
+            clientId,
+            ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+          })
           watchDelivery(clientId)
         } catch {
+          playMessageHaptic("error")
           await failPendingMessage(db, clientId).catch(() => undefined)
         }
       })()
     },
-    [api, conversationId, db, online, toast, watchDelivery],
+    [api, conversationId, db, online, toast, watchDelivery, peerUserId],
   )
 
   const editMessage = useCallback(
@@ -718,6 +820,7 @@ export function useConversationMessages(
       const text = body.trim()
       if (!text || text === message.text || text.length > MAX_MESSAGE_LENGTH) return
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to edit messages.",
@@ -726,6 +829,7 @@ export function useConversationMessages(
         return
       }
       if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+        playMessageHaptic("warning")
         toast({
           title: "Edit window expired",
           description: "Messages can only be edited within 15 minutes of sending.",
@@ -735,22 +839,23 @@ export function useConversationMessages(
       }
 
       const previous = message.text ?? null
-      trackMutation(message.id, () => {
-        void updateCachedMessageBody(db, message.id, previous).catch((error) => {
+      trackMutation(message.uid, () => {
+        void updateCachedMessageBody(db, message.uid, previous).catch((error) => {
           console.warn("[db] failed to roll back message edit", error)
         })
       })
 
-      void updateCachedMessageBody(db, message.id, text).catch((error) => {
+      void updateCachedMessageBody(db, message.uid, text).catch((error) => {
         console.warn("[db] failed to edit message", error)
       })
 
       void api
-        .edit({ conversationId, messageId: message.id, body: text, clientId: newClientId() })
+        .edit({ conversationId, uid: message.uid, body: text, clientId: newClientId() })
         .catch(() => {
-          if (!pendingMutations.current.has(message.id)) return
-          settleMutation(message.id)
-          void updateCachedMessageBody(db, message.id, previous).catch(() => undefined)
+          if (!pendingMutations.current.has(message.uid)) return
+          playMessageHaptic("error")
+          settleMutation(message.uid)
+          void updateCachedMessageBody(db, message.uid, previous).catch(() => undefined)
           toast({ title: "Could not edit the message", variant: "destructive" })
         })
     },
@@ -760,6 +865,7 @@ export function useConversationMessages(
   const deleteMessage = useCallback(
     (message: ChatMessage) => {
       if (!online) {
+        playMessageHaptic("warning")
         toast({
           title: "You're offline",
           description: "Connect to the internet to delete messages.",
@@ -768,6 +874,7 @@ export function useConversationMessages(
         return
       }
       if (Date.now() - message.createdAt > MESSAGE_ACTION_WINDOW_MS) {
+        playMessageHaptic("warning")
         toast({
           title: "Delete window expired",
           description: "Messages can only be deleted within 15 minutes of sending.",
@@ -777,7 +884,7 @@ export function useConversationMessages(
       }
 
       let snapshot: CachedMessage | undefined
-      trackMutation(message.id, () => {
+      trackMutation(message.uid, () => {
         if (!snapshot) return
         void restoreCachedMessage(db, snapshot).catch((error) => {
           console.warn("[db] failed to restore deleted message", error)
@@ -786,21 +893,22 @@ export function useConversationMessages(
 
       void (async () => {
         try {
-          snapshot = await findCachedMessage(db, message.id)
+          snapshot = await findCachedMessage(db, message.uid)
           if (!snapshot) {
-            settleMutation(message.id)
+            settleMutation(message.uid)
             return
           }
 
-          await markCachedMessageDeleted(db, message.id)
+          await markCachedMessageDeleted(db, message.uid)
           await api.remove({
             conversationId,
-            messageId: message.id,
+            uid: message.uid,
             clientId: newClientId(),
           })
         } catch {
-          if (!pendingMutations.current.has(message.id)) return
-          settleMutation(message.id)
+          if (!pendingMutations.current.has(message.uid)) return
+          playMessageHaptic("error")
+          settleMutation(message.uid)
           if (snapshot) {
             await restoreCachedMessage(db, snapshot).catch((error) => {
               console.warn("[db] failed to restore deleted message", error)
@@ -817,7 +925,7 @@ export function useConversationMessages(
     () => ({
       messages,
       status,
-      hasOlder,
+      reachedStart,
       loadingOlder,
       loadOlder,
       send,
@@ -832,7 +940,7 @@ export function useConversationMessages(
     [
       messages,
       status,
-      hasOlder,
+      reachedStart,
       loadingOlder,
       loadOlder,
       send,

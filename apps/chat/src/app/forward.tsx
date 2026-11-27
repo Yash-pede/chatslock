@@ -39,11 +39,11 @@ function toSendData(row: CachedMessage): SendMessageData | null {
 
   if (row.type === "TEXT") {
     if (!body) return null
-    return { type: "TEXT", body, clientId: newClientId() }
+    return { type: "TEXT", body, clientId: newClientId(), isForwarded: true }
   }
 
   if (!row.attachment) return null
-  return { type: row.type, attachment: row.attachment, clientId: newClientId() }
+  return { type: row.type, attachment: row.attachment, clientId: newClientId(), isForwarded: true }
 }
 
 /**
@@ -157,7 +157,8 @@ export default function ForwardScreen() {
       const rows = await db
         .select()
         .from(messagesTable)
-        .where(inArray(messagesTable.messageId, messageIds))
+        .where(inArray(messagesTable.uid, messageIds))
+        .orderBy()
 
       for (const conversationId of targets) {
         const channel = conversationChannel(conversationId)

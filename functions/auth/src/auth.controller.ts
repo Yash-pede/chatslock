@@ -12,7 +12,6 @@ import {
   getCognitoUserGroups,
   recordAuthSession,
   sendOtp,
-  subFromToken,
   verifyOtp,
 } from "./auth.service"
 import {
@@ -162,52 +161,68 @@ export const loginController = async (c: Context) => {
   }
 }
 
+/**
+ * A failed refresh means the stored session can never sign in again. Look the
+ * row up first (`USER#<userId>` + `AUTHSESSION#<sessionId>`) and delete it when
+ * it still exists, so its Expo push token stops receiving notifications. Best
+ * effort: cleanup never masks the original error.
+ */
+const deleteDeadSession = async (params: { userId: string; sessionId: string }): Promise<void> => {
+  const session = await usersDao
+    .getAuthSessionBySessionId({ userId: params.userId, sessionId: params.sessionId })
+    .catch(() => undefined)
+
+  if (!session) return
+
+  await usersDao
+    .deleteAuthSession({ userId: params.userId, sessionId: params.sessionId })
+    .catch((error) => {
+      console.warn("[auth] failed to delete dead refresh session", { userId: params.userId, error })
+    })
+}
+
 export const refreshController = async (c: Context) => {
   const { body }: RefreshOtpRequest = c.get("valid")
+  const { userId, sessionId } = body
 
-  let resp: Awaited<ReturnType<typeof cognitoRefreshCall>>
   try {
-    resp = await cognitoRefreshCall(body.refreshToken, body.client)
+    const resp = await cognitoRefreshCall(body.refreshToken, body.client)
+    const tokens = resp.AuthenticationResult
+
+    if (!tokens?.RefreshToken) {
+      throw new HTTPException(401, { message: "Session expired. Sign in again." })
+    }
+
+    const session = await usersDao.getAuthSessionBySessionId({ userId, sessionId })
+    if (!session || session.expiresAt <= Math.floor(Date.now() / 1000)) {
+      throw new HTTPException(401, { message: "Session expired. Sign in again." })
+    }
+
+    // Best effort: a failed metadata write must not kill a valid refresh.
+    await usersDao
+      .updateAuthSessionLastUsedAt({ userId, sessionId: session.sessionId })
+      .catch((error) => {
+        console.warn("[auth] failed to bump session lastUsedAt", { userId, error })
+      })
+
+    return c.json({
+      accessToken: tokens.AccessToken,
+      idToken: tokens.IdToken,
+      expiresIn: tokens.ExpiresIn,
+      sessionId: session.sessionId,
+      refreshToken: tokens.RefreshToken,
+    })
   } catch (error) {
+    // Any failure here leaves the session unusable: delete the row (and its
+    // push token) when it still exists, then surface the error.
+    await deleteDeadSession({ userId, sessionId })
+
     const code = cognitoErrorName(error)
     if (code === "NotAuthorizedException" || code === "InvalidParameterException") {
-      // Revoked/expired refresh token: make the client discard its session.
       throw new HTTPException(401, { message: "Session expired. Sign in again." })
     }
     throw error
   }
-
-  const userId = subFromToken(
-    resp.AuthenticationResult?.IdToken ?? resp.AuthenticationResult?.AccessToken,
-  )
-
-  if (!userId || !resp.AuthenticationResult?.RefreshToken) {
-    throw new HTTPException(401, { message: "Session expired. Sign in again." })
-  }
-
-  const session = await usersDao.getAuthSessionBySessionId({
-    userId,
-    sessionId: body.sessionId,
-  })
-
-  if (!session || session.expiresAt <= Math.floor(Date.now() / 1000)) {
-    throw new HTTPException(401, { message: "Session expired. Sign in again." })
-  }
-
-  // Best effort: a failed metadata write must not kill a valid refresh.
-  await usersDao
-    .updateAuthSessionLastUsedAt({ userId, sessionId: session.sessionId })
-    .catch((error) => {
-      console.warn("[auth] failed to bump session lastUsedAt", { userId, error })
-    })
-
-  return c.json({
-    accessToken: resp.AuthenticationResult?.AccessToken,
-    idToken: resp.AuthenticationResult?.IdToken,
-    expiresIn: resp.AuthenticationResult?.ExpiresIn,
-    sessionId: session.sessionId,
-    refreshToken: resp.AuthenticationResult.RefreshToken,
-  })
 }
 
 export const logOutUserController = async (c: Context) => {

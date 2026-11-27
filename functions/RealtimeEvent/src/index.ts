@@ -7,7 +7,8 @@ import type {
   AppSyncEventsPublishEvent,
   AppSyncEventsSubscribeEvent,
 } from "@aws-lambda-powertools/event-handler/types"
-import { AWSManager } from "@repo/api/utils"
+import { ApiException, assertConversationMember, AWSManager } from "@repo/api/utils"
+import { conversationsDao } from "@repo/api/dao"
 import {
   messagePublishEnvelopeSchema,
   MESSAGE_EVENT,
@@ -16,7 +17,7 @@ import {
 import type { ConversationId, UserId } from "@repo/types/schema"
 import type { Context } from "aws-lambda"
 import type { z } from "zod"
-import { assertConversationMember, conversationIdFromChannel } from "./conversation"
+import { conversationIdFromChannel } from "./conversation"
 import { identityOf } from "./identity"
 import { assertCanSubscribeToUser, assertOwnUserChannel, userIdFromChannel } from "./user-channel"
 import {
@@ -24,7 +25,6 @@ import {
   editMessageController,
   sendMessageController,
 } from "./message/message.controller"
-import { conversationsDao } from "@repo/api/dao"
 
 const { logger, metrics, tracer } = AWSManager
 
@@ -60,12 +60,14 @@ const authorizeConversation = async (
   try {
     const { userId } = identityOf(event)
     const conversationId = conversationIdFromChannel(channel)
-    await assertConversationMember(conversationId, userId)
+    assertConversationMember(conversationId, userId)
     return { conversationId, userId }
   } catch (error) {
     logger.error(`Realtime ${operation} denied`, { channel, operation, error })
     tracer.addErrorAsMetadata(error as Error)
-    throw error
+    // The shared guard throws the API-layer error; AppSync denials must be an
+    // UnauthorizedException so the resolver reports it as a rejection.
+    throw error instanceof ApiException ? new UnauthorizedException(error.message) : error
   }
 }
 

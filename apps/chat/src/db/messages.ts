@@ -9,15 +9,20 @@ type MessageStatus = "sending" | "sent" | "failed"
 function toRow(message: Message): MessageRow {
   const deleted = message.deletedAt != null
   return {
+    uid: message.uid,
     messageId: message.messageId,
     conversationId: message.conversationId,
     senderId: message.senderId,
+    peerId: message.peerId,
     type: message.type,
     body: deleted ? null : (message.body ?? null),
     attachment: deleted ? null : (message.attachment ?? null),
     createdAt: message.createdAt,
     editedAt: message.editedAt ?? null,
     deletedAt: message.deletedAt ?? null,
+    version: message.version,
+    isForwarded: message.isForwarded,
+    replyTo: message.replyTo ?? null,
   }
 }
 
@@ -54,7 +59,7 @@ export async function cacheServerMessage(
     tx.insert(messages)
       .values({ ...row, pendingId: pendingId ?? null, status: "sent" satisfies MessageStatus })
       .onConflictDoUpdate({
-        target: messages.messageId,
+        target: messages.uid,
         set: {
           ...row,
           status: "sent" satisfies MessageStatus,
@@ -72,10 +77,7 @@ export async function cacheMessages(db: Database, batch: Message[]): Promise<voi
   db.transaction((tx) => {
     for (const message of batch) {
       const row = { ...toRow(message), status: "sent" satisfies MessageStatus }
-      tx.insert(messages)
-        .values(row)
-        .onConflictDoUpdate({ target: messages.messageId, set: row })
-        .run()
+      tx.insert(messages).values(row).onConflictDoUpdate({ target: messages.uid, set: row }).run()
     }
   })
 }
@@ -89,14 +91,14 @@ export async function failPendingMessage(db: Database, pendingId: string): Promi
 }
 
 /** Physically removes a local-only row, e.g. when retrying a failed send. */
-export async function removeCachedMessage(db: Database, messageId: string): Promise<void> {
-  await db.delete(messages).where(eq(messages.messageId, messageId))
+export async function removeCachedMessage(db: Database, uid: string): Promise<void> {
+  await db.delete(messages).where(eq(messages.uid, uid))
 }
 
 /** Retains the message slot while redacting its content as a tombstone. */
 export async function markCachedMessageDeleted(
   db: Database,
-  messageId: string,
+  uid: string,
   deletedAt = Date.now(),
 ): Promise<void> {
   await db
@@ -105,50 +107,50 @@ export async function markCachedMessageDeleted(
       attachment: null,
       body: null,
       deletedAt,
-      starred: false,
+      pinned: false,
     })
-    .where(eq(messages.messageId, messageId))
+    .where(eq(messages.uid, uid))
 }
 
 export async function findCachedMessage(
   db: Database,
-  messageId: string,
+  uid: string,
 ): Promise<CachedMessage | undefined> {
-  const rows = await db.select().from(messages).where(eq(messages.messageId, messageId)).limit(1)
+  const rows = await db.select().from(messages).where(eq(messages.uid, uid)).limit(1)
   return rows[0]
 }
 
 /** Puts a row back after an optimistic delete is rejected. */
 export async function restoreCachedMessage(db: Database, row: CachedMessage): Promise<void> {
-  await db.insert(messages).values(row).onConflictDoUpdate({ target: messages.messageId, set: row })
+  await db.insert(messages).values(row).onConflictDoUpdate({ target: messages.uid, set: row })
 }
 
 /** Optimistic edit; the server ack overwrites this with the authoritative body. */
 export async function updateCachedMessageBody(
   db: Database,
-  messageId: string,
+  uid: string,
   body: string | null,
 ): Promise<void> {
-  await db.update(messages).set({ body }).where(eq(messages.messageId, messageId))
+  await db.update(messages).set({ body }).where(eq(messages.uid, uid))
 }
 
-export async function starCachedMessage(db: Database, messageId: string): Promise<void> {
-  await db.update(messages).set({ starred: true }).where(eq(messages.messageId, messageId))
+export async function pinCachedMessage(db: Database, uid: string): Promise<void> {
+  await db.update(messages).set({ pinned: true }).where(eq(messages.uid, uid))
 }
 
-export async function unstarCachedMessage(db: Database, messageId: string): Promise<void> {
-  await db.update(messages).set({ starred: false }).where(eq(messages.messageId, messageId))
+export async function unpinCachedMessage(db: Database, uid: string): Promise<void> {
+  await db.update(messages).set({ pinned: false }).where(eq(messages.uid, uid))
 }
 
 /** Unstars every starred message in one conversation. */
-export async function unstarConversationMessages(
+export async function unpinConversationMessages(
   db: Database,
   conversationId: string,
 ): Promise<void> {
   await db
     .update(messages)
-    .set({ starred: false })
-    .where(and(eq(messages.starred, true), eq(messages.conversationId, conversationId)))
+    .set({ pinned: false })
+    .where(and(eq(messages.pinned, true), eq(messages.conversationId, conversationId)))
 }
 
 /**

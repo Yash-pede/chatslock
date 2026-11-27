@@ -1,7 +1,5 @@
 import { UnauthorizedException } from "@aws-lambda-powertools/event-handler/appsync-events"
-import { conversationsDao } from "@repo/api/dao"
-import { parseConversationId } from "@repo/api/utils"
-import { compositeConversationId, type ConversationId, type UserId } from "@repo/types/schema"
+import { compositeConversationId, type ConversationId } from "@repo/types/schema"
 
 const CHANNEL_NAMESPACE = "conversation"
 
@@ -34,26 +32,4 @@ export const conversationIdFromChannel = (path: string): ConversationId => {
   }
 
   return parsed.data
-}
-
-/**
- * Authorizes subscribe and publish against the caller's membership row. This
- * rejects fabricated ids, conversations that do not exist, and conversations
- * the caller is not part of (not only for DIRECT ids). The cheap structural
- * DIRECT check runs first so an outsider never causes a storage read.
- */
-export const assertConversationMember = async (
-  conversationId: ConversationId,
-  userId: UserId,
-): Promise<void> => {
-  const { type, conversationId: storageId } = parseConversationId(conversationId)
-
-  if (type === "DIRECT" && !storageId.split("#").includes(userId)) {
-    throw new UnauthorizedException("You are not a participant of this conversation")
-  }
-
-  const member = await conversationsDao.getUserConversationMember({ userId, conversationId })
-  if (!member) {
-    throw new UnauthorizedException("You are not a participant of this conversation")
-  }
 }

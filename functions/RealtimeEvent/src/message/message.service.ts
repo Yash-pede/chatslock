@@ -1,6 +1,6 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
 import { messagePushNotification, sendPushNotification } from "@repo/api/notifications"
-import { ApiException, AWSManager, parseConversationId, parseOrThrow } from "@repo/api/utils"
+import { ApiException, assertConversationMember, AWSManager, parseOrThrow } from "@repo/api/utils"
 import {
   MAX_MESSAGE_LENGTH,
   MESSAGE_ACTION_WINDOW_MS,
@@ -8,40 +8,12 @@ import {
   messagePreview,
   type ConversationId,
   type Message,
-  type MessageId,
+  type MessageUID,
   type UserId,
 } from "@repo/types/schema"
 import type { DeleteMessageReq, EditMessageReq, SendMessageReq } from "@repo/types/req"
 
 const { logger } = AWSManager
-
-/** Splits `TYPE#id`; a malformed id is a client error. */
-const conversationRef = (conversationId: ConversationId) => {
-  try {
-    return parseConversationId(conversationId)
-  } catch {
-    throw new ApiException(422, { message: `Invalid conversation id "${conversationId}"` })
-  }
-}
-
-/**
- * Confirms the caller is a participant by checking that the storage part of the
- * conversation id (`user1#user2`) contains the userId from the access token, or
- * throws 403.
- */
-const assertConversationAccess = async ({
-  userId,
-  conversationId,
-}: {
-  userId: UserId
-  conversationId: ConversationId
-}): Promise<void> => {
-  const { type, conversationId: storageId } = conversationRef(conversationId)
-
-  if (type === "DIRECT" && !storageId.split("#").includes(userId)) {
-    throw new ApiException(403, { message: "You are not a participant of this conversation" })
-  }
-}
 
 /**
  * Pushes a message notification to every registered device of a peer. This is
@@ -126,7 +98,7 @@ export const sendMessageService = async ({
   message: SendMessageReq
 }): Promise<Message> => {
   try {
-    await assertConversationAccess({ userId: senderId, conversationId: message.conversationId })
+    assertConversationMember(message.conversationId, senderId)
 
     if (message.body && message.body.length > MAX_MESSAGE_LENGTH) {
       throw new ApiException(400, {
@@ -134,13 +106,21 @@ export const sendMessageService = async ({
       })
     }
 
-    const { conversationId, type, body, attachment } = message
+    const { conversationId, type, body, attachment, replyTo, isForwarded } = message
+    const peerId = getPeerUserId(conversationId, senderId)
+    if (!peerId) {
+      throw new ApiException(400, { message: "Could not resolve the conversation peer" })
+    }
+
     const created = await messagesDao.createMessage({
       conversationId,
+      senderId,
+      peerId,
       type,
       ...(body ? { body } : {}),
       ...(attachment ? { attachment } : {}),
-      senderId,
+      ...(replyTo !== undefined ? { replyTo } : {}),
+      isForwarded: isForwarded ?? false,
     })
 
     const isPeerViewingCurrentConversation = await notifyPeerIfNotViewing({
@@ -166,6 +146,7 @@ export const sendMessageService = async ({
       senderId,
       conversationId,
       messageId: created.messageId,
+      uid: created.uid,
       type: created.type,
     })
 
@@ -189,7 +170,7 @@ export const editMessageService = async ({
   edit: EditMessageReq
 }): Promise<Message> => {
   try {
-    await assertConversationAccess({ userId: editorId, conversationId: edit.conversationId })
+    assertConversationMember(edit.conversationId, editorId)
 
     if (edit.body.length > MAX_MESSAGE_LENGTH) {
       throw new ApiException(400, {
@@ -197,7 +178,10 @@ export const editMessageService = async ({
       })
     }
 
-    const existing = await messagesDao.getMessageById(edit)
+    const existing = await messagesDao.getMessageById({
+      conversationId: edit.conversationId,
+      uid: edit.uid,
+    })
     if (!existing || existing.deletedAt) {
       throw new ApiException(404, { message: "Message not found" })
     }
@@ -210,25 +194,19 @@ export const editMessageService = async ({
         message: "Messages can only be edited within 15 minutes of sending",
       })
     }
-    if (existing.createdAt > Date.now() - 15 * 60) {
-      throw new ApiException(403, { message: "Can only edit messages withing 15 min." })
-    }
 
-    await messagesDao.editMessage({
+    const updated = await messagesDao.editMessage({
       conversationId: edit.conversationId,
-      messageId: edit.messageId,
+      uid: edit.uid,
       body: edit.body,
     })
-
-    const updated = await messagesDao.getMessageById(edit)
-    if (!updated) throw new ApiException(404, { message: "Message not found" })
 
     try {
       const member = await conversationsDao
         .getUserConversationMember({ userId: editorId, conversationId: edit.conversationId })
         .catch(() => undefined)
 
-      if (member?.lastMessageId === edit.messageId) {
+      if (member?.lastMessageId === updated.messageId) {
         await conversationsDao.updateUserConversationLastMessage({
           senderId: editorId,
           conversationId: edit.conversationId,
@@ -254,22 +232,29 @@ export const deleteMessageService = async ({
 }: {
   deleterId: UserId
   target: DeleteMessageReq
-}): Promise<{ messageId: MessageId; conversationId: ConversationId }> => {
+}): Promise<{ uid: MessageUID; messageId: string; conversationId: ConversationId }> => {
   try {
-    await assertConversationAccess({ userId: deleterId, conversationId: target.conversationId })
+    assertConversationMember(target.conversationId, deleterId)
 
-    const existing = await messagesDao.getMessageById(target)
+    const existing = await messagesDao.getMessageById({
+      conversationId: target.conversationId,
+      uid: target.uid,
+    })
     if (!existing) throw new ApiException(404, { message: "Message not found" })
     if (existing.deletedAt) {
-      return { conversationId: target.conversationId, messageId: target.messageId }
+      return {
+        conversationId: target.conversationId,
+        uid: existing.uid,
+        messageId: existing.messageId,
+      }
     }
     if (existing.senderId !== deleterId) {
       throw new ApiException(403, { message: "You can only delete your own messages" })
     }
 
-    await messagesDao.deleteMessage({
+    const updated = await messagesDao.deleteMessage({
       conversationId: target.conversationId,
-      messageId: target.messageId,
+      uid: target.uid,
     })
 
     try {
@@ -277,7 +262,7 @@ export const deleteMessageService = async ({
         .getUserConversationMember({ userId: deleterId, conversationId: target.conversationId })
         .catch(() => undefined)
 
-      if (member?.lastMessageId === target.messageId) {
+      if (member?.lastMessageId === updated.messageId) {
         const peerId = getPeerUserId(target.conversationId, deleterId)
         const peerActive = peerId
           ? await conversationsDao
@@ -289,7 +274,7 @@ export const deleteMessageService = async ({
           senderId: deleterId,
           conversationId: target.conversationId,
           increaseUnread: peerActive !== target.conversationId,
-          lastMessageId: target.messageId,
+          lastMessageId: updated.messageId,
           lastMessagePreview: "Message deleted",
           lastMessageAt: Date.now(),
         })
@@ -298,7 +283,11 @@ export const deleteMessageService = async ({
       logger.warn("Could not update conversation last message on delete", { error })
     }
 
-    return { conversationId: target.conversationId, messageId: target.messageId }
+    return {
+      conversationId: target.conversationId,
+      uid: updated.uid,
+      messageId: updated.messageId,
+    }
   } catch (error) {
     throw asApiError(error, `message.delete failed for ${deleterId}`)
   }

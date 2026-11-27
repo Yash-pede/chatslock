@@ -62,6 +62,7 @@ export function LocalDbProvider({
   }, [])
 
   if (error) {
+    console.log(error)
     return (
       <SafeArea>
         <View className="flex-1 items-center justify-center gap-4 px-8">

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "c5b3ca2b-9c6d-4cbe-b722-2c64414e07d5",
-  "prevIds": ["77a1a1dd-6a9e-4fec-a7de-3a92a4de3c59"],
+  "id": "97d607c5-0dab-490e-a890-b6a55086ad17",
+  "prevIds": ["00000000-0000-0000-0000-000000000000"],
   "ddl": [
     {
       "name": "chats",
@@ -156,9 +156,19 @@
     },
     {
       "table": "messages",
-      "name": "message_id",
+      "name": "uid",
       "type": "text",
       "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "entityType": "columns"
+    },
+    {
+      "table": "messages",
+      "name": "message_id",
+      "type": "text",
+      "notNull": true,
       "autoincrement": false,
       "default": null,
       "generated": null,
@@ -177,6 +187,16 @@
     {
       "table": "messages",
       "name": "sender_id",
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "entityType": "columns"
+    },
+    {
+      "table": "messages",
+      "name": "peer_id",
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -266,11 +286,41 @@
     },
     {
       "table": "messages",
-      "name": "starred",
+      "name": "pinned",
       "type": "integer",
       "notNull": true,
       "autoincrement": false,
       "default": "false",
+      "generated": null,
+      "entityType": "columns"
+    },
+    {
+      "table": "messages",
+      "name": "version",
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "entityType": "columns"
+    },
+    {
+      "table": "messages",
+      "name": "isForwarded",
+      "type": "integer",
+      "notNull": false,
+      "autoincrement": false,
+      "default": "false",
+      "generated": null,
+      "entityType": "columns"
+    },
+    {
+      "table": "messages",
+      "name": "reply_to",
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
       "generated": null,
       "entityType": "columns"
     },
@@ -481,7 +531,7 @@
     {
       "table": "messages",
       "name": "messages_pk",
-      "columns": ["message_id"],
+      "columns": ["uid"],
       "nameExplicit": false,
       "entityType": "pks"
     },

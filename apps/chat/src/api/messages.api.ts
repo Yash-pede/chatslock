@@ -37,7 +37,7 @@ export type { MessagePage }
 export interface MessageEventHandlers {
   onCreated: (message: Message, clientId?: string) => void
   onUpdated: (message: Message) => void
-  onDeleted: (event: { messageId: string; conversationId: string }) => void
+  onDeleted: (event: { uid: string; messageId: string; conversationId: string }) => void
   onTyping: (event: MessageTypingData) => void
 }
 
@@ -60,13 +60,15 @@ export function useMessagesApi(conversationId: string, currentUserId: string | n
           ...(input.body !== undefined ? { body: input.body } : {}),
           ...(input.attachment ? { attachment: input.attachment } : {}),
           ...(input.clientId ? { clientId: input.clientId } : {}),
+          ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
+          ...(input.isForwarded !== undefined ? { isForwarded: input.isForwarded } : {}),
         }
         return publishMessage({ eventType: MESSAGE_EVENT.send, data })
       },
 
       edit: (input: EditMessageInput) => {
         const data: EditMessageData = {
-          messageId: input.messageId,
+          uid: input.uid,
           body: input.body,
           ...(input.clientId ? { clientId: input.clientId } : {}),
         }
@@ -75,7 +77,7 @@ export function useMessagesApi(conversationId: string, currentUserId: string | n
 
       remove: (input: DeleteMessageInput) => {
         const data: DeleteMessageData = {
-          messageId: input.messageId,
+          uid: input.uid,
           ...(input.clientId ? { clientId: input.clientId } : {}),
         }
         return publishMessage({ eventType: MESSAGE_EVENT.delete, data })
@@ -95,10 +97,6 @@ export function useMessagesApi(conversationId: string, currentUserId: string | n
     }
   }, [publish, channel, currentUserId])
 
-  /**
-   * One channel subscription that fans out by `eventType` instead of three
-   * listeners on the same channel.
-   */
   const subscribeToMessages = useCallback(
     (handlers: MessageEventHandlers) =>
       subscribe(channel, (event) => {

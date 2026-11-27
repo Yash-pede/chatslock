@@ -13,6 +13,18 @@ export function getPeerUserId(conversationId: string, currentUserId: string | nu
   return others[0] ?? null
 }
 
+/**
+ * Structural membership rule for composite conversation ids: a DIRECT id embeds
+ * both participant ids, so the caller must be one of them. Non-DIRECT ids and
+ * ids without two participants cannot be decided structurally — the caller is
+ * allowed here and the storage-backed membership check decides on the server.
+ */
+export function isDirectConversationParticipant(conversationId: string, userId: string): boolean {
+  const [type, ...ids] = conversationId.split("#")
+  if (type !== "DIRECT" || ids.length < 2) return true
+  return ids.includes(userId)
+}
+
 /** Chat-list label for media messages; shared by pushes and preview builders. */
 export const MEDIA_PREVIEW_LABEL = {
   IMAGE: "Sent a photo",

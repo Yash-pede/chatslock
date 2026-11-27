@@ -1,11 +1,11 @@
 import { conversationsDao, messagesDao, usersDao } from "@repo/api/dao"
 import {
   ApiException,
+  assertConversationMember,
   AWSManager,
   buildConversationId,
   encodeLastEvaluatedKey,
   generateUlid,
-  parseConversationId,
 } from "@repo/api/utils"
 import {
   AVATAR_CONTENT_TYPES,
@@ -20,40 +20,12 @@ import {
   getPeerUserId,
   type ConversationId,
   type Message,
-  type MessageId,
+  type MessageUID,
   type UserId,
   type UserMemberConversation,
 } from "@repo/types/schema"
 import { MAX_MEDIA_FILE_SIZE } from "@repo/types/req"
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post"
-
-/** Splits `TYPE#id`; a malformed id is a client error. */
-const conversationRef = (conversationId: ConversationId) => {
-  try {
-    return parseConversationId(conversationId)
-  } catch {
-    throw new ApiException(422, { message: `Invalid conversation id "${conversationId}"` })
-  }
-}
-
-/**
- * Confirms the caller is a participant by checking that the storage part of the
- * conversation id (`user1#user2`) contains the userId from the access token, or
- * throws 403.
- */
-const assertConversationAccess = async ({
-  userId,
-  conversationId,
-}: {
-  userId: UserId
-  conversationId: ConversationId
-}): Promise<void> => {
-  const { type, conversationId: storageId } = conversationRef(conversationId)
-
-  if (type === "DIRECT" && !storageId.split("#").includes(userId)) {
-    throw new ApiException(403, { message: "You are not a participant of this conversation" })
-  }
-}
 
 /**
  * One page of message history, newest first, oldest id as the next cursor.
@@ -67,14 +39,14 @@ export const listMessagesService = async ({
 }: {
   userId: UserId
   conversationId: ConversationId
-  cursor?: MessageId
+  cursor?: string
   limit: number
-}): Promise<{ messages: Message[]; nextCursor?: MessageId }> => {
-  await assertConversationAccess({ userId, conversationId })
+}): Promise<{ messages: Message[]; nextCursor?: string }> => {
+  assertConversationMember(conversationId, userId)
 
   const messages = await messagesDao.getMessagesByConversationId({
     conversationId,
-    ...(cursor ? { cursor } : {}),
+    cursor,
     limit,
   })
 
@@ -83,6 +55,29 @@ export const listMessagesService = async ({
     messages,
     nextCursor: messages.length === limit && oldest ? oldest.messageId : undefined,
   }
+}
+
+/**
+ * One message by ULID. Membership is asserted before the read so a non-member
+ * can never probe a conversation's messages, and a missing message is a 404.
+ */
+export const getMessageService = async ({
+  userId,
+  conversationId,
+  uid,
+}: {
+  userId: UserId
+  conversationId: ConversationId
+  uid: MessageUID
+}): Promise<Message> => {
+  assertConversationMember(conversationId, userId)
+
+  const message = await messagesDao.getMessageById({ conversationId, uid })
+  if (!message) {
+    throw new ApiException(404, { message: "Message not found" })
+  }
+
+  return message
 }
 
 export const chatPageConversationsService = async ({

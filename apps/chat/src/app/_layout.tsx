@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { View } from "react-native"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { Stack, type ErrorBoundaryProps } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -100,25 +101,27 @@ function ProtectedNavigator({ flow }: { flow: Flow }) {
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <LocalDbProvider fallback={<LoadingGate />}>
-        <ToastProvider>
-          <AuthProvider>
-            <ProfileProvider>
-              <NotificationProvider>
-                <SettingsProvider>
-                  <RealtimeGate>
-                    <AppFrame>
-                      <RootNavigator />
-                    </AppFrame>
-                  </RealtimeGate>
-                </SettingsProvider>
-              </NotificationProvider>
-            </ProfileProvider>
-          </AuthProvider>
-        </ToastProvider>
-      </LocalDbProvider>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <LocalDbProvider fallback={<LoadingGate />}>
+          <ToastProvider>
+            <AuthProvider>
+              <ProfileProvider>
+                <NotificationProvider>
+                  <SettingsProvider>
+                    <RealtimeGate>
+                      <AppFrame>
+                        <RootNavigator />
+                      </AppFrame>
+                    </RealtimeGate>
+                  </SettingsProvider>
+                </NotificationProvider>
+              </ProfileProvider>
+            </AuthProvider>
+          </ToastProvider>
+        </LocalDbProvider>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   )
 }
 

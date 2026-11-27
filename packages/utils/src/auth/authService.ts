@@ -254,11 +254,19 @@ export async function refresh(): Promise<AuthTokens> {
     throw new Error("No refresh token available")
   }
 
+  // Required by the refresh endpoint so it can delete this exact session row
+  // (and its push token) when the refresh is rejected server-side.
+  const identity = await secureStorage.getIdentity()
+  if (!identity?.id) {
+    throw new Error("No stored identity for refresh")
+  }
+
   const client = (await secureStorage.getAuthClient()) as AuthClient | null
   const { data: raw } = await http.post<unknown>("/refresh", {
     refreshToken,
     client: client ?? "otp",
     sessionId: await secureStorage.getSessionId(),
+    userId: identity.id,
   })
   const data = unwrap<AuthTokens>(raw)
   // Cognito only returns an access token here — the ID token rides along as

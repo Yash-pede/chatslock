@@ -4,6 +4,7 @@ import type {
   GetChatPageConversationRequest,
   GetConversationMessagesRequest,
   GetDirectConversationRequest,
+  GetMessageRequest,
   MediaUploadPresignUrlRequest,
 } from "@repo/types/req"
 import {
@@ -11,6 +12,7 @@ import {
   createDirectConversationService,
   getDirectConversationService,
   getMediaUploadPresignedUrl,
+  getMessageService,
   listMessagesService,
 } from "./conversatinos.service"
 
@@ -33,6 +35,18 @@ export const listMessagesController = async (c: Context) => {
     conversationId: query.conversationId,
     cursor: query.cursor,
     limit: query.limit,
+  })
+
+  return c.json(resp)
+}
+
+export const getMessageController = async (c: Context) => {
+  const { query }: GetMessageRequest = c.get("valid")
+
+  const resp = await getMessageService({
+    userId: c.get("userId"),
+    conversationId: query.conversationId,
+    uid: query.uid,
   })
 
   return c.json(resp)

@@ -1,4 +1,4 @@
-import type { MessageType } from "@repo/types/schema"
+import type { CachedMessage } from "@/db/schema"
 
 /**
  * Message shapes used by the conversation screen. Media messages carry the
@@ -26,22 +26,26 @@ export interface MessageAttachment {
   mimeType: string
 }
 
-export interface ChatMessage {
-  id: string
-  conversationId: string
-  /** `u1#u2`-style conversation id is the key; this is who wrote the message. */
-  senderId: string
+/** Local send state of an outgoing message. */
+export type ChatMessageStatus = "sending" | "sent" | "delivered" | "read" | "failed"
+
+/**
+ * A chat row is the drizzle cache row plus the presentation-only fields the
+ * bubbles need. Every storage field (`uid`, `messageId`, `peerId`, `version`,
+ * `isForwarded`, `replyTo`, `pinned`, `deletedAt`, …) comes straight from the
+ * `messages` table, so the two can never drift apart.
+ */
+export type ChatMessage = Omit<CachedMessage, "attachment" | "status" | "pendingId"> & {
   /** True when the signed-in user sent it. */
   isMine: boolean
-  type: MessageType
+  /** Display text; tombstones get "This message was deleted". */
   text?: string
   image?: MessageImage
   video?: MessageVideo
+  /** The wire attachment reshaped for previews and the downloader. */
   attachment?: MessageAttachment
   voice?: { url: string; durationSeconds: number; waveform: number[] }
-  /** Epoch milliseconds. */
-  createdAt: number
-  status?: "sending" | "sent" | "delivered" | "read" | "failed"
+  status?: ChatMessageStatus
   /**
    * `clientId` of the request that created this optimistic row. The server
    * echoes it on the ack, so the real message can be matched exactly instead of
@@ -52,8 +56,6 @@ export interface ChatMessage {
   isSystem?: boolean
   /** Tombstone for a message whose body/attachment was removed by the server. */
   isDeleted?: boolean
-  /** Local-only star state from the cache; renders a star beside the timestamp. */
-  starred?: boolean
 }
 
 /** A locally picked file ready to be uploaded and attached to a media message. */

@@ -29,9 +29,11 @@ export const chats = sqliteTable("chats", {
 export const messages = sqliteTable(
   "messages",
   {
-    messageId: text("message_id").primaryKey().notNull(),
+    uid: text("uid").primaryKey().notNull(),
+    messageId: text("message_id").notNull(),
     conversationId: text("conversation_id").notNull(),
     senderId: text("sender_id").notNull(),
+    peerId: text("peer_id").notNull(),
     type: text("type").$type<Message["type"]>().notNull(),
     body: text("body"),
     attachment: text("attachment", { mode: "json" }).$type<NonNullable<Message["attachment"]>>(),
@@ -40,7 +42,10 @@ export const messages = sqliteTable(
     deletedAt: integer("deleted_at"),
     pendingId: text("pending_id"),
     status: text("status"),
-    starred: integer({ mode: "boolean" }).notNull().default(false),
+    pinned: integer({ mode: "boolean" }).notNull().default(false),
+    version: integer("version").default(1),
+    isForwarded: integer({ mode: "boolean" }).default(false),
+    replyTo: text("reply_to"),
   },
   (table) => ({
     conversationIdx: index("messages_conversation_id_idx").on(

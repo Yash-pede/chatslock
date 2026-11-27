@@ -8,7 +8,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { useLiveQuery } from "drizzle-orm/expo-sqlite"
 import { Text, useThemeColors, useToast } from "@repo/ui"
 import * as Clipboard from "expo-clipboard"
-import { unstarCachedMessage, unstarConversationMessages, useLocalDb } from "@/db"
+import { unpinCachedMessage, unpinConversationMessages, useLocalDb } from "@/db"
 import { messages as messagesTable } from "@/db/schema"
 import { useProfile } from "@/context/profile/ProfileContext"
 import {
@@ -23,7 +23,7 @@ const styles = StyleSheet.create({
   row: { paddingVertical: 3, paddingHorizontal: 12 },
 })
 
-const keyExtractor = (item: ChatMessage) => item.id
+const keyExtractor = (item: ChatMessage) => item.uid
 
 /** Pinned messages for one conversation from the local cache, newest first. */
 export default function StarredMessagesScreen() {
@@ -46,7 +46,7 @@ export default function StarredMessagesScreen() {
         .select()
         .from(messagesTable)
         .where(
-          and(eq(messagesTable.starred, true), eq(messagesTable.conversationId, conversationId)),
+          and(eq(messagesTable.pinned, true), eq(messagesTable.conversationId, conversationId)),
         )
         .orderBy(desc(messagesTable.createdAt)),
     [conversationId, db],
@@ -59,7 +59,7 @@ export default function StarredMessagesScreen() {
   )
 
   const selectedMessage = selectedId
-    ? (messages.find((message) => message.id === selectedId) ?? null)
+    ? (messages.find((message) => message.uid === selectedId) ?? null)
     : null
 
   const clearSelection = useCallback(() => setSelectedId(null), [])
@@ -78,14 +78,14 @@ export default function StarredMessagesScreen() {
   const unstarSelected = useCallback(() => {
     if (!selectedMessage) return
     clearSelection()
-    void unstarCachedMessage(db, selectedMessage.id)
+    void unpinCachedMessage(db, selectedMessage.uid)
       .then(() => toast({ title: "Message unpinned" }))
       .catch(() => toast({ title: "Could not unpin message", variant: "destructive" }))
   }, [clearSelection, db, selectedMessage, toast])
 
   const unstarAll = useCallback(() => {
     setMenuOpen(false)
-    void unstarConversationMessages(db, conversationId)
+    void unpinConversationMessages(db, conversationId)
       .then(() =>
         toast({
           title: "Unpinned all messages",
@@ -97,13 +97,13 @@ export default function StarredMessagesScreen() {
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) => (
-      <View style={[styles.row, item.id === selectedId && { backgroundColor: colors.secondary }]}>
+      <View style={[styles.row, item.uid === selectedId && { backgroundColor: colors.secondary }]}>
         <MessageBubble
           message={item}
-          onPress={item.id === selectedId ? clearSelection : undefined}
+          onPress={item.uid === selectedId ? clearSelection : undefined}
           onSelect={
             !item.isSystem && !item.isDeleted && item.status !== "failed"
-              ? () => setSelectedId(item.id)
+              ? () => setSelectedId(item.uid)
               : undefined
           }
         />

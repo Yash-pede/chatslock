@@ -72,6 +72,7 @@ export const messagePushNotification = (
 ): PushNotificationContent => {
   const data: Record<string, unknown> = {
     conversationId: message.conversationId,
+    uid: message.uid,
     messageId: message.messageId,
     messageType: message.type,
   }

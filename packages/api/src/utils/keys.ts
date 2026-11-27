@@ -2,7 +2,7 @@
  * Key building/parsing for the single-table layout. The prefixes themselves live
  * in `@repo/types/schema` with the storage schemas; these helpers are server-only.
  */
-import { compositeConversationIdPattern, conversationKeyPattern } from "@repo/types/schema"
+import { conversationKeyPattern } from "@repo/types/schema"
 import type { ConversationType } from "@repo/types/schema"
 
 /**
@@ -55,27 +55,4 @@ export const parseConversationKey = (
     type: type as ConversationType,
     conversationId: rest.join("#"),
   }
-}
-
-/**
- * The API-facing conversation id: `TYPE#id` (e.g. `DIRECT#u1#u2`). One value
- * carries both the type and the storage id, so callers never pass the type
- * separately.
- */
-export const buildConversationId = (type: ConversationType, conversationId: string): string =>
-  `${type}#${conversationId}`
-
-/** Inverse of `buildConversationId`; throws when the id is malformed. */
-export const parseConversationId = (
-  id: string,
-): { type: ConversationType; conversationId: string } => {
-  if (!compositeConversationIdPattern.test(id)) {
-    throw new Error(`Cannot parse conversation id "${id}"`)
-  }
-
-  const separator = id.indexOf("#")
-  const type = id.slice(0, separator)
-  const conversationId = id.slice(separator + 1)
-
-  return { type: type as ConversationType, conversationId }
 }

@@ -8,6 +8,8 @@ import { messages } from "./schema"
 /** Single on-device database file shared by every local cache table. */
 export const DATABASE_NAME = "chatslock.db"
 
+const LOCAL_SCHEMA_VERSION = 2
+
 function createDatabase(sqlite: SQLite.SQLiteDatabase) {
   return drizzle(sqlite)
 }
@@ -21,6 +23,17 @@ export interface LocalDatabase {
 
 let connection: Promise<LocalDatabase> | null = null
 
+/** Drops every user table so a fresh migration set can be applied cleanly. */
+async function resetLocalSchema(sqlite: SQLite.SQLiteDatabase): Promise<void> {
+  const tables = await sqlite.getAllAsync<{ name: string }>(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+  )
+
+  for (const { name } of tables) {
+    await sqlite.execAsync(`DROP TABLE IF EXISTS "${name}"`)
+  }
+}
+
 async function connect(): Promise<LocalDatabase> {
   const sqlite = await SQLite.openDatabaseAsync(DATABASE_NAME, {
     // Keeps `useLiveQuery` subscriptions working for future screens.
@@ -31,11 +44,18 @@ async function connect(): Promise<LocalDatabase> {
     // Connection settings must be applied outside a migration transaction.
     await sqlite.execAsync("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
 
+    const versionRow = await sqlite.getFirstAsync<{ db_version: number }>("PRAGMA db_version")
+    if ((versionRow?.db_version ?? 0) < LOCAL_SCHEMA_VERSION) {
+      await resetLocalSchema(sqlite)
+    }
+
     const db = createDatabase(sqlite)
     const failure = await migrate(db, migrations)
     if (failure) {
       throw new Error("Could not prepare the local database.")
     }
+
+    await sqlite.execAsync(`PRAGMA db_version = ${LOCAL_SCHEMA_VERSION}`)
 
     // A send that was in flight when the process died can never receive its
     // ack. Mark it failed so it can be retried instead of looking "sending"

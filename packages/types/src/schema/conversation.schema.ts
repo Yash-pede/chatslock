@@ -1,6 +1,5 @@
 import z from "zod"
-import { PREFIXES } from "./keys"
-import { ulid } from "./ulid.schema"
+import { PREFIXES, messageIdSchema } from "./keys"
 
 const zodTimestamp = z.number().int().nonnegative()
 
@@ -68,7 +67,7 @@ export const userMember_conversationItem = z.strictObject({
   SK: conversationKey,
   userMember: z.string(),
   unreadCount: z.int().default(0),
-  lastMessageId: z.optional(ulid),
+  lastMessageId: z.optional(messageIdSchema),
   lastMessagePreview: z.optional(z.string()),
   lastMessageAt: z.optional(zodTimestamp),
 })

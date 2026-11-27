@@ -8,6 +8,7 @@ import { useRealtime } from "@/context/RealtimeContext"
 import { DownloadButton } from "./download-button"
 import { LinkifiedText } from "./linkified-text"
 import { MediaOfflinePlaceholder } from "./media-offline-placeholder"
+import { useReplyMessage } from "../hooks/use-reply-message"
 import { useVideoThumbnail } from "../hooks/use-video-thumbnail"
 import type { ChatMessage } from "../types"
 
@@ -35,6 +36,8 @@ function AudioBubble({
   failedClass,
   online,
   starred = false,
+  isForwarded = false,
+  replyPreview,
 }: {
   voice: { url: string; durationSeconds: number; waveform: number[] }
   tint: string
@@ -45,6 +48,8 @@ function AudioBubble({
   failedClass?: string
   online: boolean
   starred?: boolean
+  isForwarded?: boolean
+  replyPreview?: React.ReactNode
 }) {
   const remote = voice.url.startsWith("http")
   const player = useAudioPlayer(remote && !online ? null : voice.url ? { uri: voice.url } : null)
@@ -68,6 +73,8 @@ function AudioBubble({
         timestamp={time}
         status={status}
         starred={starred}
+        isForwarded={isForwarded}
+        replyPreview={replyPreview}
         className={cn("w-[62%] max-w-[66%]", failedClass)}
       >
         <View className="flex-row items-center gap-2.5">
@@ -94,6 +101,8 @@ function AudioBubble({
       timestamp={time}
       status={status}
       starred={starred}
+      isForwarded={isForwarded}
+      replyPreview={replyPreview}
       className={cn("w-[62%] max-w-[66%]", failedClass)}
     >
       <View className="flex-row items-center gap-2.5">
@@ -253,11 +262,30 @@ export const MessageBubble = memo(function MessageBubble({
   const { online } = useRealtime()
   const variant = message.isMine ? "sent" : "received"
   const time = clock(message.createdAt)
-  const starred = message.starred === true
+  const starred = message.pinned === true
   const tint = message.isMine ? colors.primaryForeground : colors.secondaryForeground
   const subtle = message.isMine ? `${colors.primaryForeground}99` : colors.mutedForeground
   const failed = message.status === "failed"
   const failedClass = failed ? "border border-destructive/60 bg-destructive/10" : undefined
+
+  const reply = useReplyMessage(message.conversationId, message.replyTo)
+  const replyBarColor = message.isMine ? colors.primaryForeground : colors.primary
+  const replyQuote =
+    message.replyTo && (reply.preview || reply.unavailable) ? (
+      <View className="mb-1 flex-row items-center gap-1.5">
+        <View
+          className="w-0.5 self-stretch rounded-full"
+          style={{ backgroundColor: replyBarColor }}
+        />
+        <Text
+          numberOfLines={1}
+          className="min-w-0 flex-1 text-xs leading-4"
+          style={{ color: subtle }}
+        >
+          {reply.unavailable ? "Preview unavailable" : reply.preview}
+        </Text>
+      </View>
+    ) : null
 
   const renderBubble = () => {
     if (message.isDeleted) {
@@ -303,10 +331,12 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
+          isForwarded={message.isForwarded === true}
+          replyPreview={replyQuote}
           className={cn("p-1 px-1 pb-1.5", failedClass)}
         >
           <Pressable
-            onPress={() => onOpenMedia?.(message.id)}
+            onPress={() => onOpenMedia?.(message.uid)}
             onLongPress={onSelect}
             delayLongPress={250}
             disabled={!onOpenMedia && !onSelect}
@@ -345,10 +375,12 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
+          isForwarded={message.isForwarded === true}
+          replyPreview={replyQuote}
           className={cn("p-1 px-1 pb-1.5", failedClass)}
         >
           <Pressable
-            onPress={() => onOpenMedia?.(message.id)}
+            onPress={() => onOpenMedia?.(message.uid)}
             onLongPress={onSelect}
             delayLongPress={250}
             disabled={!onOpenMedia && !onSelect}
@@ -377,6 +409,8 @@ export const MessageBubble = memo(function MessageBubble({
           timestamp={time}
           status={message.status}
           starred={starred}
+          isForwarded={message.isForwarded === true}
+          replyPreview={replyQuote}
           className={cn("w-[78%] max-w-[78%]", failedClass)}
         >
           <View className="flex-row items-center gap-3">
@@ -420,6 +454,8 @@ export const MessageBubble = memo(function MessageBubble({
           failedClass={failedClass}
           online={online}
           starred={starred}
+          isForwarded={message.isForwarded === true}
+          replyPreview={replyQuote}
         />
       )
     }
@@ -430,6 +466,8 @@ export const MessageBubble = memo(function MessageBubble({
         timestamp={time}
         status={message.status}
         starred={starred}
+        isForwarded={message.isForwarded === true}
+        replyPreview={replyQuote}
         className={cn(failedClass)}
       >
         <LinkifiedText

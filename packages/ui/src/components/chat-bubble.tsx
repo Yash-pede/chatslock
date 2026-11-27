@@ -1,7 +1,7 @@
 import React from "react"
 import { View, Text as RNText } from "react-native"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Check, CheckCheck, Pin } from "lucide-react-native"
+import { Check, CheckCheck, CornerUpRight, Pin } from "lucide-react-native"
 import { cn } from "../lib/utils"
 import { radius } from "../lib/radius"
 import { useThemeColors } from "./theme-provider"
@@ -37,6 +37,10 @@ export interface ChatBubbleProps
   status?: ChatBubbleStatus
   /** Shows a small filled pin beside the timestamp. */
   starred?: boolean
+  /** Shows a muted "Forwarded" tag at the top of the bubble content. */
+  isForwarded?: boolean
+  /** Quoted message block rendered above the content (replies). */
+  replyPreview?: React.ReactNode
 }
 
 /** AniUI chat bubble: sent (primary, right) and received (secondary, left). */
@@ -48,14 +52,31 @@ export function ChatBubble({
   timestamp,
   status,
   starred = false,
+  isForwarded = false,
+  replyPreview,
   ...props
 }: ChatBubbleProps) {
   const isSent = variant === "sent"
   const colors = useThemeColors()
   const tick = `${colors.primaryForeground}b3`
+  const forwardedColor = isSent ? `${colors.primaryForeground}99` : colors.mutedForeground
 
   return (
     <View className={cn(bubbleVariants({ variant }), radius.surface, className)} {...props}>
+      {isForwarded ? (
+        <View className="mb-0.5 flex-row items-center gap-1">
+          <CornerUpRight size={12} color={forwardedColor} />
+          <RNText
+            className={cn(
+              "text-[11px] font-medium",
+              isSent ? "text-primary-foreground/60" : "text-muted-foreground",
+            )}
+          >
+            Forwarded
+          </RNText>
+        </View>
+      ) : null}
+      {replyPreview}
       {typeof children === "string" ? (
         <RNText className={cn(textVariants({ variant }), textClassName)}>{children}</RNText>
       ) : (

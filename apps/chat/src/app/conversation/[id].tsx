@@ -34,10 +34,10 @@ import { usersApi } from "@/api/users.api"
 import {
   cacheProfiles,
   profileFromRow,
+  pinCachedMessage,
   starCachedConversation,
-  starCachedMessage,
   unstarCachedConversation,
-  unstarCachedMessage,
+  unpinCachedMessage,
   useLocalDb,
 } from "@/db"
 import {
@@ -58,6 +58,8 @@ import {
   MessageActions,
   MessageBubble,
   MessageComposer,
+  ReplyPreview,
+  SwipeToReply,
   TypingBubble,
   useConversationMessages,
   useConversationMeta,
@@ -78,7 +80,7 @@ const MAX_MESSAGE_SELECTION = 50
 // Prefer `pendingId`: it stays the same before and after the server ack, so a
 // just-sent row is reused instead of remounted (which would jump the list and
 // reload the image).
-const keyExtractor = (item: ChatMessage) => item.pendingId ?? item.id
+const keyExtractor = (item: ChatMessage) => item.pendingId ?? item.uid
 
 export default function ConversationScreen() {
   const colors = useThemeColors()
@@ -100,7 +102,7 @@ export default function ConversationScreen() {
   const {
     messages,
     status,
-    hasOlder,
+    reachedStart,
     loadingOlder,
     loadOlder,
     send,
@@ -113,19 +115,23 @@ export default function ConversationScreen() {
     deleteMessage,
   } = useConversationMessages(conversationId, user?.userId ?? null)
 
-  const { listRef, awayFromBottom, onScroll, onScrollBeginDrag, scrollToBottom, onLoad } =
-    useMessageListScroll<ChatMessage>({ onLoadOlder: loadOlder })
+  const { listRef, awayFromBottom, onScroll, scrollToBottom, onLoad } =
+    useMessageListScroll<ChatMessage>()
 
-  // New messages should follow the newest row only while the user is already
-  // at the bottom. Older-page inserts leave the last id unchanged, so they
-  // never pull the viewport back down.
-  const lastMessageId = messages.at(-1)?.id
+  const lastMessageId = messages.at(-1)?.uid
   const lastMessageIdRef = useRef<string | undefined>(lastMessageId)
   useEffect(() => {
     const previous = lastMessageIdRef.current
     lastMessageIdRef.current = lastMessageId
 
-    if (!lastMessageId || previous === undefined || previous === lastMessageId) return
+    if (!lastMessageId) return
+    // First rows rendered: anchor at the newest row once. The list's `onLoad`
+    // can fire before the data settles, which left the bottom half off-screen.
+    if (previous === undefined) {
+      scrollToBottom(false)
+      return
+    }
+    if (previous === lastMessageId) return
     if (!awayFromBottom) scrollToBottom(true)
   }, [lastMessageId, awayFromBottom, scrollToBottom])
 
@@ -201,25 +207,34 @@ export default function ConversationScreen() {
   const [selectedAt, setSelectedAt] = useState<number | null>(null)
   const [editTarget, setEditTarget] = useState<ChatMessage | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null)
+  /** Message being replied to via swipe; shown above the composer. */
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null)
+
+  // The reply preview sits above the composer and shrinks the list viewport,
+  // so jump to the newest row when it appears to keep it from covering the
+  // last message.
+  useEffect(() => {
+    if (replyTarget && !awayFromBottom) scrollToBottom(true)
+  }, [replyTarget, scrollToBottom, awayFromBottom])
 
   const selectedCount = selectedIds.size
   const selectionActive = selectedCount > 0
   /** The single selected message; only meaningful when exactly one is picked. */
   const singleSelectedId = selectedCount === 1 ? [...selectedIds][0] : null
   const selectedMessage = singleSelectedId
-    ? (messages.find((message) => message.id === singleSelectedId) ?? null)
+    ? (messages.find((message) => message.uid === singleSelectedId) ?? null)
     : null
 
   const selectedStarredQuery = useMemo(
     () =>
       db
-        .select({ starred: messagesTable.starred })
+        .select({ pinned: messagesTable.pinned })
         .from(messagesTable)
         .where(eq(messagesTable.messageId, singleSelectedId ?? "")),
     [db, singleSelectedId],
   )
   const { data: selectedStarredRows } = useLiveQuery(selectedStarredQuery, [selectedStarredQuery])
-  const isMessageStarred = singleSelectedId ? (selectedStarredRows[0]?.starred ?? false) : false
+  const isMessageStarred = singleSelectedId ? (selectedStarredRows[0]?.pinned ?? false) : false
 
   // Edits are only offered within the window the backend enforces. The
   // selection time is captured in an event handler, never during render.
@@ -259,21 +274,21 @@ export default function ConversationScreen() {
     if (isRemote(selectedMessage.image?.url)) {
       return {
         url: selectedMessage.image.url,
-        fileName: `photo-${selectedMessage.id}.jpg`,
+        fileName: `photo-${selectedMessage.uid}.jpg`,
         mimeType: "image/jpeg",
       }
     }
     if (isRemote(selectedMessage.video?.url)) {
       return {
         url: selectedMessage.video.url,
-        fileName: `video-${selectedMessage.id}.mp4`,
+        fileName: `video-${selectedMessage.uid}.mp4`,
         mimeType: "video/mp4",
       }
     }
     if (isRemote(selectedMessage.voice?.url)) {
       return {
         url: selectedMessage.voice.url,
-        fileName: `voice-${selectedMessage.id}.m4a`,
+        fileName: `voice-${selectedMessage.uid}.m4a`,
         mimeType: "audio/mp4",
       }
     }
@@ -284,9 +299,9 @@ export default function ConversationScreen() {
     (message: ChatMessage) => {
       // Tap or long-press toggles membership; long-press on the first message
       // opens the selection bar (edit window is measured from then).
-      if (selectedIds.has(message.id)) {
+      if (selectedIds.has(message.uid)) {
         const next = new Set(selectedIds)
-        next.delete(message.id)
+        next.delete(message.uid)
         setSelectedIds(next)
         if (next.size === 0) setSelectedAt(null)
         return
@@ -301,7 +316,7 @@ export default function ConversationScreen() {
       }
 
       if (selectedIds.size === 0) setSelectedAt(Date.now())
-      setSelectedIds(new Set(selectedIds).add(message.id))
+      setSelectedIds(new Set(selectedIds).add(message.uid))
     },
     [selectedIds, toast],
   )
@@ -370,7 +385,7 @@ export default function ConversationScreen() {
     clearSelection()
     const next = !isMessageStarred
     void (
-      next ? starCachedMessage(db, selectedMessage.id) : unstarCachedMessage(db, selectedMessage.id)
+      next ? pinCachedMessage(db, selectedMessage.uid) : unpinCachedMessage(db, selectedMessage.uid)
     )
       .then(() => toast({ title: next ? "Message pinned" : "Message unpinned" }))
       .catch(() => toast({ title: "Could not update message", variant: "destructive" }))
@@ -430,9 +445,14 @@ export default function ConversationScreen() {
     if (index >= 0) setViewerIndex(index)
   }, [])
 
+  /** Swiping right on a bubble starts a reply to that message. */
+  const startReply = useCallback((message: ChatMessage) => {
+    setReplyTarget(message)
+  }, [])
+
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
-    ({ item }) => (
-      <View style={[styles.row, selectedIds.has(item.id) && { backgroundColor: colors.secondary }]}>
+    ({ item }) => {
+      const bubble = (
         <MessageBubble
           message={item}
           onPress={
@@ -448,9 +468,27 @@ export default function ConversationScreen() {
           onRetry={item.status === "failed" ? () => retry(item) : undefined}
           onOpenMedia={openMedia}
         />
-      </View>
-    ),
-    [colors.secondary, openMedia, retry, selectMessage, selectedIds, selectionActive],
+      )
+
+      const replyable =
+        !item.isSystem &&
+        !item.isDeleted &&
+        item.status !== "failed" &&
+        !item.uid.startsWith("optimistic-")
+
+      return (
+        <View
+          style={[styles.row, selectedIds.has(item.uid) && { backgroundColor: colors.secondary }]}
+        >
+          {replyable && !selectionActive ? (
+            <SwipeToReply onReply={() => startReply(item)}>{bubble}</SwipeToReply>
+          ) : (
+            bubble
+          )}
+        </View>
+      )
+    },
+    [colors.secondary, openMedia, retry, selectMessage, selectedIds, selectionActive, startReply],
   )
 
   const emptyState =
@@ -528,6 +566,8 @@ export default function ConversationScreen() {
             ref={listRef}
             data={messages}
             renderItem={renderItem}
+            onStartReached={loadOlder}
+            onStartReachedThreshold={0.7}
             keyExtractor={keyExtractor}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
@@ -536,14 +576,13 @@ export default function ConversationScreen() {
             maintainVisibleContentPosition={{ startRenderingFromBottom: true }}
             onLoad={onLoad}
             onScroll={onScroll}
-            onScrollBeginDrag={onScrollBeginDrag}
             scrollEventThrottle={32}
             ListHeaderComponent={
               messages.length > 0 ? (
                 <ConversationListHeader
                   name={name}
                   avatar={avatar}
-                  hasOlder={hasOlder}
+                  reachedStart={reachedStart}
                   loadingOlder={loadingOlder}
                 />
               ) : null
@@ -563,16 +602,34 @@ export default function ConversationScreen() {
             </Pressable>
           ) : null}
 
+          {replyTarget ? (
+            <ReplyPreview
+              message={replyTarget}
+              replyingTo={replyTarget.isMine ? "yourself" : name}
+              onCancel={() => setReplyTarget(null)}
+            />
+          ) : null}
+
           <MessageComposer
-            onSend={send}
-            onSendMedia={sendMedia}
-            onSendAudio={sendAudio}
+            onSend={(text) => {
+              const result = send(text, replyTarget?.uid)
+              if (result !== false) setReplyTarget(null)
+              return result
+            }}
+            onSendMedia={(media) => {
+              sendMedia(media, replyTarget?.uid)
+              setReplyTarget(null)
+            }}
+            onSendAudio={(audio) => {
+              sendAudio(audio, replyTarget?.uid)
+              setReplyTarget(null)
+            }}
             onTyping={notifyTyping}
           />
 
           {editTarget ? (
             <EditMessageDialog
-              key={editTarget.id}
+              key={editTarget.uid}
               message={editTarget}
               onCancel={() => setEditTarget(null)}
               onSave={(text) => {

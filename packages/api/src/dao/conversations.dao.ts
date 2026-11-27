@@ -19,6 +19,7 @@ import {
   type UserMemberConversation,
   type UserId,
   UpdateConversation,
+  MessageId,
 } from "@repo/types/schema"
 import {
   AWSManager,
@@ -151,7 +152,7 @@ export const conversationsDao = {
   updateUserConversationLastMessage: async (input: {
     senderId: UserId
     increaseUnread: boolean
-    lastMessageId: string
+    lastMessageId: MessageId
     lastMessagePreview: string
     lastMessageAt: number
     conversationId: string

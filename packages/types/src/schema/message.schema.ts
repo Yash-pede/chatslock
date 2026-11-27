@@ -1,5 +1,5 @@
 import z from "zod"
-import { PREFIXES } from "./keys"
+import { PREFIXES, messageIdSchema } from "./keys"
 import {
   compositeConversationId,
   conversationKey,
@@ -9,6 +9,7 @@ import { userId } from "./user.schema"
 import { ulid } from "./ulid.schema"
 
 export { ulid }
+export { messageIdSchema, type MessageId } from "./keys"
 
 const zodTimestamp = z.number().int().nonnegative()
 
@@ -20,8 +21,8 @@ export const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024
 /** Editing and deleting are only allowed this long after the message was created. */
 export const MESSAGE_ACTION_WINDOW_MS = 15 * 60 * 1000
 
-/** Message identifier — a ULID so sort keys order chronologically. */
-export type MessageId = z.infer<typeof ulid>
+/** Message identity: the ULID that keys the item (`SK MESSAGE#<uid>`). */
+export type MessageUID = z.infer<typeof ulid>
 
 export const MESSAGE_TYPE = ["TEXT", "IMAGE", "DOC", "AUDIO"] as const
 export type MessageType = (typeof MESSAGE_TYPE)[number]
@@ -89,36 +90,48 @@ export const refineMessageContent = (
 
 /**
  * A message item as stored in DynamoDB, living under its conversation's partition:
- * `PK CONVERSATION#<type>#<id>`, `SK MESSAGE#<ulid>`. `conversationId` is the
- * composite `TYPE#id` value clients use everywhere. ULID sort keys keep messages
- * in chronological order per conversation. Timestamps are epoch milliseconds and
- * are populated by the DAO, never by callers.
+ * `PK CONVERSATION#<type>#<id>`, `SK MESSAGE#<uid>`. `conversationId` is the
+ * composite `TYPE#id` value clients use everywhere. `uid` (ULID) identifies the
+ * row and `messageId` is the numeric per-conversation sequence the
+ * `MessageIdSequence_GSI` indexes for pagination. Timestamps are epoch
+ * milliseconds and are populated by the DAO, never by callers.
  */
 const messageItemBase = z.strictObject({
   PK: conversationKey,
   SK: messageSK,
-  messageId: ulid,
+  uid: ulid,
+  messageId: z.number().int().positive(),
   conversationId: compositeConversationId,
   senderId: userId,
+  peerId: userId,
   type: z.enum(MESSAGE_TYPE),
   body: z.string().min(1).max(MAX_MESSAGE_LENGTH).optional(),
   attachment: messageAttachment.optional(),
   createdAt: zodTimestamp,
   editedAt: zodTimestamp.optional(),
-  /** Soft-delete marker; deleted messages keep their storage row for history sync. */
   deletedAt: zodTimestamp.optional(),
   expiresAt: zodTimestamp,
+  version: z.number(),
+  isForwarded: z.boolean().default(false),
+  /** UID of the message being replied to. */
+  replyTo: ulid.optional(),
 })
 
 /** `.omit()` must run on the refinement-free base; zod v4 rejects refinements there. */
 export const messageItem = messageItemBase.superRefine(refineMessageContent)
 
 /**
- * The message shape returned by the DAO and exposed through the API.
- * Non-strict, so a full DynamoDB item can be parsed directly: `PK`/`SK` are dropped.
+ * The message shape returned by the DAO and exposed through the API: both the
+ * `uid` (identity) and the string `messageId` (sequence) are always present.
+ * Non-strict, so a full DynamoDB item can be parsed directly: `PK`/`SK` are
+ * dropped and the numeric sequence fields are coerced to their string form.
  */
 export const messageSchema = z
-  .object(messageItemBase.omit({ PK: true, SK: true, expiresAt: true }).shape)
+  .object({
+    ...messageItemBase.omit({ PK: true, SK: true, expiresAt: true }).shape,
+    messageId: messageIdSchema,
+    replyTo: ulid.optional(),
+  })
   .superRefine(refineMessageContent)
 
 /** A new message: identity and storage attributes are supplied by the DAO. */
@@ -126,23 +139,27 @@ export const createMessageSchema = z
   .strictObject({
     conversationId: compositeConversationId,
     senderId: userId,
+    /** The other participant, derived from the conversation id by the service. */
+    peerId: userId,
     type: z.enum(MESSAGE_TYPE),
     body: z.string().min(1).max(MAX_MESSAGE_LENGTH).optional(),
     attachment: messageAttachment.optional(),
+    replyTo: ulid.optional(),
+    isForwarded: z.boolean().default(false),
   })
   .superRefine(refineMessageContent)
 
-/** A message edit; only TEXT messages are editable. */
+/** A message edit; only TEXT messages are editable. Identified by its `uid`. */
 export const editMessageSchema = z.strictObject({
   conversationId: compositeConversationId,
-  messageId: ulid,
+  uid: ulid,
   body: z.string().min(1).max(MAX_MESSAGE_LENGTH),
 })
 
-/** Identifies the message to delete. */
+/** Identifies the message to delete by its `uid`. */
 export const deleteMessageSchema = z.strictObject({
   conversationId: compositeConversationId,
-  messageId: ulid,
+  uid: ulid,
 })
 
 export const MESSAGE_SK_PREFIX = PREFIXES.MESSAGE
@@ -155,3 +172,5 @@ export type CreateMessageInput = z.infer<typeof createMessageSchema>
 export type EditMessageInput = z.infer<typeof editMessageSchema>
 export type DeleteMessageInput = z.infer<typeof deleteMessageSchema>
 export type { ConversationType }
+
+export const MESSAGE_ID_SEQUENCE_GSI = "MessageIdSequence_GSI"

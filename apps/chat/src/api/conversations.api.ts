@@ -109,6 +109,17 @@ export const conversationsApi = {
     return unwrap<MessagePage>(data)
   },
 
+  /**
+   * `GET /api/conversations/message?conversationId=&uid=` — one message by its
+   * ULID, used to resolve a reply whose quoted message is not cached locally.
+   */
+  getMessage: async (input: { conversationId: string; uid: string }): Promise<Message> => {
+    const { data } = await apiClient.get("/api/conversations/message", {
+      params: { conversationId: input.conversationId, uid: input.uid },
+    })
+    return unwrap<Message>(data)
+  },
+
   /** `POST /api/conversations/profiles` — peer profiles by id (batched). */
 
   /** `POST /api/conversations/media` — presigns a media upload (S3 POST). */

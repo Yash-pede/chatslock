@@ -14,7 +14,7 @@ export function mediaItemOf(message: ChatMessage): MediaItem | null {
   if (message.isSystem) return null
   if (message.image) {
     return {
-      id: message.id,
+      id: message.uid,
       kind: "image",
       url: message.image.url,
       width: message.image.width,
@@ -23,7 +23,7 @@ export function mediaItemOf(message: ChatMessage): MediaItem | null {
   }
   if (message.video) {
     return {
-      id: message.id,
+      id: message.uid,
       kind: "video",
       url: message.video.url,
       width: message.video.width,

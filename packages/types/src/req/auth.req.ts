@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { baseSchema } from "./base"
 import { AUTH_CLIENTS } from "../schema/auth.schema"
+import { userId } from "../schema/user.schema"
 
 const phonePipe = z
   .string()
@@ -54,6 +55,13 @@ export const refreshOtpSchema = baseSchema.extend({
     refreshToken: z.string(),
     client: z.enum(AUTH_CLIENTS).optional().default("otp"),
     sessionId: z.string(),
+    /**
+     * The client's user id. Required so the session row (`USER#<userId>` +
+     * `AUTHSESSION#<sessionId>`) can be found and deleted when a refresh fails;
+     * the row stores the Expo push token, and a dead session must stop
+     * receiving notifications.
+     */
+    userId,
   }),
 })
 

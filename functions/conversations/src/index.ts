@@ -7,6 +7,7 @@ import {
   getChatPageConversationSchema,
   getConversationMessagesSchema,
   getDirectConversationSchema,
+  getMessageSchema,
   mediaUploadPresignUrlSchema,
 } from "@repo/types/req"
 import { validateWithZod } from "@repo/api/req"
@@ -15,6 +16,7 @@ import {
   createDirectConversationController,
   getDirectConversationController,
   getMediaUploadPresignedUrlController,
+  getMessageController,
   listMessagesController,
 } from "./conversatinos.controller"
 
@@ -31,6 +33,7 @@ app.use(withAuth)
 
 app.get("/chat", validateWithZod(getChatPageConversationSchema), chatPageConversationsController)
 app.get("/messages", validateWithZod(getConversationMessagesSchema), listMessagesController)
+app.get("/message", validateWithZod(getMessageSchema), getMessageController)
 
 app.get("/direct", validateWithZod(getDirectConversationSchema), getDirectConversationController)
 

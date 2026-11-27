@@ -1,6 +1,6 @@
 import z from "zod"
 import { baseSchema } from "./base"
-import { compositeConversationId, ulid, userId } from "../schema"
+import { compositeConversationId, messageIdSchema, ulid, userId } from "../schema"
 
 /** Base64url-encoded JSON of DynamoDB `LastEvaluatedKey`; opaque to clients. */
 export const maxStartKeyLength = 2048
@@ -36,7 +36,7 @@ export type GetChatPageConversationInput = z.input<typeof getChatPageConversatio
 export const getConversationMessagesSchema = baseSchema.extend({
   query: z.strictObject({
     conversationId: compositeConversationId,
-    cursor: ulid.optional(),
+    cursor: messageIdSchema.optional(),
     limit: z.coerce
       .number()
       .int("Limit must be a whole number")
@@ -48,6 +48,20 @@ export const getConversationMessagesSchema = baseSchema.extend({
 })
 
 export type GetConversationMessagesRequest = z.infer<typeof getConversationMessagesSchema>
+
+/**
+ * `GET /api/conversations/message?conversationId=...&uid=...` — one message by
+ * its ULID. The composite id stays in the query string for the same fragment
+ * reason as `/messages`.
+ */
+export const getMessageSchema = baseSchema.extend({
+  query: z.strictObject({
+    conversationId: compositeConversationId,
+    uid: ulid,
+  }),
+})
+
+export type GetMessageRequest = z.infer<typeof getMessageSchema>
 
 /** `GET /api/conversations/direct?userId=` — the direct chat with one peer. */
 export const getDirectConversationSchema = baseSchema.extend({

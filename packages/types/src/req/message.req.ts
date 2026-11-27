@@ -5,6 +5,7 @@ import {
   MAX_MESSAGE_LENGTH,
   MESSAGE_TYPE,
   messageAttachment,
+  messageIdSchema,
   messageSchema,
   refineMessageContent,
   ulid,
@@ -37,18 +38,21 @@ const sendMessageFields = {
   body: z.string().min(1).max(MAX_MESSAGE_LENGTH).optional(),
   attachment: messageAttachment.optional(),
   clientId: clientIdSchema,
+  isForwarded: z.boolean().optional(),
+  /** UID of the message being replied to. */
+  replyTo: ulid.optional(),
 }
 
 export const sendMessageData = z.strictObject(sendMessageFields).superRefine(refineMessageContent)
 
 export const editMessageData = z.strictObject({
-  messageId: ulid,
+  uid: ulid,
   body: z.string().min(1).max(MAX_MESSAGE_LENGTH),
   clientId: clientIdSchema,
 })
 
 export const deleteMessageData = z.strictObject({
-  messageId: ulid,
+  uid: ulid,
   clientId: clientIdSchema,
 })
 
@@ -79,7 +83,8 @@ export const deleteMessageReq = z.strictObject({
 // ---- server → client: events and acks ----
 
 const messageDeletedBody = z.strictObject({
-  messageId: ulid,
+  uid: ulid,
+  messageId: messageIdSchema,
   conversationId: compositeConversationId,
 })
 
